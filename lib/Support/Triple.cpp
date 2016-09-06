@@ -108,6 +108,8 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   case sparcel:
   case sparc:       return "sparc";
 
+  case systemz:     return "s390";
+
   case m680x0:      return "m680x0";
 
   case x86:
