@@ -1,0 +1,391 @@
+//== M680x0InstrInfo.td - Main Motorola 680x0 Instruction Definition tablegen =//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file describes the M680x0 instruction set, defining the instructions and
+// properties of the instructions which are needed for code generation, machine
+// code emission, and analysis.
+//
+//===----------------------------------------------------------------------===//
+
+include "M680x0InstrFormats.td"
+
+//===----------------------------------------------------------------------===//
+// Profiles
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Nodes
+//===----------------------------------------------------------------------===//
+
+def M680x0Ret : SDNode<"M680x0ISD::RET", SDTNone,
+                       [SDNPHasChain, SDNPOptInGlue]>;
+
+//===----------------------------------------------------------------------===//
+// Operands
+//===----------------------------------------------------------------------===//
+
+// DATA REGISTER DIRECT. The operand is in the data register specified by
+// the effective address register field.
+def M680x0_DRD8  : RegisterOperand<DR8,  "printDRD8Operand">;
+def M680x0_DRD16 : RegisterOperand<DR16, "printDRD16Operand">;
+def M680x0_DRD32 : RegisterOperand<DR32, "printDRD32Operand">;
+
+// ADDRESS REGISTER DIRECT. The operand is in the address register specified by
+// the effective address register field.
+def M680x0_ARD : RegisterOperand<AR32, "printARDOperand">;
+
+// TODO finish parser wiring
+def M680x0MemAsmOperand : AsmOperandClass {
+ let Name = "Mem";
+}
+
+class M680x0MemOperand<dag ops, string printMethod,
+          AsmOperandClass parserMatchClass = M680x0MemAsmOperand>
+    : Operand<iPTR> {
+  let PrintMethod = printMethod;
+  let MIOperandInfo = ops;
+  let ParserMatchClass = parserMatchClass;
+  let OperandType = "OPERAND_MEMORY";
+}
+
+// ADDRESS REGISTER INDIRECT. The address of the operand is in the address
+// register specified by the register field. The reference is classified as
+// a data reference with the exception of the jump and jump-to-subroutine
+// instructions.
+def M680x0_ARI8     : M680x0MemOperand<(ops AR32), "printARI8Mem">;
+def M680x0_ARI16    : M680x0MemOperand<(ops AR32), "printARI16Mem">;
+def M680x0_ARI32    : M680x0MemOperand<(ops AR32), "printARI32Mem">;
+
+// ADDRESS REGISTER INDIRECT WITH POSTINCREMENT. The address of the operand is
+// in the address register specified by the register field. After the operand
+// address is used, it is incremented by one, two, or four depending upon whether
+// the size of the operand is byte, word, or long word. If the address register
+// is the stack pointer and the operand size is byte, the address is incremented
+// by two rather than one to keep the stack pointer on a word boundary.
+// The reference is classified as a data reference.
+def M680x0_ARIPI8   : M680x0MemOperand<(ops i8imm, AR32), "printARIPI8Mem">;
+def M680x0_ARIPI16  : M680x0MemOperand<(ops i8imm, AR32), "printARIPI16Mem">;
+def M680x0_ARIPI32  : M680x0MemOperand<(ops i8imm, AR32), "printARIPI32Mem">;
+
+// ADDRESS REGISTER INDIRECT WITH PREDECREMENT. The address of the operand is in
+// the address register specified by the register field. Before the operand
+// address is used, it is decremented by one, two, or four depending upon whether
+// the operand size is byte, word, or long word. If the address register is
+// the stack pointer and the operand size is byte, the address is decremented by
+// two rather than one to keep the stack pointer on a word boundary.
+// The reference is classified as a data reference.
+def M680x0_ARIPD8   : M680x0MemOperand<(ops i8imm, AR32), "printARIPD8Mem">;
+def M680x0_ARIPD16  : M680x0MemOperand<(ops i8imm, AR32), "printARIPD16Mem">;
+def M680x0_ARIPD32  : M680x0MemOperand<(ops i8imm, AR32), "printARIPD32Mem">;
+
+// ADDRESS REGISTER INDIRECT WITH DISPLACEMENT. This addressing mode requires one
+// word of extension. The address of the operand is the sum of the address in
+// the address register and the sign-extended 16-bit displacement integer in the
+// extension word. The reference is classified as a data reference with the
+// exception of the jump and jump-to-subroutine instructions.
+def M680x0_ARID8    : M680x0MemOperand<(ops i16imm, AR32), "printARID8Mem">;
+def M680x0_ARID16   : M680x0MemOperand<(ops i16imm, AR32), "printARID16Mem">;
+def M680x0_ARID32   : M680x0MemOperand<(ops i16imm, AR32), "printARID32Mem">;
+
+// ADDRESS REGISTER INDIRECT WITH INDEX. This addressing mode requires one word
+// of extension. The address of the operand is the sum of the address in the
+// address register, the signextended displacement integer in the low order eight
+// bits of the extension word, and the contents of the index register.
+// The reference is classified as a data reference with the exception of the
+// jump and jump-to-subroutine instructions
+def M680x0_ARII8w   : M680x0MemOperand<(ops i8imm, AR32, IR16), "printARII8wMem">;
+def M680x0_ARII16w  : M680x0MemOperand<(ops i8imm, AR32, IR16), "printARII16wMem">;
+def M680x0_ARII32w  : M680x0MemOperand<(ops i8imm, AR32, IR16), "printARII32wMem">;
+
+def M680x0_ARII8l   : M680x0MemOperand<(ops i8imm, AR32, IR32), "printARII8lMem">;
+def M680x0_ARII16l  : M680x0MemOperand<(ops i8imm, AR32, IR32), "printARII16lMem">;
+def M680x0_ARII32l  : M680x0MemOperand<(ops i8imm, AR32, IR32), "printARII32lMem">;
+
+// ABSOLUTE SHORT ADDRESS. This addressing mode requires one word of extension.
+// The address of the operand is the extension word. The 16-bit address is sign
+// extended before it is used.  The reference is classified as a data reference
+// with the exception of the jump and jump-tosubroutine instructions.
+def M680x0_AS8      : M680x0MemOperand<(ops i16imm), "printAS8Mem">;
+def M680x0_AS16     : M680x0MemOperand<(ops i16imm), "printAS16Mem">;
+def M680x0_AS32     : M680x0MemOperand<(ops i16imm), "printAS32Mem">;
+
+// ABSOLUTE LONG ADDRESS. This addressing mode requires two words of extension.
+// The address of the operand is developed by the concatenation of the extension
+// words. The high order part of the address is the first extension word; the low
+// order part of the address is the second extension word. The reference is
+// classified as a data reference with the exception of the jump and jump
+// to-subroutine instructions.
+def M680x0_AL8      : M680x0MemOperand<(ops i32imm), "printAL8Mem">;
+def M680x0_AL16     : M680x0MemOperand<(ops i32imm), "printAL16Mem">;
+def M680x0_AL32     : M680x0MemOperand<(ops i32imm), "printAL32Mem">;
+
+let OperandType = "OPERAND_PCREL" in {
+// PROGRAM COUNTER WITH DISPLACEMENT. This addressing mode requires one word of
+// extension. The address of the operand is the sum of the address in the program
+// counter and the Sign-extended 16-bit displacement integer in the extension
+// word. The value in the program counter is the address of the extension word.
+// The reference is classified as a program reference.
+def M680x0_PCD8     : M680x0MemOperand<(ops i16imm), "printPCD8Mem">;
+def M680x0_PCD16    : M680x0MemOperand<(ops i16imm), "printPCD16Mem">;
+def M680x0_PCD32    : M680x0MemOperand<(ops i16imm), "printPCD32Mem">;
+
+// PROGRAM COUNTER WITH INDEX. This addressing mode requires one word of
+// extension. The address is the sum of the address in the program counter, the
+// sign-extended displacement integer in the lower eight bits of the extension
+// word, and the contents of the index register.  The value in the program
+// counter is the address of the extension word. This reference is classified as
+// a program reference.
+def M680x0_PCI8w   : M680x0MemOperand<(ops i8imm, IR16), "printPCI8wMem">;
+def M680x0_PCI16w  : M680x0MemOperand<(ops i8imm, IR16), "printPCI16wMem">;
+def M680x0_PCI32w  : M680x0MemOperand<(ops i8imm, IR16), "printPCI32wMem">;
+
+def M680x0_PCI8l   : M680x0MemOperand<(ops i8imm, IR32), "printPCI8lMem">;
+def M680x0_PCI16l  : M680x0MemOperand<(ops i8imm, IR32), "printPCI16lMem">;
+def M680x0_PCI32l  : M680x0MemOperand<(ops i8imm, IR32), "printPCI32lMem">;
+} // let OperandType
+
+let OperandType = "OPERAND_IMMEDIATE" in {
+// IMMEDIATE DATA. This addressing mode requires either one or two words of
+// extension depending on the size of the operation.
+//     Byte Operation - operand is low order byte of extension word
+//     Word Operation - operand is extension word
+//     Long Word Operation - operand is in the two extension words,
+//                           high order 16 bits are in the first
+//                           extension word, low order 16 bits are
+//                           in the second extension word.
+def M680x0_Imm8    : Operand<i8>;
+def M680x0_Imm16   : Operand<i16>;
+def M680x0_Imm32   : Operand<i32>;
+} // let OperandType
+
+//===----------------------------------------------------------------------===//
+// Complex Patterns
+//===----------------------------------------------------------------------===//
+
+def M680x0CP_ARIPI : ComplexPattern<iPTR, 2, "SelectARIPI",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_ARIPD : ComplexPattern<iPTR, 2, "SelectARIPD",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_ARID  : ComplexPattern<iPTR, 3, "SelectARID",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_ARII  : ComplexPattern<iPTR, 3, "SelectARII",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_PCD   : ComplexPattern<iPTR, 2, "SelectPCD",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_PCI   : ComplexPattern<iPTR, 3, "SelectPCI",
+                                    [frameindex], [SDNPWantParent]>;
+
+//===----------------------------------------------------------------------===//
+// Predicates
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Pattern Fragments
+//===----------------------------------------------------------------------===//
+
+// Helper fragments for loads.
+// It's always safe to treat a anyext i16 load as a i32 load if the i16 is
+// known to be 32-bit aligned or better. Ditto for i8 to i16.
+def M680x0_loadi16 : PatFrag<(ops node:$ptr), (i16 (unindexedload node:$ptr)), [{
+  LoadSDNode *LD = cast<LoadSDNode>(N);
+  ISD::LoadExtType ExtType = LD->getExtensionType();
+  if (ExtType == ISD::NON_EXTLOAD)
+    return true;
+  if (ExtType == ISD::EXTLOAD)
+    return LD->getAlignment() >= 2 && !LD->isVolatile();
+  return false;
+}]>;
+
+def M680x0_loadi32 : PatFrag<(ops node:$ptr), (i32 (unindexedload node:$ptr)), [{
+  LoadSDNode *LD = cast<LoadSDNode>(N);
+  ISD::LoadExtType ExtType = LD->getExtensionType();
+  if (ExtType == ISD::NON_EXTLOAD)
+    return true;
+  if (ExtType == ISD::EXTLOAD)
+    return LD->getAlignment() >= 4 && !LD->isVolatile();
+  return false;
+}]>;
+
+def M680x0_loadi8         : PatFrag<(ops node:$ptr), (i8  (load node:$ptr))>;
+
+def M680x0_sextloadi16i8  : PatFrag<(ops node:$ptr), (i16 (sextloadi8 node:$ptr))>;
+def M680x0_sextloadi32i8  : PatFrag<(ops node:$ptr), (i32 (sextloadi8 node:$ptr))>;
+def M680x0_sextloadi32i16 : PatFrag<(ops node:$ptr), (i32 (sextloadi16 node:$ptr))>;
+
+def M680x0_zextloadi8i1   : PatFrag<(ops node:$ptr), (i8  (zextloadi1 node:$ptr))>;
+def M680x0_zextloadi16i1  : PatFrag<(ops node:$ptr), (i16 (zextloadi1 node:$ptr))>;
+def M680x0_zextloadi32i1  : PatFrag<(ops node:$ptr), (i32 (zextloadi1 node:$ptr))>;
+def M680x0_zextloadi16i8  : PatFrag<(ops node:$ptr), (i16 (zextloadi8 node:$ptr))>;
+def M680x0_zextloadi32i8  : PatFrag<(ops node:$ptr), (i32 (zextloadi8 node:$ptr))>;
+def M680x0_zextloadi32i16 : PatFrag<(ops node:$ptr), (i32 (zextloadi16 node:$ptr))>;
+
+def M680x0_extloadi8i1    : PatFrag<(ops node:$ptr), (i8  (extloadi1 node:$ptr))>;
+def M680x0_extloadi16i1   : PatFrag<(ops node:$ptr), (i16 (extloadi1 node:$ptr))>;
+def M680x0_extloadi32i1   : PatFrag<(ops node:$ptr), (i32 (extloadi1 node:$ptr))>;
+def M680x0_extloadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))>;
+def M680x0_extloadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
+def M680x0_extloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
+
+//===----------------------------------------------------------------------===//
+// Instructions
+//===----------------------------------------------------------------------===//
+
+// NOP
+let hasSideEffects = 0 in {
+  def NOP : M680x0Inst<0x4E71, (outs), (ins), "nop", []>;
+}
+
+// FIXME these must conform to M680x0 EA operands described above
+
+// MOVE
+// X - not affected
+// N,Z - set by operation
+// V,C - cleared
+let Defs = [CCR] in {
+
+// Dn -> Dn
+def MOV8rr  : M680x0Inst<0x1000, (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src),
+                         "move{.b}\t$src, $dst",
+                         [(set i8:$dst, i8:$src)]>;
+
+def MOV16rr : M680x0Inst<0x3000, (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src),
+                         "move{.w}\t$src, $dst",
+                         [(set i16:$dst, i16:$src)]>;
+
+def MOV32rr : M680x0Inst<0x2000, (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src),
+                         "move{.l}\t$src, $dst",
+                         [(set i32:$dst, i32:$src)]>;
+
+
+// Imm -> Dn
+// TODO what the hell this means?
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
+def MOV8ir  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins i8imm :$src),
+                         "move{.b}\t$src, $dst",
+                         [(set i8:$dst, imm:$src)]>;
+
+def MOV16ir : M680x0Inst<0x3000, (outs DR16:$dst), (ins i16imm:$src),
+                         "move{.w}\t$src, $dst",
+                         [(set i16:$dst, imm:$src)]>;
+
+def MOV32ir : M680x0Inst<0x2000, (outs DR32:$dst), (ins i32imm:$src),
+                         "move{.l}\t$src, $dst",
+                         [(set i32:$dst, imm:$src)]>;
+}
+
+
+// TODO check if DAG imm will be matched to i*imm operand
+// Imm -> (An)
+def MOV8im  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, i8imm:$src),
+                         "move{.b}\t$src, $dst",
+                         [(store (i8 imm:$src), iPTR:$dst)]>;
+
+def MOV16im : M680x0Inst<0x3000, (outs), (ins M680x0_ARI16:$dst, i16imm:$src),
+                         "move{.w}\t$src, $dst",
+                         [(store (i16 imm:$src), iPTR:$dst)]>;
+
+def MOV32im : M680x0Inst<0x2000, (outs), (ins M680x0_ARI32:$dst, i32imm:$src),
+                         "move{.l}\t$src, $dst}",
+                         [(store (i32 imm:$src), iPTR:$dst)]>;
+
+
+// (An) -> Reg
+let canFoldAsLoad = 1, isReMaterializable = 1 in {
+def MOV8mr  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins M680x0_ARI8 :$src),
+                         "move{.b}\t$src, $dst",
+                         [(set DR8:$dst, (M680x0_loadi8 iPTR:$src))]>;
+
+def MOV16mr : M680x0Inst<0x1000, (outs DR16:$dst), (ins M680x0_ARI16:$src),
+                         "move{.w}\t$src, $dst",
+                         [(set DR16:$dst, (M680x0_loadi16 iPTR:$src))]>;
+
+def MOV32mr : M680x0Inst<0x1000, (outs DR32:$dst), (ins M680x0_ARI32:$src),
+                         "move{.l}\t$src, $dst",
+                         [(set DR32:$dst, (M680x0_loadi32 iPTR:$src))]>;
+
+
+// Dn -> (An)
+def MOV8rm  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, DR8:$src),
+                         "move{.b}\t$src, $dst",
+                         [(store DR8:$src, iPTR:$dst)]>;
+
+def MOV16rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI16:$dst, DR16:$src),
+                         "move{.w}\t$src, $dst",
+                         [(store DR16:$src, iPTR:$dst)]>;
+
+def MOV32rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
+                         "move{.l}\t$src, $dst",
+                         [(store DR32:$src, iPTR:$dst)]>;
+}
+} // Defs
+
+
+// ARITHMETIC
+//FIXME extend to proper multiclasses
+let isCommutable = 1 in {
+// M680x0 instruction format is binary where the second operand is destination
+let Constraints = "$src1 = $dst" in {
+// X,N,Z,V,C - set by operation's result
+let Defs = [CCR] in {
+
+// Imm + Dn -> Dn
+def ADD8ir   : M680x0Inst<0x000, (outs DR16:$dst), (ins DR16:$src1, DR16:$src2),
+                    "add{.b}\t$src1, $src2",
+                    [(set DR16:$dst, (add DR16:$src1, DR16:$src2))]>;
+
+def ADD16ir  : M680x0Inst<0x000, (outs DR16:$dst), (ins DR16:$src1, DR16:$src2),
+                    "add{.w}\t$src1, $src2",
+                    [(set DR16:$dst, (add DR16:$src1, DR16:$src2))]>;
+
+def ADD32ir  : M680x0Inst<0x000, (outs DR32:$dst), (ins DR32:$src1, DR32:$src2),
+                    "add{.l}\t$src1, $src2",
+                    [(set DR32:$dst, (add DR32:$src1, DR32:$src2))]>;
+} // Defs
+} // Constraints
+} // isCommutable
+
+
+// CONTROL
+
+// Indirect branching
+let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
+// FIXME M680x0 does not allow 16 bit indirect jumps use sext operands
+/* def JMP16r     : M680x0Inst<0x0 (outs), (ins M680x0_ARI16:$dst), */
+/*                             "jmp\t$dst", */
+/*                             [(brind AR16:$dst)]>; */
+
+// jmp (An)
+def JMP32r     : M680x0Inst<0x0, (outs), (ins M680x0_ARI32:$dst),
+                            "jmp\t$dst",
+                            [(brind iPTR:$dst)]>;
+
+// FIXME how to jmp from mem?
+/* def JMP16m     : M680x0Inst<0x0 (outs), (ins M680x0_ARI16:$dst), */
+/*                             "jmp{w}\t{*}$dst", */
+/*                             [(brind (M680x0_loadi16 AR32:$dst))]>; */
+
+/* def JMP32m     : M680x0Inst<0x0 (outs), (ins M680x0_ARI32:$dst), */
+/*                             "jmp\t$dst", */
+/*                             [(brind (M680x0_loadi32 AR32:$dst))]>; */
+}
+
+// TODO don't forget about LINK/UNLK
+// JSR,LINK ... UNLK,RTS(RTR)
+// Return
+// FIXME
+/* let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in { */
+/* let isCodeGenOnly = 1 in { */
+/* def RET : M680x0Inst<0x0, (outs), (ins i32imm:$adj), "", [(M680x0Ret timm:$adj)]>; */
+/* } // isCodeGenOnly */
+/* } */

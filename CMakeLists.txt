@@ -275,6 +275,7 @@ set(LLVM_ALL_TARGETS
   PowerPC
   Sparc
   SystemZ
+  M680x0
   X86
   XCore
   )

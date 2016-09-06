@@ -46,6 +46,7 @@ const char *Triple::getArchTypeName(ArchType Kind) {
   case tce:            return "tce";
   case thumb:          return "thumb";
   case thumbeb:        return "thumbeb";
+  case m680x0:         return "m680x0";
   case x86:            return "i386";
   case x86_64:         return "x86_64";
   case xcore:          return "xcore";
@@ -107,7 +108,7 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   case sparcel:
   case sparc:       return "sparc";
 
-  case systemz:     return "s390";
+  case m680x0:      return "m680x0";
 
   case x86:
   case x86_64:      return "x86";
@@ -266,6 +267,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("tce", tce)
     .Case("thumb", thumb)
     .Case("thumbeb", thumbeb)
+    .Case("m680x0", m680x0)
     .Case("x86", x86)
     .Case("x86-64", x86_64)
     .Case("xcore", xcore)
@@ -349,6 +351,9 @@ static Triple::ArchType parseARMArch(StringRef ArchName) {
 
 static Triple::ArchType parseArch(StringRef ArchName) {
   auto AT = StringSwitch<Triple::ArchType>(ArchName)
+    .Cases("m680x0", "m68k", Triple::m680x0)
+    .Cases("m68000", "m68010", "m68020", Triple::m680x0)
+    .Cases("m68030", "m68040", "m68060", Triple::m680x0)
     .Cases("i386", "i486", "i586", "i686", Triple::x86)
     // FIXME: Do we need to support these?
     .Cases("i786", "i886", "i986", Triple::x86)
@@ -571,6 +576,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::aarch64:
   case Triple::arm:
   case Triple::thumb:
+  case Triple::m680x0:  // FIXME should be COFF?
   case Triple::x86:
   case Triple::x86_64:
     if (T.isOSDarwin())
@@ -1137,6 +1143,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::tce:
   case llvm::Triple::thumb:
   case llvm::Triple::thumbeb:
+  case llvm::Triple::m680x0:
   case llvm::Triple::x86:
   case llvm::Triple::xcore:
   case llvm::Triple::amdil:
@@ -1193,6 +1200,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::avr:
   case Triple::bpfel:
   case Triple::bpfeb:
+  case Triple::m680x0:
   case Triple::msp430:
   case Triple::systemz:
   case Triple::ppc64le:
