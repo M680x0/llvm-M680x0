@@ -362,6 +362,11 @@ enum {
 
 #define ELF_RELOC(name, value) name = value,
 
+// M680x0 relocations.
+enum {
+#include "ELFRelocs/m680x0.def"
+};
+
 // X86_64 relocations.
 enum {
 #include "ELFRelocs/x86_64.def"
