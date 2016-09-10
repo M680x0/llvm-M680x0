@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "M680x0.h"
-#include "MCTargetDesc/M680x0MCTargetDesc.cpp"
+#include "MCTargetDesc/M680x0MCTargetDesc.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 

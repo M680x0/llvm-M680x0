@@ -7,5 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO do something here, look into GCC
-// All timings can be found in the 68000 16-bit manual
+// This is a very general M680x0 Scheduling Model and best suited for the very
+// first M68000 CPU, other model must override these characteristics
+class M680x0SchedModel : SchedMachineModel {
+  let LoadLatency = 4;  // Word (Rn)
+  let HighLatency = 16; // Long ABS
+  let PostRAScheduler = 0;
+  let CompleteModel = 0;
+}
+
+def GenericM680x0Model : M680x0SchedModel;

@@ -21,6 +21,12 @@ include "llvm/Target/Target.td"
 
 include "M680x0Schedule.td"
 
+class Proc<string Name, list<SubtargetFeature> Features>
+ : ProcessorModel<Name, GenericM680x0Model, Features>;
+
+def : Proc<"generic", []>;
+def : Proc<"M68000",  []>;
+
 //===----------------------------------------------------------------------===//
 // Register File Description
 //===----------------------------------------------------------------------===//

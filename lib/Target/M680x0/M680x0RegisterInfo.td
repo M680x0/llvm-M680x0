@@ -44,6 +44,8 @@ class M680x0AliasReg<string n, M680x0Reg reg>
   let Aliases = [reg];
 }
 
+def FP  : M680x0AliasReg<"fp",  A6>; // FIXME check if this is correct register
+
 def SP  : M680x0AliasReg<"sp",  A7>;
 def USP : M680x0AliasReg<"usp", A7>;
 def SSP : M680x0AliasReg<"ssp", A7>;

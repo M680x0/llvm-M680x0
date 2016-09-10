@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_CPU0_MCTARGETDESC_CPU0MCTARGETDESC_H
-#define LLVM_LIB_TARGET_CPU0_MCTARGETDESC_CPU0MCTARGETDESC_H
+#ifndef LLVM_LIB_TARGET_M680X0_MCTARGETDESC_M680X0MCTARGETDESC_H
+#define LLVM_LIB_TARGET_M680X0_MCTARGETDESC_M680X0MCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
 
@@ -21,7 +21,6 @@ class Target;
 class Triple;
 
 extern Target TheM680x0Target;
-extern Target TheM680x0elTarget;
 
 } // End llvm namespace
 
