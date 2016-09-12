@@ -56,6 +56,10 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
                                            const M680x0Subtarget &STI)
     : TargetLowering(TM), Subtarget(STI), ABI(TM.getABI()) {
 
+  computeRegisterProperties(STI.getRegisterInfo());
+
+  setMinFunctionAlignment(2); // 2^2 bytes
+
 }
 
 SDValue M680x0TargetLowering::LowerOperation(SDValue Op,

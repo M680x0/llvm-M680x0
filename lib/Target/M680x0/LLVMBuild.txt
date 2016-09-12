@@ -16,7 +16,7 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = MCTargetDesc TargetInfo
+subdirectories = InstPrinter MCTargetDesc TargetInfo
 
 [component_0]
 type = TargetGroup
@@ -28,9 +28,10 @@ type = Library
 name = M680x0CodeGen
 parent = M680x0
 required_libraries =
-                     CodeGen Core MC 
+                     CodeGen Core MC  AsmPrinter
                      M680x0Desc 
                      M680x0Info 
+                     M680x0AsmPrinter 
                      SelectionDAG 
                      Support 
                      Target

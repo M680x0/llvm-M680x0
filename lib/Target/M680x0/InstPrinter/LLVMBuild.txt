@@ -1,4 +1,4 @@
-;===- ./lib/Target/M680x0/MCTargetDesc/LLVMBuild.txt -------------*- Conf -*--===;
+;===- ./lib/Target/M680x0/InstPrinter/LLVMBuild.txt ------------*- Conf -*--===;
 ;
 ;                     The LLVM Compiler Infrastructure
 ;
@@ -17,7 +17,7 @@
 
 [component_0]
 type = Library
-name = M680x0Desc
+name = M680x0AsmPrinter
 parent = M680x0
-required_libraries = MC MCDisassembler Support M680x0AsmPrinter M680x0Info
+required_libraries = MC Support
 add_to_library_groups = M680x0

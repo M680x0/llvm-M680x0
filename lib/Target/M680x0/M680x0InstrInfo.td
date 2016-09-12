@@ -32,9 +32,9 @@ def M680x0Ret : SDNode<"M680x0ISD::RET", SDTNone,
 
 // DATA REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def M680x0_DRD8  : RegisterOperand<DR8,  "printDRD8Operand">;
-def M680x0_DRD16 : RegisterOperand<DR16, "printDRD16Operand">;
-def M680x0_DRD32 : RegisterOperand<DR32, "printDRD32Operand">;
+def M680x0_DRD8  : RegisterOperand<DR8,  "printOperand">;
+def M680x0_DRD16 : RegisterOperand<DR16, "printOperand">;
+def M680x0_DRD32 : RegisterOperand<DR32, "printOperand">;
 
 // ADDRESS REGISTER DIRECT. The operand is in the address register specified by
 // the effective address register field.
@@ -69,9 +69,9 @@ def M680x0_ARI32    : M680x0MemOperand<(ops AR32), "printARI32Mem">;
 // is the stack pointer and the operand size is byte, the address is incremented
 // by two rather than one to keep the stack pointer on a word boundary.
 // The reference is classified as a data reference.
-def M680x0_ARIPI8   : M680x0MemOperand<(ops i8imm, AR32), "printARIPI8Mem">;
-def M680x0_ARIPI16  : M680x0MemOperand<(ops i8imm, AR32), "printARIPI16Mem">;
-def M680x0_ARIPI32  : M680x0MemOperand<(ops i8imm, AR32), "printARIPI32Mem">;
+def M680x0_ARIPI8   : M680x0MemOperand<(ops AR32), "printARIPI8Mem">;
+def M680x0_ARIPI16  : M680x0MemOperand<(ops AR32), "printARIPI16Mem">;
+def M680x0_ARIPI32  : M680x0MemOperand<(ops AR32), "printARIPI32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH PREDECREMENT. The address of the operand is in
 // the address register specified by the register field. Before the operand
@@ -80,9 +80,9 @@ def M680x0_ARIPI32  : M680x0MemOperand<(ops i8imm, AR32), "printARIPI32Mem">;
 // the stack pointer and the operand size is byte, the address is decremented by
 // two rather than one to keep the stack pointer on a word boundary.
 // The reference is classified as a data reference.
-def M680x0_ARIPD8   : M680x0MemOperand<(ops i8imm, AR32), "printARIPD8Mem">;
-def M680x0_ARIPD16  : M680x0MemOperand<(ops i8imm, AR32), "printARIPD16Mem">;
-def M680x0_ARIPD32  : M680x0MemOperand<(ops i8imm, AR32), "printARIPD32Mem">;
+def M680x0_ARIPD8   : M680x0MemOperand<(ops AR32), "printARIPD8Mem">;
+def M680x0_ARIPD16  : M680x0MemOperand<(ops AR32), "printARIPD16Mem">;
+def M680x0_ARIPD32  : M680x0MemOperand<(ops AR32), "printARIPD32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH DISPLACEMENT. This addressing mode requires one
 // word of extension. The address of the operand is the sum of the address in
@@ -333,7 +333,7 @@ def MOV32rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
 
 // ARITHMETIC
 //FIXME extend to proper multiclasses
-let isCommutable = 1 in {
+let isCommutable = 1 in { // FIXME is it really a commutable form?
 // M680x0 instruction format is binary where the second operand is destination
 let Constraints = "$src1 = $dst" in {
 // X,N,Z,V,C - set by operation's result

@@ -54,16 +54,16 @@ namespace llvm {
   //===--------------------------------------------------------------------===//
   // TargetLowering Implementation
   //===--------------------------------------------------------------------===//
-  class M680x0FunctionInfo;
+  class M680x0MachineFunctionInfo;
   class M680x0Subtarget;
 
   class M680x0TargetLowering : public TargetLowering  {
   public:
     explicit M680x0TargetLowering(const M680x0TargetMachine &TM,
-                                const M680x0Subtarget &STI);
+                                  const M680x0Subtarget &STI);
 
     static const M680x0TargetLowering *create(const M680x0TargetMachine &TM,
-                                            const M680x0Subtarget &STI);
+                                              const M680x0Subtarget &STI);
 
     const char *getTargetNodeName(unsigned Opcode) const override;
 
