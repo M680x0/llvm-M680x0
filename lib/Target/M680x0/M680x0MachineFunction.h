@@ -49,6 +49,11 @@ class M680x0MachineFunctionInfo : public MachineFunctionInfo {
   /// VarArgsFrameIndex - FrameIndex for start of varargs area.
   int VarArgsFrameIndex = 0;
 
+  /// BytesToPopOnReturn - Number of bytes function pops on return (in addition
+  /// to the space used by the return address).
+  /// Used on windows platform for stdcall & fastcall name decoration
+  unsigned BytesToPopOnReturn = 0;
+
   // FIXME add description
   unsigned MaxCallFrameSize = 0;
 
@@ -72,20 +77,15 @@ class M680x0MachineFunctionInfo : public MachineFunctionInfo {
   /// Frame objects for spilling eh data registers.
   int EhDataRegFI[2]; // FIXME not sure if this is correct
 
-private:
-  virtual void anchor();
-
-  /// M680x0CallEntry maps.
-  StringMap<std::unique_ptr<const M680x0CallEntry>> ExternalCallEntries;
-  ValueMap<const GlobalValue *, std::unique_ptr<const M680x0CallEntry>>
-      GlobalCallEntries;
-
 public:
   M680x0MachineFunctionInfo() = default;
   explicit M680x0MachineFunctionInfo(MachineFunction& MF) : MF(MF) {}
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
+  unsigned getBytesToPopOnReturn() const { return BytesToPopOnReturn; }
+  void setBytesToPopOnReturn (unsigned bytes) { BytesToPopOnReturn = bytes;}
 
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
@@ -96,6 +96,15 @@ public:
     IncomingArgSize = Size;
     HasByvalArg = HasByval;
   }
+
+private:
+  virtual void anchor();
+
+  /// M680x0CallEntry maps.
+  StringMap<std::unique_ptr<const M680x0CallEntry>> ExternalCallEntries;
+  ValueMap<const GlobalValue *, std::unique_ptr<const M680x0CallEntry>>
+      GlobalCallEntries;
+
 };
 
 } // end of namespace llvm

@@ -108,7 +108,11 @@ M680x0TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CCID,
 
   SDValue Flag;
   SmallVector<SDValue, 6> RetOps;
-  RetOps.push_back(Chain); // Operand #0 = Chain (updated below)
+  // Operand #0 = Chain (updated below)
+  RetOps.push_back(Chain);
+  // Operand #1 = Bytes To Pop
+  RetOps.push_back(DAG.getTargetConstant(MFI->getBytesToPopOnReturn(),
+                                         DL, MVT::i32));
 
   // Copy the result values into the output registers.
   for (unsigned i = 0, e = RVLocs.size(); i != e; ++i) {
