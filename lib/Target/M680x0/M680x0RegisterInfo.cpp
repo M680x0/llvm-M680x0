@@ -44,27 +44,21 @@ M680x0RegisterInfo::M680x0RegisterInfo(const M680x0Subtarget &ST)
 //===----------------------------------------------------------------------===//
 // Callee Saved Registers methods
 //===----------------------------------------------------------------------===//
-/// M680x0 Callee Saved Registers
-// In M680x0CallConv.td,
-// def CSR_O32 : CalleeSavedRegs<(add LR, FP,
-//                                   (sequence "S%u", 2, 0))>;
-// llc create CSR_O32_SaveList and CSR_O32_RegMask from above defined.
+//
 const MCPhysReg *
 M680x0RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  return CSR_O32_SaveList;
+  return CSR_STD_SaveList;
 }
 
 const uint32_t *
 M680x0RegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const {
-  return CSR_O32_RegMask; 
+  return CSR_STD_RegMask; 
 }
 
 // pure virtual method
-//@getReservedRegs {
 BitVector M680x0RegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
-//@getReservedRegs body {
   static const uint16_t ReservedCPURegs[] = {
     M680x0::SP, M680x0::PC
   };
@@ -76,9 +70,6 @@ getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-//@eliminateFrameIndex {
-//- If no eliminateFrameIndex(), it will hang on run. 
-// pure virtual method
 // FrameIndex represent objects inside a abstract stack.
 // We must replace FrameIndex with an stack/frame pointer
 // direct reference.
@@ -86,7 +77,6 @@ void M680x0RegisterInfo::
 eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
                     unsigned FIOperandNum, RegScavenger *RS) const {
 }
-//}
 
 bool
 M680x0RegisterInfo::requiresRegisterScavenging(const MachineFunction &MF) const {

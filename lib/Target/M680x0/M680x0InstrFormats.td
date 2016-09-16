@@ -39,3 +39,10 @@ class M680x0Inst<bits<16> opcode,
   // composed based on the actual register used and EA mode
   bits<16> Opcode = opcode;
 }
+
+// M680x0 PSEUDO INSTRUCTION
+class M680x0PseudoInst<dag outs, dag ins, string asmStr, list<dag> pattern>
+    : M680x0Inst<0x0, outs, ins, asmStr, pattern> {
+  let isCodeGenOnly = 1;
+  let isPseudo = 1;
+}

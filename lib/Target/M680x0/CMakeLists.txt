@@ -23,11 +23,11 @@ add_llvm_target(M680x0CodeGen
   # M680x0LongBranch.cpp
   M680x0InstrInfo.cpp
   M680x0ISelLowering.cpp
+  M680x0ISelDAGToDAG.cpp
   M680x0MachineFunction.cpp
   M680x0RegisterInfo.cpp
   M680x0Subtarget.cpp
   M680x0TargetObjectFile.cpp
-  # M680x0ISelDAGToDAG.cpp
   M680x0TargetMachine.cpp
 )
 

@@ -81,18 +81,13 @@ def AR16 : M680x0RegClass<[i16], 16, (sequence "A%u", 0, 6)>;
 def AR32 : M680x0RegClass<[i32], 32, (sequence "A%u", 0, 6)>;
 
 // It is possible to use A* registers as data source, but they are limited to
-// 16 and 32 bit operations
-def SRS16 : M680x0RegClass<[i16], 16, (add DR16, AR16)>;
-def SRS32 : M680x0RegClass<[i32], 32, (add DR32, AR32)>;
-
-// It is possible to use A* registers as data source, but they are limited to
 // 16 and 32 bit operations. When an address register used as the destination
 // operand, the entire register is affected regardless of the operation size.
 // If the operation size is word, any other operands are sign-extended to 32bits
 // before the operation is performed.
 // TODO find a way to control sign-extension for load into AR16
-def DST16 : M680x0RegClass<[i16], 16, (add DR16, AR16)>;
-def DST32 : M680x0RegClass<[i32], 32, (add DR32, AR32)>;
+def ALL16 : M680x0RegClass<[i16], 16, (add DR16, AR16)>;
+def ALL32 : M680x0RegClass<[i32], 32, (add DR32, AR32)>;
 
 // Index Register Classes
 def IR16 : M680x0RegClass<[i16], 16, (add DR16, AR16)>;

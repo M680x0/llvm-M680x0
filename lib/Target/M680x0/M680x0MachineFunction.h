@@ -44,32 +44,58 @@ private:
 };
 
 class M680x0MachineFunctionInfo : public MachineFunctionInfo {
-public:
-  M680x0MachineFunctionInfo(MachineFunction& MF)
-  : MF(MF), 
-    VarArgsFrameIndex(0), 
-    MaxCallFrameSize(0)
-    {}
+  MachineFunction& MF;
 
-  ~M680x0MachineFunctionInfo();
+  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
+  int VarArgsFrameIndex = 0;
 
-  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
-  void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+  // FIXME add description
+  unsigned MaxCallFrameSize = 0;
+
+  /// SRetReturnReg - Some subtargets require that sret lowering includes
+  /// returning the value of the returned struct in a register. This field
+  /// holds the virtual register into which the sret argument is passed.
+  unsigned SRetReturnReg = 0;
+
+  /// True if function has a byval argument.
+  bool HasByvalArg = false;
+
+  /// Size of incoming argument area.
+  unsigned IncomingArgSize = 0;
+
+  /// CallsEhReturn - Whether the function calls llvm.eh.return.
+  bool CallsEhReturn = false;
+
+  /// CallsEhDwarf - Whether the function calls llvm.eh.dwarf.
+  bool CallsEhDwarf = false;
+
+  /// Frame objects for spilling eh data registers.
+  int EhDataRegFI[2]; // FIXME not sure if this is correct
 
 private:
   virtual void anchor();
-
-  MachineFunction& MF;
-
-    /// VarArgsFrameIndex - FrameIndex for start of varargs area.
-  int VarArgsFrameIndex;
-
-  unsigned MaxCallFrameSize;
 
   /// M680x0CallEntry maps.
   StringMap<std::unique_ptr<const M680x0CallEntry>> ExternalCallEntries;
   ValueMap<const GlobalValue *, std::unique_ptr<const M680x0CallEntry>>
       GlobalCallEntries;
+
+public:
+  M680x0MachineFunctionInfo() = default;
+  explicit M680x0MachineFunctionInfo(MachineFunction& MF) : MF(MF) {}
+
+  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
+  void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
+  unsigned getSRetReturnReg() const { return SRetReturnReg; }
+  void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
+
+  bool hasByvalArg() const { return HasByvalArg; }
+
+  void setFormalArgInfo(unsigned Size, bool HasByval) {
+    IncomingArgSize = Size;
+    HasByvalArg = HasByval;
+  }
 };
 
 } // end of namespace llvm

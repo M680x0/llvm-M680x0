@@ -44,6 +44,4 @@ void M680x0CallEntry::printCustom(raw_ostream &O) const {
 #endif
 }
 
-M680x0MachineFunctionInfo::~M680x0MachineFunctionInfo() {}
-
 void M680x0MachineFunctionInfo::anchor() { }

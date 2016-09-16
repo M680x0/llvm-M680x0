@@ -41,9 +41,6 @@ public:
   /// always be able to get register info as well (through this method).
   const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
 
-  /// Return the number of bytes of code the specified instruction may be.
-  unsigned GetInstSizeInBytes(const MachineInstr *MI) const;
-
 protected:
 };
 

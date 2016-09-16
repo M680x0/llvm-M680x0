@@ -19,12 +19,14 @@ include "M680x0InstrFormats.td"
 // Profiles
 //===----------------------------------------------------------------------===//
 
+def SDTM680x0Ret : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+
 //===----------------------------------------------------------------------===//
 // Nodes
 //===----------------------------------------------------------------------===//
 
-def M680x0Ret : SDNode<"M680x0ISD::RET", SDTNone,
-                       [SDNPHasChain, SDNPOptInGlue]>;
+def M680x0Ret : SDNode<"M680x0ISD::RET", SDTM680x0Ret,
+                       [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
 //===----------------------------------------------------------------------===//
 // Operands
@@ -168,22 +170,22 @@ def M680x0_Imm32   : Operand<i32>;
 // Complex Patterns
 //===----------------------------------------------------------------------===//
 
-def M680x0CP_ARIPI : ComplexPattern<iPTR, 2, "SelectARIPI",
+def M680x0CP_ARIPI : ComplexPattern<iPTR, 1, "selectARIPI",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_ARIPD : ComplexPattern<iPTR, 2, "SelectARIPD",
+def M680x0CP_ARIPD : ComplexPattern<iPTR, 1, "selectARIPD",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_ARID  : ComplexPattern<iPTR, 3, "SelectARID",
+def M680x0CP_ARID  : ComplexPattern<iPTR, 2, "selectARID",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_ARII  : ComplexPattern<iPTR, 3, "SelectARII",
+def M680x0CP_ARII  : ComplexPattern<iPTR, 3, "selectARII",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_PCD   : ComplexPattern<iPTR, 2, "SelectPCD",
+def M680x0CP_PCD   : ComplexPattern<iPTR, 1, "selectPCD",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_PCI   : ComplexPattern<iPTR, 3, "SelectPCI",
+def M680x0CP_PCI   : ComplexPattern<iPTR, 2, "selectPCI",
                                     [frameindex], [SDNPWantParent]>;
 
 //===----------------------------------------------------------------------===//
@@ -237,6 +239,10 @@ def M680x0_extloadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))
 def M680x0_extloadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
 def M680x0_extloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 
+def immSExt8  : ImmLeaf<i8,  [{ return isInt<8>(Imm);  }]>;
+def immSExt16 : ImmLeaf<i16, [{ return isInt<16>(Imm); }]>;
+def immSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
+
 //===----------------------------------------------------------------------===//
 // Instructions
 //===----------------------------------------------------------------------===//
@@ -256,76 +262,76 @@ let Defs = [CCR] in {
 
 // Dn -> Dn
 def MOV8rr  : M680x0Inst<0x1000, (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src),
-                         "move{.b}\t$src, $dst",
-                         [(set i8:$dst, i8:$src)]>;
+                         "move.b\t$src, $dst",
+                         []>;
 
 def MOV16rr : M680x0Inst<0x3000, (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src),
-                         "move{.w}\t$src, $dst",
-                         [(set i16:$dst, i16:$src)]>;
+                         "move.w\t$src, $dst",
+                         []>;
 
 def MOV32rr : M680x0Inst<0x2000, (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src),
-                         "move{.l}\t$src, $dst",
-                         [(set i32:$dst, i32:$src)]>;
+                         "move.l\t$src, $dst",
+                         []>;
 
 
 // Imm -> Dn
 // TODO what the hell this means?
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 def MOV8ir  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins i8imm :$src),
-                         "move{.b}\t$src, $dst",
-                         [(set i8:$dst, imm:$src)]>;
+                         "move.b\t$src, $dst",
+                         [(set i8:$dst, immSExt8:$src)]>;
 
 def MOV16ir : M680x0Inst<0x3000, (outs DR16:$dst), (ins i16imm:$src),
-                         "move{.w}\t$src, $dst",
-                         [(set i16:$dst, imm:$src)]>;
+                         "move.w\t$src, $dst",
+                         [(set i16:$dst, immSExt16:$src)]>;
 
 def MOV32ir : M680x0Inst<0x2000, (outs DR32:$dst), (ins i32imm:$src),
-                         "move{.l}\t$src, $dst",
-                         [(set i32:$dst, imm:$src)]>;
+                         "move.l\t$src, $dst",
+                         [(set i32:$dst, immSExt32:$src)]>;
 }
 
 
 // TODO check if DAG imm will be matched to i*imm operand
 // Imm -> (An)
 def MOV8im  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, i8imm:$src),
-                         "move{.b}\t$src, $dst",
-                         [(store (i8 imm:$src), iPTR:$dst)]>;
+                         "move.b\t$src, $dst",
+                         [(store immSExt8:$src, iPTR:$dst)]>;
 
 def MOV16im : M680x0Inst<0x3000, (outs), (ins M680x0_ARI16:$dst, i16imm:$src),
-                         "move{.w}\t$src, $dst",
-                         [(store (i16 imm:$src), iPTR:$dst)]>;
+                         "move.w\t$src, $dst",
+                         [(store immSExt16:$src, iPTR:$dst)]>;
 
 def MOV32im : M680x0Inst<0x2000, (outs), (ins M680x0_ARI32:$dst, i32imm:$src),
-                         "move{.l}\t$src, $dst}",
-                         [(store (i32 imm:$src), iPTR:$dst)]>;
+                         "move.l\t$src, $dst}",
+                         [(store immSExt32:$src, iPTR:$dst)]>;
 
 
 // (An) -> Reg
 let canFoldAsLoad = 1, isReMaterializable = 1 in {
-def MOV8mr  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins M680x0_ARI8 :$src),
-                         "move{.b}\t$src, $dst",
+def MOV8mr  : M680x0Inst<0x1000, (outs DR8:$dst), (ins M680x0_ARI8 :$src),
+                         "move.b\t$src, $dst",
                          [(set DR8:$dst, (M680x0_loadi8 iPTR:$src))]>;
 
 def MOV16mr : M680x0Inst<0x1000, (outs DR16:$dst), (ins M680x0_ARI16:$src),
-                         "move{.w}\t$src, $dst",
+                         "move.w\t$src, $dst",
                          [(set DR16:$dst, (M680x0_loadi16 iPTR:$src))]>;
 
 def MOV32mr : M680x0Inst<0x1000, (outs DR32:$dst), (ins M680x0_ARI32:$src),
-                         "move{.l}\t$src, $dst",
+                         "move.l\t$src, $dst",
                          [(set DR32:$dst, (M680x0_loadi32 iPTR:$src))]>;
 
 
 // Dn -> (An)
 def MOV8rm  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, DR8:$src),
-                         "move{.b}\t$src, $dst",
+                         "move.b\t$src, $dst",
                          [(store DR8:$src, iPTR:$dst)]>;
 
 def MOV16rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI16:$dst, DR16:$src),
-                         "move{.w}\t$src, $dst",
+                         "move.w\t$src, $dst",
                          [(store DR16:$src, iPTR:$dst)]>;
 
 def MOV32rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
-                         "move{.l}\t$src, $dst",
+                         "move.l\t$src, $dst",
                          [(store DR32:$src, iPTR:$dst)]>;
 }
 } // Defs
@@ -334,23 +340,44 @@ def MOV32rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
 // ARITHMETIC
 //FIXME extend to proper multiclasses
 let isCommutable = 1 in { // FIXME is it really a commutable form?
-// M680x0 instruction format is binary where the second operand is destination
-let Constraints = "$src1 = $dst" in {
+
+// M680x0 instruction is dyadic where the second operand is destination
+let Constraints = "$src = $dst" in {
+
 // X,N,Z,V,C - set by operation's result
 let Defs = [CCR] in {
 
 // Imm + Dn -> Dn
-def ADD8ir   : M680x0Inst<0x000, (outs DR16:$dst), (ins DR16:$src1, DR16:$src2),
-                    "add{.b}\t$src1, $src2",
-                    [(set DR16:$dst, (add DR16:$src1, DR16:$src2))]>;
+def ADD8ir  : M680x0Inst<0x000,
+               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
+               "add.b\t$imm, $dst",
+               [(set i8:$dst, (add i8:$src, immSExt8:$imm))]>;
 
-def ADD16ir  : M680x0Inst<0x000, (outs DR16:$dst), (ins DR16:$src1, DR16:$src2),
-                    "add{.w}\t$src1, $src2",
-                    [(set DR16:$dst, (add DR16:$src1, DR16:$src2))]>;
+def ADD16ir : M680x0Inst<0x000,
+               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
+               "add.w\t$imm, $dst",
+               [(set i16:$dst, (add i16:$src, immSExt16:$imm))]>;
 
-def ADD32ir  : M680x0Inst<0x000, (outs DR32:$dst), (ins DR32:$src1, DR32:$src2),
-                    "add{.l}\t$src1, $src2",
-                    [(set DR32:$dst, (add DR32:$src1, DR32:$src2))]>;
+def ADD32ir : M680x0Inst<0x000,
+               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
+               "add.l\t$imm, $dst",
+               [(set i32:$dst, (add i32:$src, immSExt32:$imm))]>;
+
+// Dm + Dn -> Dn
+def ADD8rr  : M680x0Inst<0x000,
+               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
+               "add.b\t$reg, $dst",
+               [(set i8:$dst, (add i8:$src, i8:$reg))]>;
+
+def ADD16rr : M680x0Inst<0x000,
+               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, M680x0_DRD16:$reg),
+               "add.w\t$reg, $dst",
+               [(set i16:$dst, (add i16:$src, i16:$reg))]>;
+
+def ADD32rr : M680x0Inst<0x000,
+               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
+               "add.l\t$reg, $dst",
+               [(set i32:$dst, (add i32:$src, i32:$reg))]>;
 } // Defs
 } // Constraints
 } // isCommutable
@@ -384,8 +411,8 @@ def JMP32r     : M680x0Inst<0x0, (outs), (ins M680x0_ARI32:$dst),
 // JSR,LINK ... UNLK,RTS(RTR)
 // Return
 // FIXME
-/* let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in { */
-/* let isCodeGenOnly = 1 in { */
-/* def RET : M680x0Inst<0x0, (outs), (ins i32imm:$adj), "", [(M680x0Ret timm:$adj)]>; */
-/* } // isCodeGenOnly */
-/* } */
+let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
+let isCodeGenOnly = 1 in {
+def RET : M680x0PseudoInst<(outs), (ins i32imm:$adj), "", [(M680x0Ret timm:$adj)]>;
+} // isCodeGenOnly
+}

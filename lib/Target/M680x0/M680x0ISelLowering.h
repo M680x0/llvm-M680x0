@@ -97,7 +97,7 @@ namespace llvm {
     SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue
-    LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
+    LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
                          const SmallVectorImpl<ISD::InputArg> &Ins,
                          const SDLoc &DL, SelectionDAG &DAG,
                          SmallVectorImpl<SDValue> &InVals) const override;
@@ -105,7 +105,7 @@ namespace llvm {
     // SDValue LowerCall(CallLoweringInfo &CLI,
     //                   SmallVectorImpl<SDValue> &InVals) const override;
 
-    SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
+    SDValue LowerReturn(SDValue Chain, CallingConv::ID CCID, bool IsVarArg,
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
                         const SmallVectorImpl<SDValue> &OutVals,
                         const SDLoc &DL, SelectionDAG &DAG) const override;

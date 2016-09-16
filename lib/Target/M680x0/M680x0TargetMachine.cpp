@@ -16,6 +16,7 @@
 
 #include "M680x0Subtarget.h"
 #include "M680x0TargetObjectFile.h"
+#include "M680x0ISelDAGToDAG.h"
 
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/Passes.h"
@@ -52,7 +53,7 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   Ret += "-n8:16:32";
 
   // Aggregates are 32 bit aligned and stack is 16 bit aligned
-  Ret += "a:0:32-S16";
+  Ret += "-a:0:32-S16";
 
   return Ret;
 }
@@ -122,9 +123,17 @@ public:
   const M680x0Subtarget &getM680x0Subtarget() const {
     return *getM680x0TargetMachine().getSubtargetImpl();
   }
+
+  bool addInstSelector() override;
 };
 } // namespace
 
 TargetPassConfig *M680x0TargetMachine::createPassConfig(PassManagerBase &PM) {
   return new M680x0PassConfig(this, PM);
+}
+
+bool M680x0PassConfig::addInstSelector() {
+  // Install an instruction selector.
+  addPass(createM680x0ISelDag(getM680x0TargetMachine()));
+  return false;
 }
