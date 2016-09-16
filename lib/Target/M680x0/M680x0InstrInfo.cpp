@@ -30,3 +30,8 @@ void M680x0InstrInfo::anchor() {}
 
 M680x0InstrInfo::M680x0InstrInfo(const M680x0Subtarget &STI)
     : Subtarget(STI), RI(STI) {}
+
+bool M680x0InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
+  MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
+  return false;
+}

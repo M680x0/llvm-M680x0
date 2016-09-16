@@ -141,12 +141,12 @@ M680x0TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CCID,
   }
 
   // Swift calling convention does not require we copy the sret argument
-  // into %rax/%eax for the return, and SRetReturnReg is not set for Swift.
+  // into %d0 for the return, and SRetReturnReg is not set for Swift.
 
   // All M680x0 ABIs require that for returning structs by value we copy
-  // the sret argument into %rax/%eax (depending on ABI) for the return.
+  // the sret argument into %d0 (depending on ABI) for the return.
   // We saved the argument into a virtual register in the entry block,
-  // so now we copy the value out and into %rax/%eax.
+  // so now we copy the value out and into %d0.
   //
   // Checking Function.hasStructRetAttr() here is insufficient because the IR
   // may not have an explicit sret argument. If MFI.CanLowerReturn is

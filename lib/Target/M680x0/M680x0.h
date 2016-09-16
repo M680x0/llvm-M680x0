@@ -23,6 +23,12 @@ namespace llvm {
 class FunctionPass;
 class M680x0TargetMachine;
 
+/// Return a Machine IR pass that expands M680x0-specific pseudo
+/// instructions into a sequence of actual instructions. This pass
+/// must run after prologue/epilogue insertion and before lowering
+/// the MachineInstr to MC.
+FunctionPass * createM680x0ExpandPseudoPass();
+
 } // End llvm namespace
 
 #endif

@@ -125,6 +125,7 @@ public:
   }
 
   bool addInstSelector() override;
+  void addPreSched2() override;
 };
 } // namespace
 
@@ -136,4 +137,8 @@ bool M680x0PassConfig::addInstSelector() {
   // Install an instruction selector.
   addPass(createM680x0ISelDag(getM680x0TargetMachine()));
   return false;
+}
+
+void M680x0PassConfig::addPreSched2() {
+  addPass(createM680x0ExpandPseudoPass());
 }

@@ -410,8 +410,8 @@ def JMP32r     : M680x0Inst<0x0, (outs), (ins M680x0_ARI32:$dst),
 // TODO don't forget about LINK/UNLK
 // JSR,LINK ... UNLK,RTS(RTR)
 // Return
-// FIXME
 let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
+def RTS : M680x0Inst<0x0, (outs), (ins), "rts", []>;
 let isCodeGenOnly = 1 in {
 def RET : M680x0PseudoInst<(outs), (ins i32imm:$adj, variable_ops),
                            "", [(M680x0Ret timm:$adj)]>;

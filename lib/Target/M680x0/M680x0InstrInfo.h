@@ -14,6 +14,7 @@
 #ifndef LLVM_LIB_TARGET_M680X0_M680X0INSTRINFO_H
 #define LLVM_LIB_TARGET_M680X0_M680X0INSTRINFO_H
 
+#include "MCTargetDesc/M680x0BaseInfo.h"
 #include "M680x0.h"
 #include "M680x0RegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -40,6 +41,8 @@ public:
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
   const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
+
+  bool expandPostRAPseudo(MachineInstr &MI) const override;
 
 protected:
 };
