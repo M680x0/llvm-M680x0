@@ -53,7 +53,12 @@ bool M680x0AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 }
 
 void M680x0AsmPrinter::EmitInstruction(const MachineInstr *MI) {
-    // TODO
+  if (MI->isPseudo())
+    llvm_unreachable("Pseudo opcode found in EmitInstruction()");
+
+  MCInst TmpInst0;
+  MCInstLowering.Lower(MI, TmpInst0);
+  OutStreamer->EmitInstruction(TmpInst0, getSubtargetInfo());
 }
 
 void M680x0AsmPrinter::EmitFunctionEntryLabel() {
