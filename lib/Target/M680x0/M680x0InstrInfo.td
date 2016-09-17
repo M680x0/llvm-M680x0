@@ -247,6 +247,9 @@ def immSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 // Instructions
 //===----------------------------------------------------------------------===//
 
+// TODO make instr set CCR like X86 does
+// Do i need this?
+
 // NOP
 let hasSideEffects = 0 in {
   def NOP : M680x0Inst<0x4E71, (outs), (ins), "nop", []>;
@@ -260,7 +263,7 @@ let hasSideEffects = 0 in {
 // V,C - cleared
 let Defs = [CCR] in {
 
-// Dn -> Dn
+// Dn <- Dn
 def MOV8rr  : M680x0Inst<0x1000, (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src),
                          "move.b\t$src, $dst",
                          []>;
@@ -274,63 +277,63 @@ def MOV32rr : M680x0Inst<0x2000, (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$sr
                          []>;
 
 
-// Imm -> Dn
+// Dn <- Imm
 // TODO what the hell this means?
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-def MOV8ir  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins i8imm :$src),
+def MOV8ri  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins i8imm :$src),
                          "move.b\t$src, $dst",
                          [(set i8:$dst, immSExt8:$src)]>;
 
-def MOV16ir : M680x0Inst<0x3000, (outs DR16:$dst), (ins i16imm:$src),
+def MOV16ri : M680x0Inst<0x3000, (outs DR16:$dst), (ins i16imm:$src),
                          "move.w\t$src, $dst",
                          [(set i16:$dst, immSExt16:$src)]>;
 
-def MOV32ir : M680x0Inst<0x2000, (outs DR32:$dst), (ins i32imm:$src),
+def MOV32ri : M680x0Inst<0x2000, (outs DR32:$dst), (ins i32imm:$src),
                          "move.l\t$src, $dst",
                          [(set i32:$dst, immSExt32:$src)]>;
 }
 
 
 // TODO check if DAG imm will be matched to i*imm operand
-// Imm -> (An)
-def MOV8im  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, i8imm:$src),
+// (An) <- Imm
+def MOV8mi  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, i8imm:$src),
                          "move.b\t$src, $dst",
                          [(store immSExt8:$src, iPTR:$dst)]>;
 
-def MOV16im : M680x0Inst<0x3000, (outs), (ins M680x0_ARI16:$dst, i16imm:$src),
+def MOV16mi : M680x0Inst<0x3000, (outs), (ins M680x0_ARI16:$dst, i16imm:$src),
                          "move.w\t$src, $dst",
                          [(store immSExt16:$src, iPTR:$dst)]>;
 
-def MOV32im : M680x0Inst<0x2000, (outs), (ins M680x0_ARI32:$dst, i32imm:$src),
+def MOV32mi : M680x0Inst<0x2000, (outs), (ins M680x0_ARI32:$dst, i32imm:$src),
                          "move.l\t$src, $dst}",
                          [(store immSExt32:$src, iPTR:$dst)]>;
 
 
-// (An) -> Reg
+// Dn <- (An)
 let canFoldAsLoad = 1, isReMaterializable = 1 in {
-def MOV8mr  : M680x0Inst<0x1000, (outs DR8:$dst), (ins M680x0_ARI8 :$src),
+def MOV8rm  : M680x0Inst<0x1000, (outs DR8:$dst), (ins M680x0_ARI8 :$src),
                          "move.b\t$src, $dst",
                          [(set DR8:$dst, (M680x0_loadi8 iPTR:$src))]>;
 
-def MOV16mr : M680x0Inst<0x1000, (outs DR16:$dst), (ins M680x0_ARI16:$src),
+def MOV16rm : M680x0Inst<0x1000, (outs DR16:$dst), (ins M680x0_ARI16:$src),
                          "move.w\t$src, $dst",
                          [(set DR16:$dst, (M680x0_loadi16 iPTR:$src))]>;
 
-def MOV32mr : M680x0Inst<0x1000, (outs DR32:$dst), (ins M680x0_ARI32:$src),
+def MOV32rm : M680x0Inst<0x1000, (outs DR32:$dst), (ins M680x0_ARI32:$src),
                          "move.l\t$src, $dst",
                          [(set DR32:$dst, (M680x0_loadi32 iPTR:$src))]>;
 
 
-// Dn -> (An)
-def MOV8rm  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, DR8:$src),
+// (An) <- Dn
+def MOV8mr  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, DR8:$src),
                          "move.b\t$src, $dst",
                          [(store DR8:$src, iPTR:$dst)]>;
 
-def MOV16rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI16:$dst, DR16:$src),
+def MOV16mr : M680x0Inst<0x1000, (outs), (ins M680x0_ARI16:$dst, DR16:$src),
                          "move.w\t$src, $dst",
                          [(store DR16:$src, iPTR:$dst)]>;
 
-def MOV32rm : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
+def MOV32mr : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
                          "move.l\t$src, $dst",
                          [(store DR32:$src, iPTR:$dst)]>;
 }
@@ -344,26 +347,30 @@ let isCommutable = 1 in { // FIXME is it really a commutable form?
 // M680x0 instruction is dyadic where the second operand is destination
 let Constraints = "$src = $dst" in {
 
-// X,N,Z,V,C - set by operation's result
+// X — Set the same as the carry bit.
+// N — Set if the result is negative; cleared otherwise.
+// Z — Set if the result is zero; cleared otherwise.
+// V — Set if an overflow is generated; cleared otherwise.
+// C — Set if a carry is generated; cleared otherwise.
 let Defs = [CCR] in {
 
-// Imm + Dn -> Dn
-def ADD8ir  : M680x0Inst<0x000,
+// Dn <- Dn + Imm
+def ADD8ri  : M680x0Inst<0x000,
                (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
-               "add.b\t$imm, $dst",
+               "addi.b\t$imm, $dst",
                [(set i8:$dst, (add i8:$src, immSExt8:$imm))]>;
 
-def ADD16ir : M680x0Inst<0x000,
+def ADD16ri : M680x0Inst<0x000,
                (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
-               "add.w\t$imm, $dst",
+               "addi.w\t$imm, $dst",
                [(set i16:$dst, (add i16:$src, immSExt16:$imm))]>;
 
-def ADD32ir : M680x0Inst<0x000,
+def ADD32ri : M680x0Inst<0x000,
                (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
-               "add.l\t$imm, $dst",
+               "addi.l\t$imm, $dst",
                [(set i32:$dst, (add i32:$src, immSExt32:$imm))]>;
 
-// Dm + Dn -> Dn
+// Dn <- Dn + Dr
 def ADD8rr  : M680x0Inst<0x000,
                (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
                "add.b\t$reg, $dst",
@@ -378,7 +385,80 @@ def ADD32rr : M680x0Inst<0x000,
                (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
                "add.l\t$reg, $dst",
                [(set i32:$dst, (add i32:$src, i32:$reg))]>;
-} // Defs
+
+
+// Dn <- Dn - Imm
+def SUB8ri  : M680x0Inst<0x000,
+               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
+               "subi.b\t$imm, $dst",
+               [(set i8:$dst, (sub i8:$src, immSExt8:$imm))]>;
+
+def SUB16ri : M680x0Inst<0x000,
+               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
+               "subi.w\t$imm, $dst",
+               [(set i16:$dst, (sub i16:$src, immSExt16:$imm))]>;
+
+def SUB32ri : M680x0Inst<0x000,
+               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
+               "subi.l\t$imm, $dst",
+               [(set i32:$dst, (sub i32:$src, immSExt32:$imm))]>;
+
+// Dn <- Dn - Dr
+def SUB8rr  : M680x0Inst<0x000,
+               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
+               "sub.b\t$reg, $dst",
+               [(set i8:$dst, (sub i8:$src, i8:$reg))]>;
+
+def SUB16rr : M680x0Inst<0x000,
+               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, M680x0_DRD16:$reg),
+               "sub.w\t$reg, $dst",
+               [(set i16:$dst, (sub i16:$src, i16:$reg))]>;
+
+def SUB32rr : M680x0Inst<0x000,
+               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
+               "sub.l\t$reg, $dst",
+               [(set i32:$dst, (sub i32:$src, i32:$reg))]>;
+} // CCR Defs
+
+// X — Not affected.
+// N — Set if the most significant bit of the result is set; cleared otherwise.
+// Z — Set if the result is zero; cleared otherwise.
+// V — Always cleared.
+// C — Always cleared.
+let Defs = [CCR] in {
+
+// Dn <- Dn AND Imm
+def AND8ri  : M680x0Inst<0x000,
+               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
+               "andi.b\t$imm, $dst",
+               [(set i8:$dst, (and i8:$src, immSExt8:$imm))]>;
+
+def AND16ri : M680x0Inst<0x000,
+               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
+               "andi.w\t$imm, $dst",
+               [(set i16:$dst, (and i16:$src, immSExt16:$imm))]>;
+
+def AND32ri : M680x0Inst<0x000,
+               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
+               "andi.l\t$imm, $dst",
+               [(set i32:$dst, (and i32:$src, immSExt32:$imm))]>;
+
+// Dn <- Dn AND Dr
+def AND8rr  : M680x0Inst<0x000,
+               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
+               "and.b\t$reg, $dst",
+               [(set i8:$dst, (and i8:$src, i8:$reg))]>;
+
+def AND16rr : M680x0Inst<0x000,
+               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, M680x0_DRD16:$reg),
+               "and.w\t$reg, $dst",
+               [(set i16:$dst, (and i16:$src, i16:$reg))]>;
+
+def AND32rr : M680x0Inst<0x000,
+               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
+               "and.l\t$reg, $dst",
+               [(set i32:$dst, (and i32:$src, i32:$reg))]>;
+} // CCR Defs
 } // Constraints
 } // isCommutable
 
