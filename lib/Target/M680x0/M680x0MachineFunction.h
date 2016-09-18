@@ -29,82 +29,68 @@
 
 namespace llvm {
 
-/// \brief The class represents a GOT entry resolved by lazy-binding.
-class M680x0CallEntry : public CallEntryPseudoSourceValue {
-public:
-  explicit M680x0CallEntry(StringRef N);
-  explicit M680x0CallEntry(const GlobalValue *V);
-
-private:
-  void printCustom(raw_ostream &O) const override;
-#ifndef NDEBUG
-  std::string Name;
-  const GlobalValue *Val;
-#endif
-};
-
 class M680x0MachineFunctionInfo : public MachineFunctionInfo {
   MachineFunction& MF;
 
-  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
-  int VarArgsFrameIndex = 0;
+  /// RestoreBasePointerOffset - Non-zero if the function has base pointer
+  /// and makes call to llvm.eh.sjlj.setjmp. When non-zero, the value is a
+  /// displacement from the frame pointer to a slot where the base pointer
+  /// is stashed.
+  signed char RestoreBasePointerOffset = 0;
+
+  /// CalleeSavedFrameSize - Size of the callee-saved register portion of the
+  /// stack frame in bytes.
+  unsigned CalleeSavedFrameSize = 0;
 
   /// BytesToPopOnReturn - Number of bytes function pops on return (in addition
   /// to the space used by the return address).
   /// Used on windows platform for stdcall & fastcall name decoration
   unsigned BytesToPopOnReturn = 0;
 
-  // FIXME add description
-  unsigned MaxCallFrameSize = 0;
+  /// TailCallReturnAddrDelta - The number of bytes by which return address
+  /// stack slot is moved as the result of tail call optimization.
+  int TailCallReturnAddrDelta = 0;
+
+  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
+  int VarArgsFrameIndex = 0;
+
+  /// HasPushSequences - Keeps track of whether this function uses sequences
+  /// of pushes to pass function parameters.
+  bool HasPushSequences = false;
 
   /// SRetReturnReg - Some subtargets require that sret lowering includes
   /// returning the value of the returned struct in a register. This field
   /// holds the virtual register into which the sret argument is passed.
   unsigned SRetReturnReg = 0;
 
-  /// True if function has a byval argument.
-  bool HasByvalArg = false;
-
-  /// Size of incoming argument area.
-  unsigned IncomingArgSize = 0;
-
-  /// CallsEhReturn - Whether the function calls llvm.eh.return.
-  bool CallsEhReturn = false;
-
-  /// CallsEhDwarf - Whether the function calls llvm.eh.dwarf.
-  bool CallsEhDwarf = false;
-
-  /// Frame objects for spilling eh data registers.
-  int EhDataRegFI[2]; // FIXME not sure if this is correct
-
 public:
   M680x0MachineFunctionInfo() = default;
   explicit M680x0MachineFunctionInfo(MachineFunction& MF) : MF(MF) {}
 
-  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
-  void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+  bool getRestoreBasePointer() const { return RestoreBasePointerOffset!=0; }
+  void setRestoreBasePointer(const MachineFunction *MF);
+  int getRestoreBasePointerOffset() const {return RestoreBasePointerOffset; }
+
+  unsigned getCalleeSavedFrameSize() const { return CalleeSavedFrameSize; }
+  void setCalleeSavedFrameSize(unsigned bytes) { CalleeSavedFrameSize = bytes; }
 
   unsigned getBytesToPopOnReturn() const { return BytesToPopOnReturn; }
   void setBytesToPopOnReturn (unsigned bytes) { BytesToPopOnReturn = bytes;}
 
+  int getTCReturnAddrDelta() const { return TailCallReturnAddrDelta; }
+  void setTCReturnAddrDelta(int delta) {TailCallReturnAddrDelta = delta;}
+
+  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
+  void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
+  bool getHasPushSequences() const { return HasPushSequences; }
+  void setHasPushSequences(bool HasPush) { HasPushSequences = HasPush; }
+
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
-  bool hasByvalArg() const { return HasByvalArg; }
-
-  void setFormalArgInfo(unsigned Size, bool HasByval) {
-    IncomingArgSize = Size;
-    HasByvalArg = HasByval;
-  }
-
 private:
   virtual void anchor();
-
-  /// M680x0CallEntry maps.
-  StringMap<std::unique_ptr<const M680x0CallEntry>> ExternalCallEntries;
-  ValueMap<const GlobalValue *, std::unique_ptr<const M680x0CallEntry>>
-      GlobalCallEntries;
-
 };
 
 } // end of namespace llvm

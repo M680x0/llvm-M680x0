@@ -44,7 +44,7 @@ const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case M680x0ISD::TAIL_CALL: return "M680x0ISD::TAIL_CALL";
   case M680x0ISD::GP_REL:    return "M680x0ISD::GP_REL";
   case M680x0ISD::RET:       return "M680x0ISD::RET";
-  case M680x0ISD::EH_RETURN: return "M680x0ISD::EH_RETURN";
+  case M680x0ISD::TC_RETURN: return "M680x0ISD::TC_RETURN";
   case M680x0ISD::DivRem:    return "M680x0ISD::DivRem";
   case M680x0ISD::DivRemU:   return "M680x0ISD::DivRemU";
   case M680x0ISD::Wrapper:   return "M680x0ISD::Wrapper";

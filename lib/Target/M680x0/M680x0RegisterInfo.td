@@ -44,9 +44,10 @@ class M680x0AliasReg<string n, M680x0Reg reg>
   let Aliases = [reg];
 }
 
-def FP  : M680x0AliasReg<"fp",  A6>; // FIXME check if this is correct register
-
+def BP  : M680x0AliasReg<"bp",  A5>;
+def FP  : M680x0AliasReg<"fp",  A6>;
 def SP  : M680x0AliasReg<"sp",  A7>;
+
 def USP : M680x0AliasReg<"usp", A7>;
 def SSP : M680x0AliasReg<"ssp", A7>;
 def ISP : M680x0AliasReg<"isp", A7>;
@@ -100,3 +101,6 @@ let CopyCost = -1, isAllocatable = 0 in {
   def CR32 : M680x0RegClass<[i32], 32, (add PC)>;
   def CSP  : M680x0RegClass<[i32], 32, (add SP)>;
 }
+
+// Register used with tail call
+def R32_TC : M680x0RegClass<[i32], 32, (add D0, D1, A0, A1)>;

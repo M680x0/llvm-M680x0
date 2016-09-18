@@ -68,6 +68,13 @@ private:
   // Complex Patterns
   bool selectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
 
+  bool selectARID(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base);
+
+  bool selectARIIw(SDNode *Parent, SDValue N,
+                    SDValue &Imm, SDValue &Base, SDValue &Index);
+  bool selectARIIl(SDNode *Parent, SDValue N,
+                    SDValue &Imm, SDValue &Base, SDValue &Index);
+
 };
 
 FunctionPass *createM680x0ISelDag(M680x0TargetMachine &TM);

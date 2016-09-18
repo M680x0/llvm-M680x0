@@ -55,6 +55,23 @@ bool M680x0DAGToDAGISel::selectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
     return false;
 }
 
+bool M680x0DAGToDAGISel::
+selectARID(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base) {
+  return false;
+}
+
+bool M680x0DAGToDAGISel::
+selectARIIw(SDNode *Parent, SDValue N,
+                  SDValue &Imm, SDValue &Base, SDValue &Index) {
+  return false;
+}
+
+bool M680x0DAGToDAGISel::
+selectARIIl(SDNode *Parent, SDValue N,
+                  SDValue &Imm, SDValue &Base, SDValue &Index) {
+  return false;
+}
+
 std::pair<bool, SDNode*> M680x0DAGToDAGISel::selectNode(SDNode *Node) {
   // unsigned Opcode = Node->getOpcode();
   // SDLoc DL(Node);

@@ -52,7 +52,7 @@ M680x0Subtarget::M680x0Subtarget(const Triple &TT, const std::string &CPU,
   M680x0GenSubtargetInfo(TT, CPU, FS),
   TM(_TM), TargetTriple(TT), TSInfo(),
   InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
-  FrameLowering(*this, this->stackAlignment()),
+  FrameLowering(*this, this->getStackAlignment()),
   TLInfo(TM, *this) { }
 
 M680x0Subtarget &

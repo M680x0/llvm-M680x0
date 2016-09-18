@@ -41,7 +41,7 @@ namespace llvm {
       // Return
       RET,
 
-      EH_RETURN,
+      TC_RETURN,
 
       // DivRem(u)
       DivRem,

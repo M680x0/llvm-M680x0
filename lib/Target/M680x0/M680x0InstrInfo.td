@@ -19,14 +19,19 @@ include "M680x0InstrFormats.td"
 // Profiles
 //===----------------------------------------------------------------------===//
 
-def SDTM680x0Ret : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def SDTM680x0Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+
+def SDTM680x0TCRET : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
 //===----------------------------------------------------------------------===//
 // Nodes
 //===----------------------------------------------------------------------===//
 
-def M680x0Ret : SDNode<"M680x0ISD::RET", SDTM680x0Ret,
+def M680x0Ret   : SDNode<"M680x0ISD::RET", SDTM680x0Ret,
                        [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+
+def M680x0TCRet : SDNode<"M680x0ISD::TC_RETURN", SDTM680x0TCRET,
+                        [SDNPHasChain,  SDNPOptInGlue, SDNPVariadic]>;
 
 //===----------------------------------------------------------------------===//
 // Operands
@@ -150,7 +155,7 @@ def M680x0_PCI32w  : M680x0MemOperand<(ops i8imm, IR16), "printPCI32wMem">;
 def M680x0_PCI8l   : M680x0MemOperand<(ops i8imm, IR32), "printPCI8lMem">;
 def M680x0_PCI16l  : M680x0MemOperand<(ops i8imm, IR32), "printPCI16lMem">;
 def M680x0_PCI32l  : M680x0MemOperand<(ops i8imm, IR32), "printPCI32lMem">;
-} // let OperandType
+} // OPERAND_PCREL
 
 let OperandType = "OPERAND_IMMEDIATE" in {
 // IMMEDIATE DATA. This addressing mode requires either one or two words of
@@ -166,6 +171,18 @@ def M680x0_Imm16   : Operand<i16>;
 def M680x0_Imm32   : Operand<i32>;
 } // let OperandType
 
+let OperandType = "OPERAND_PCREL",
+    /* ParserMatchClass = M680x0AbsMemAsmOperand, */
+    PrintMethod = "printPCRelImm" in {
+def i16imm_pcrel : Operand<i16>;
+def i32imm_pcrel : Operand<i32>;
+
+// Branch targets have OtherVT type and print as pc-relative values.
+def brtarget  : Operand<OtherVT>;
+def brtarget8 : Operand<OtherVT>;
+
+} // OPERAND_PCREL
+
 //===----------------------------------------------------------------------===//
 // Complex Patterns
 //===----------------------------------------------------------------------===//
@@ -179,18 +196,32 @@ def M680x0CP_ARIPD : ComplexPattern<iPTR, 1, "selectARIPD",
 def M680x0CP_ARID  : ComplexPattern<iPTR, 2, "selectARID",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_ARII  : ComplexPattern<iPTR, 3, "selectARII",
+def M680x0CP_ARIIw  : ComplexPattern<iPTR, 3, "selectARIIw",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_ARIIl  : ComplexPattern<iPTR, 3, "selectARIIl",
                                     [frameindex], [SDNPWantParent]>;
 
 def M680x0CP_PCD   : ComplexPattern<iPTR, 1, "selectPCD",
                                     [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_PCI   : ComplexPattern<iPTR, 2, "selectPCI",
+def M680x0CP_PCIw  : ComplexPattern<iPTR, 2, "selectPCIw",
+                                    [frameindex], [SDNPWantParent]>;
+
+def M680x0CP_PCIl  : ComplexPattern<iPTR, 2, "selectPCIl",
                                     [frameindex], [SDNPWantParent]>;
 
 //===----------------------------------------------------------------------===//
 // Predicates
 //===----------------------------------------------------------------------===//
+
+def SmallCode    : Predicate<"TM.getCodeModel() == CodeModel::Small">;
+def KernelCode   : Predicate<"TM.getCodeModel() == CodeModel::Kernel">;
+def FarData      : Predicate<"TM.getCodeModel() != CodeModel::Small &&"
+                             "TM.getCodeModel() != CodeModel::Kernel">;
+def NearData     : Predicate<"TM.getCodeModel() == CodeModel::Small ||"
+                             "TM.getCodeModel() == CodeModel::Kernel">;
+def IsNotPIC : Predicate<"!TM.isPositionIndependent()">;
 
 //===----------------------------------------------------------------------===//
 // Pattern Fragments
@@ -247,7 +278,7 @@ def immSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 // Instructions
 //===----------------------------------------------------------------------===//
 
-// TODO make instr set CCR like X86 does
+// TODO make instr set CCR like M680x0 does
 // Do i need this?
 
 // NOP
@@ -291,7 +322,7 @@ def MOV16ri : M680x0Inst<0x3000, (outs DR16:$dst), (ins i16imm:$src),
 def MOV32ri : M680x0Inst<0x2000, (outs DR32:$dst), (ins i32imm:$src),
                          "move.l\t$src, $dst",
                          [(set i32:$dst, immSExt32:$src)]>;
-}
+} // let isReMaterializable = 1, isAsCheapAsAMove = 1
 
 
 // TODO check if DAG imm will be matched to i*imm operand
@@ -336,8 +367,44 @@ def MOV16mr : M680x0Inst<0x1000, (outs), (ins M680x0_ARI16:$dst, DR16:$src),
 def MOV32mr : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
                          "move.l\t$src, $dst",
                          [(store DR32:$src, iPTR:$dst)]>;
-}
-} // Defs
+} // let canFoldAsLoad = 1, isReMaterializable = 1
+} // Defs = [CCR]
+
+
+// FIXME Could these be specialized from normal MOVrPIm and MOVrpDm?
+let Defs = [SP], hasSideEffects = 0 in {
+
+// SP <- SP - <size>; (SP) <- Dn
+let mayStore = 1 in {
+def PUSH8r  : M680x0Inst<0x0, (outs), (ins DR8:$reg,  CSP:$sp),
+                         "move.b\t$reg, -($sp)",[]>;
+def PUSH16r : M680x0Inst<0x0, (outs), (ins DR16:$reg, CSP:$sp),
+                         "move.w\t$reg, -($sp)",[]>;
+def PUSH32r : M680x0Inst<0x0, (outs), (ins DR32:$reg, CSP:$sp),
+                         "move.l\t$reg, -($sp)",[]>;
+} // let mayStore = 1
+
+// Dn <- (SP); SP <- SP + <size>
+let mayLoad = 1 in {
+def POP8r  : M680x0Inst<0x0, (outs DR8:$reg),  (ins CSP:$sp),
+                        "move.b\t($sp)+, $reg", []>;
+def POP16r : M680x0Inst<0x0, (outs DR16:$reg), (ins CSP:$sp),
+                        "move.w\t($sp)+, $reg", []>;
+def POP32r : M680x0Inst<0x0, (outs DR32:$reg), (ins CSP:$sp),
+                        "move.l\t($sp)+, $reg", []>;
+} // let mayLoad = 1
+
+} // let Defs = [SP], hasSideEffects = 0
+
+
+// LEA - Load Effective Address
+def LEA32r_ARID : M680x0Inst<0x0, (outs AR32:$dst), (ins M680x0_ARID32:$src),
+                        "lea\t$src, $dst",
+                        [(set i32:$dst, M680x0CP_ARID:$src)]>;
+
+def LEA32r_ARIIl : M680x0Inst<0x0, (outs AR32:$dst), (ins M680x0_ARII32l:$src),
+                        "lea\t$src, $dst",
+                        [(set i32:$dst, M680x0CP_ARIIl:$src)]>;
 
 
 // ARITHMETIC
@@ -463,7 +530,7 @@ def AND32rr : M680x0Inst<0x000,
 } // isCommutable
 
 
-// CONTROL
+// CONTROL TODO move control into a separate file
 
 // Indirect branching
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
@@ -493,7 +560,39 @@ def JMP32r     : M680x0Inst<0x0, (outs), (ins M680x0_ARI32:$dst),
 let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
 def RTS : M680x0Inst<0x0, (outs), (ins), "rts", []>;
 let isCodeGenOnly = 1 in {
-def RET : M680x0PseudoInst<(outs), (ins i32imm:$adj, variable_ops),
-                           "", [(M680x0Ret timm:$adj)]>;
-} // isCodeGenOnly
+def RET : M680x0Pseudo<(outs), (ins i32imm:$adj, variable_ops),
+                        "", [(M680x0Ret timm:$adj)]>;
+} // let isCodeGenOnly = 1
 }
+
+// Tail call stuff.
+
+let isCodeGenOnly = 1 in {
+let Uses = [SP] in {
+let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1 in {
+
+def TCRETURNri : M680x0Pseudo<(outs), (ins R32_TC:$dst,       i32imm:$offset)>;
+def TCRETURNdi : M680x0Pseudo<(outs), (ins i32imm_pcrel:$dst, i32imm:$offset)>;
+
+// FIXME: The should be pseudo instructions that are lowered when going to
+// mcinst.
+/* def TAILJMPd : Ii32PCRel<0xE9, RawFrm, (outs), */
+/*                          (ins i32imm_pcrel:$dst), */
+/*                          "jmp\t$dst", */
+/*                          [], IIC_JMP_REL>; */
+/* def TAILJMPr : I<0xFF, MRM4r, (outs), (ins ptr_rc_tailcall:$dst), */
+/*                  "", [], IIC_JMP_REG>;  // FIXME: Remove encoding when JIT is dead. */
+/* let mayLoad = 1 in */
+/* def TAILJMPm : I<0xFF, MRM4m, (outs), (ins i32mem_TC:$dst), */
+/*                  "jmp{l}\t{*}$dst", [], IIC_JMP_MEM>; */
+}
+} // let Uses = [SP]
+} // let isCodeGenOnly = 1
+
+
+//===----------------------------------------------------------------------===//
+// Subsystems.
+//===----------------------------------------------------------------------===//
+
+// Compiler Pseudo Instructions and Pat Patterns
+include "M680x0InstrCompiler.td"

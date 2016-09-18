@@ -27,17 +27,33 @@ class Type;
 
 class M680x0RegisterInfo : public M680x0GenRegisterInfo {
   virtual void anchor();
+
+  /// StackPtr - M680x0 physical register used as stack ptr.
+  unsigned StackPtr;
+
+  /// FramePtr - M680x0 physical register used as frame ptr.
+  unsigned FramePtr;
+
+  /// BasePtr - M680x0 physical register used as a base ptr in complex stack
+  /// frames. I.e., when we need a 3rd base, not just SP and FP, due to
+  /// variable size stack objects.
+  unsigned BasePtr;
+
 protected:
   const M680x0Subtarget &Subtarget;
 
 public:
   M680x0RegisterInfo(const M680x0Subtarget &Subtarget);
 
-  /// Code Generation virtual methods...
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
 
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const override;
+
+  /// getRegsForTailCall - Returns a register class with registers that can be
+  /// used in forming tail calls.
+  const TargetRegisterClass * getRegsForTailCall(
+                                              const MachineFunction &MF) const;
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
@@ -50,10 +66,15 @@ public:
                            int SPAdj, unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
 
-  /// Debug information queries.
-  unsigned getFrameRegister(const MachineFunction &MF) const override;
+  bool hasBasePointer(const MachineFunction &MF) const;
 
-  /// \brief Return GPR register class.
+  /// True if the stack can be realigned for the target.
+  bool canRealignStack(const MachineFunction &MF) const override;
+
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getStackRegister() const { return StackPtr; }
+  unsigned getBaseRegister() const { return BasePtr; }
+
   const TargetRegisterClass *intRegClass(unsigned Size) const;
 };
 
