@@ -19,42 +19,69 @@ include "M680x0InstrFormats.td"
 // Profiles
 //===----------------------------------------------------------------------===//
 
-def SDTM680x0Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def MxSDT_Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
 
-def SDTM680x0TCRET : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
+def MxSDT_TCRet : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
 //===----------------------------------------------------------------------===//
 // Nodes
 //===----------------------------------------------------------------------===//
 
-def M680x0Ret   : SDNode<"M680x0ISD::RET", SDTM680x0Ret,
-                       [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+def MxRet   : SDNode<"M680x0ISD::RET", MxSDT_Ret,
+                     [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
-def M680x0TCRet : SDNode<"M680x0ISD::TC_RETURN", SDTM680x0TCRET,
-                        [SDNPHasChain,  SDNPOptInGlue, SDNPVariadic]>;
+def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
+                     [SDNPHasChain,  SDNPOptInGlue, SDNPVariadic]>;
 
 //===----------------------------------------------------------------------===//
 // Operands
 //===----------------------------------------------------------------------===//
 
+/// Size is the size of the data, either bits of a register or number of bits
+/// addressed in memory. Size id is a letter that identifies size.
+class MxSize<int num, string id, string full> {
+  int Num = num;
+  string Id = id;
+  string Full = full;
+}
+
+def Mx8  : MxSize<8,  "b", "byte">;
+def Mx16 : MxSize<16, "w", "word">;
+def Mx32 : MxSize<32, "l", "long">;
+
+class MxOperand<MxSize size, string letter> {
+  MxSize Size = size;
+  string Letter = letter;
+}
+
+class MxRegOp<RegisterClass rc, MxSize size, string letter, string pm = "printOperand">
+    : RegisterOperand<rc, pm>, MxOperand<size, letter>;
+
+// REGISTER DIRECT. The operand is in the data register specified by
+// the effective address register field.
+def MxXRD16 : MxRegOp<XR16, Mx16, "r", "printOperand">;
+def MxXRD32 : MxRegOp<XR32, Mx32, "r", "printOperand">;
+
 // DATA REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def M680x0_DRD8  : RegisterOperand<DR8,  "printOperand">;
-def M680x0_DRD16 : RegisterOperand<DR16, "printOperand">;
-def M680x0_DRD32 : RegisterOperand<DR32, "printOperand">;
+def MxDRD8  : MxRegOp<DR8,  Mx8,  "d", "printOperand">;
+def MxDRD16 : MxRegOp<DR16, Mx16, "d", "printOperand">;
+def MxDRD32 : MxRegOp<DR32, Mx32, "d", "printOperand">;
 
 // ADDRESS REGISTER DIRECT. The operand is in the address register specified by
 // the effective address register field.
-def M680x0_ARD : RegisterOperand<AR32, "printARDOperand">;
+def MxARD16 : MxRegOp<AR16, Mx16, "a", "printARDOperand">;
+def MxARD32 : MxRegOp<AR32, Mx32, "a", "printARDOperand">;
 
 // TODO finish parser wiring
-def M680x0MemAsmOperand : AsmOperandClass {
- let Name = "Mem";
+def MxMemAsmOperand : AsmOperandClass {
+ let Name = "MxMemOp";
 }
 
-class M680x0MemOperand<dag ops, string printMethod,
-          AsmOperandClass parserMatchClass = M680x0MemAsmOperand>
-    : Operand<iPTR> {
+class MxMemOp<dag ops, MxSize size, string letter,
+              string printMethod = "printOperand",
+              AsmOperandClass parserMatchClass = MxMemAsmOperand>
+    : Operand<iPTR>, MxOperand<size, letter> {
   let PrintMethod = printMethod;
   let MIOperandInfo = ops;
   let ParserMatchClass = parserMatchClass;
@@ -65,9 +92,13 @@ class M680x0MemOperand<dag ops, string printMethod,
 // register specified by the register field. The reference is classified as
 // a data reference with the exception of the jump and jump-to-subroutine
 // instructions.
-def M680x0_ARI8     : M680x0MemOperand<(ops AR32), "printARI8Mem">;
-def M680x0_ARI16    : M680x0MemOperand<(ops AR32), "printARI16Mem">;
-def M680x0_ARI32    : M680x0MemOperand<(ops AR32), "printARI32Mem">;
+def MxARI8        : MxMemOp<(ops AR32), Mx8,  "m", "printARI8Mem">;
+def MxARI16       : MxMemOp<(ops AR32), Mx16, "m", "printARI16Mem">;
+def MxARI32       : MxMemOp<(ops AR32), Mx32, "m", "printARI32Mem">;
+
+def MxARI8_TC     : MxMemOp<(ops AR32_TC), Mx8,  "m", "printARI8Mem">;
+def MxARI16_TC    : MxMemOp<(ops AR32_TC), Mx16, "m", "printARI16Mem">;
+def MxARI32_TC    : MxMemOp<(ops AR32_TC), Mx32, "m", "printARI32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH POSTINCREMENT. The address of the operand is
 // in the address register specified by the register field. After the operand
@@ -76,9 +107,13 @@ def M680x0_ARI32    : M680x0MemOperand<(ops AR32), "printARI32Mem">;
 // is the stack pointer and the operand size is byte, the address is incremented
 // by two rather than one to keep the stack pointer on a word boundary.
 // The reference is classified as a data reference.
-def M680x0_ARIPI8   : M680x0MemOperand<(ops AR32), "printARIPI8Mem">;
-def M680x0_ARIPI16  : M680x0MemOperand<(ops AR32), "printARIPI16Mem">;
-def M680x0_ARIPI32  : M680x0MemOperand<(ops AR32), "printARIPI32Mem">;
+def MxARIPI8      : MxMemOp<(ops AR32), Mx8,  "o", "printARIPI8Mem">;
+def MxARIPI16     : MxMemOp<(ops AR32), Mx16, "o", "printARIPI16Mem">;
+def MxARIPI32     : MxMemOp<(ops AR32), Mx32, "o", "printARIPI32Mem">;
+
+def MxARIPI8_TC   : MxMemOp<(ops AR32_TC), Mx8,  "o", "printARIPI8Mem">;
+def MxARIPI16_TC  : MxMemOp<(ops AR32_TC), Mx16, "o", "printARIPI16Mem">;
+def MxARIPI32_TC  : MxMemOp<(ops AR32_TC), Mx32, "o", "printARIPI32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH PREDECREMENT. The address of the operand is in
 // the address register specified by the register field. Before the operand
@@ -87,18 +122,26 @@ def M680x0_ARIPI32  : M680x0MemOperand<(ops AR32), "printARIPI32Mem">;
 // the stack pointer and the operand size is byte, the address is decremented by
 // two rather than one to keep the stack pointer on a word boundary.
 // The reference is classified as a data reference.
-def M680x0_ARIPD8   : M680x0MemOperand<(ops AR32), "printARIPD8Mem">;
-def M680x0_ARIPD16  : M680x0MemOperand<(ops AR32), "printARIPD16Mem">;
-def M680x0_ARIPD32  : M680x0MemOperand<(ops AR32), "printARIPD32Mem">;
+def MxARIPD8      : MxMemOp<(ops AR32), Mx8,  "e", "printARIPD8Mem">;
+def MxARIPD16     : MxMemOp<(ops AR32), Mx16, "e", "printARIPD16Mem">;
+def MxARIPD32     : MxMemOp<(ops AR32), Mx32, "e", "printARIPD32Mem">;
+
+def MxARIPD8_TC   : MxMemOp<(ops AR32_TC), Mx8,  "e", "printARIPD8Mem">;
+def MxARIPD16_TC  : MxMemOp<(ops AR32_TC), Mx16, "e", "printARIPD16Mem">;
+def MxARIPD32_TC  : MxMemOp<(ops AR32_TC), Mx32, "e", "printARIPD32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH DISPLACEMENT. This addressing mode requires one
 // word of extension. The address of the operand is the sum of the address in
 // the address register and the sign-extended 16-bit displacement integer in the
 // extension word. The reference is classified as a data reference with the
 // exception of the jump and jump-to-subroutine instructions.
-def M680x0_ARID8    : M680x0MemOperand<(ops i16imm, AR32), "printARID8Mem">;
-def M680x0_ARID16   : M680x0MemOperand<(ops i16imm, AR32), "printARID16Mem">;
-def M680x0_ARID32   : M680x0MemOperand<(ops i16imm, AR32), "printARID32Mem">;
+def MxARID8       : MxMemOp<(ops i16imm, AR32), Mx8,  "p", "printARID8Mem">;
+def MxARID16      : MxMemOp<(ops i16imm, AR32), Mx16, "p", "printARID16Mem">;
+def MxARID32      : MxMemOp<(ops i16imm, AR32), Mx32, "p", "printARID32Mem">;
+
+def MxARID8_TC    : MxMemOp<(ops i16imm, AR32_TC), Mx8,  "p", "printARID8Mem">;
+def MxARID16_TC   : MxMemOp<(ops i16imm, AR32_TC), Mx16, "p", "printARID16Mem">;
+def MxARID32_TC   : MxMemOp<(ops i16imm, AR32_TC), Mx32, "p", "printARID32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH INDEX. This addressing mode requires one word
 // of extension. The address of the operand is the sum of the address in the
@@ -106,21 +149,21 @@ def M680x0_ARID32   : M680x0MemOperand<(ops i16imm, AR32), "printARID32Mem">;
 // bits of the extension word, and the contents of the index register.
 // The reference is classified as a data reference with the exception of the
 // jump and jump-to-subroutine instructions
-def M680x0_ARII8w   : M680x0MemOperand<(ops i8imm, AR32, IR16), "printARII8wMem">;
-def M680x0_ARII16w  : M680x0MemOperand<(ops i8imm, AR32, IR16), "printARII16wMem">;
-def M680x0_ARII32w  : M680x0MemOperand<(ops i8imm, AR32, IR16), "printARII32wMem">;
+def MxARII8      : MxMemOp<(ops i8imm, AR32, XR32), Mx8,  "F", "printARII8Mem">;
+def MxARII16     : MxMemOp<(ops i8imm, AR32, XR32), Mx16, "F", "printARII16Mem">;
+def MxARII32     : MxMemOp<(ops i8imm, AR32, XR32), Mx32, "F", "printARII32Mem">;
 
-def M680x0_ARII8l   : M680x0MemOperand<(ops i8imm, AR32, IR32), "printARII8lMem">;
-def M680x0_ARII16l  : M680x0MemOperand<(ops i8imm, AR32, IR32), "printARII16lMem">;
-def M680x0_ARII32l  : M680x0MemOperand<(ops i8imm, AR32, IR32), "printARII32lMem">;
+def MxARII8_TC   : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx8,  "F", "printARII8Mem">;
+def MxARII16_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx16, "F", "printARII16Mem">;
+def MxARII32_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx32, "F", "printARII32Mem">;
 
 // ABSOLUTE SHORT ADDRESS. This addressing mode requires one word of extension.
 // The address of the operand is the extension word. The 16-bit address is sign
 // extended before it is used.  The reference is classified as a data reference
 // with the exception of the jump and jump-tosubroutine instructions.
-def M680x0_AS8      : M680x0MemOperand<(ops i16imm), "printAS8Mem">;
-def M680x0_AS16     : M680x0MemOperand<(ops i16imm), "printAS16Mem">;
-def M680x0_AS32     : M680x0MemOperand<(ops i16imm), "printAS32Mem">;
+def MxAS8      : MxMemOp<(ops i16imm), Mx8,  "b", "printAS8Mem">;
+def MxAS16     : MxMemOp<(ops i16imm), Mx16, "b", "printAS16Mem">;
+def MxAS32     : MxMemOp<(ops i16imm), Mx32, "b", "printAS32Mem">;
 
 // ABSOLUTE LONG ADDRESS. This addressing mode requires two words of extension.
 // The address of the operand is developed by the concatenation of the extension
@@ -128,9 +171,9 @@ def M680x0_AS32     : M680x0MemOperand<(ops i16imm), "printAS32Mem">;
 // order part of the address is the second extension word. The reference is
 // classified as a data reference with the exception of the jump and jump
 // to-subroutine instructions.
-def M680x0_AL8      : M680x0MemOperand<(ops i32imm), "printAL8Mem">;
-def M680x0_AL16     : M680x0MemOperand<(ops i32imm), "printAL16Mem">;
-def M680x0_AL32     : M680x0MemOperand<(ops i32imm), "printAL32Mem">;
+def MxAL8      : MxMemOp<(ops i32imm), Mx8,  "B", "printAL8Mem">;
+def MxAL16     : MxMemOp<(ops i32imm), Mx16, "B", "printAL16Mem">;
+def MxAL32     : MxMemOp<(ops i32imm), Mx32, "B", "printAL32Mem">;
 
 let OperandType = "OPERAND_PCREL" in {
 // PROGRAM COUNTER WITH DISPLACEMENT. This addressing mode requires one word of
@@ -138,9 +181,9 @@ let OperandType = "OPERAND_PCREL" in {
 // counter and the Sign-extended 16-bit displacement integer in the extension
 // word. The value in the program counter is the address of the extension word.
 // The reference is classified as a program reference.
-def M680x0_PCD8     : M680x0MemOperand<(ops i16imm), "printPCD8Mem">;
-def M680x0_PCD16    : M680x0MemOperand<(ops i16imm), "printPCD16Mem">;
-def M680x0_PCD32    : M680x0MemOperand<(ops i16imm), "printPCD32Mem">;
+def MxPCD8     : MxMemOp<(ops i16imm), Mx8,  "q", "printPCD8Mem">;
+def MxPCD16    : MxMemOp<(ops i16imm), Mx16, "q", "printPCD16Mem">;
+def MxPCD32    : MxMemOp<(ops i16imm), Mx32, "q", "printPCD32Mem">;
 
 // PROGRAM COUNTER WITH INDEX. This addressing mode requires one word of
 // extension. The address is the sum of the address in the program counter, the
@@ -148,14 +191,13 @@ def M680x0_PCD32    : M680x0MemOperand<(ops i16imm), "printPCD32Mem">;
 // word, and the contents of the index register.  The value in the program
 // counter is the address of the extension word. This reference is classified as
 // a program reference.
-def M680x0_PCI8w   : M680x0MemOperand<(ops i8imm, IR16), "printPCI8wMem">;
-def M680x0_PCI16w  : M680x0MemOperand<(ops i8imm, IR16), "printPCI16wMem">;
-def M680x0_PCI32w  : M680x0MemOperand<(ops i8imm, IR16), "printPCI32wMem">;
-
-def M680x0_PCI8l   : M680x0MemOperand<(ops i8imm, IR32), "printPCI8lMem">;
-def M680x0_PCI16l  : M680x0MemOperand<(ops i8imm, IR32), "printPCI16lMem">;
-def M680x0_PCI32l  : M680x0MemOperand<(ops i8imm, IR32), "printPCI32lMem">;
+def MxPCI8   : MxMemOp<(ops i8imm, XR32), Mx8,  "K", "printPCI8Mem">;
+def MxPCI16  : MxMemOp<(ops i8imm, XR32), Mx16, "K", "printPCI16Mem">;
+def MxPCI32  : MxMemOp<(ops i8imm, XR32), Mx32, "K", "printPCI32Mem">;
 } // OPERAND_PCREL
+
+class MxOp<ValueType vt, MxSize size, string letter>
+    : Operand<vt>, MxOperand<size, letter>;
 
 let OperandType = "OPERAND_IMMEDIATE" in {
 // IMMEDIATE DATA. This addressing mode requires either one or two words of
@@ -166,20 +208,20 @@ let OperandType = "OPERAND_IMMEDIATE" in {
 //                           high order 16 bits are in the first
 //                           extension word, low order 16 bits are
 //                           in the second extension word.
-def M680x0_Imm8    : Operand<i8>;
-def M680x0_Imm16   : Operand<i16>;
-def M680x0_Imm32   : Operand<i32>;
-} // let OperandType
+def Mxi8imm  : MxOp<i8,  Mx8,  "i">;
+def Mxi16imm : MxOp<i16, Mx16, "i">;
+def Mxi32imm : MxOp<i32, Mx32, "i">;
+} // OPERAND_IMMEDIATE
 
 let OperandType = "OPERAND_PCREL",
     /* ParserMatchClass = M680x0AbsMemAsmOperand, */
     PrintMethod = "printPCRelImm" in {
-def i16imm_pcrel : Operand<i16>;
-def i32imm_pcrel : Operand<i32>;
+def Mxi16_PCRel : Operand<i16>;
+def Mxi32_PCRel : Operand<i32>;
 
 // Branch targets have OtherVT type and print as pc-relative values.
-def brtarget  : Operand<OtherVT>;
-def brtarget8 : Operand<OtherVT>;
+def MxBrTarget  : Operand<OtherVT>;
+def MxBrTarget8 : Operand<OtherVT>;
 
 } // OPERAND_PCREL
 
@@ -187,29 +229,23 @@ def brtarget8 : Operand<OtherVT>;
 // Complex Patterns
 //===----------------------------------------------------------------------===//
 
-def M680x0CP_ARIPI : ComplexPattern<iPTR, 1, "selectARIPI",
-                                    [frameindex], [SDNPWantParent]>;
+def MxCP_ARIPI : ComplexPattern<iPTR, 1, "selectARIPI",
+                                [], [SDNPWantParent]>;
 
-def M680x0CP_ARIPD : ComplexPattern<iPTR, 1, "selectARIPD",
-                                    [frameindex], [SDNPWantParent]>;
+def MxCP_ARIPD : ComplexPattern<iPTR, 1, "selectARIPD",
+                                [], [SDNPWantParent]>;
 
-def M680x0CP_ARID  : ComplexPattern<iPTR, 2, "selectARID",
-                                    [frameindex], [SDNPWantParent]>;
+def MxCP_ARID  : ComplexPattern<iPTR, 2, "selectARID",
+                                [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_ARIIw  : ComplexPattern<iPTR, 3, "selectARIIw",
-                                    [frameindex], [SDNPWantParent]>;
+def MxCP_ARII  : ComplexPattern<iPTR, 3, "selectARII",
+                                [frameindex], [SDNPWantParent]>;
 
-def M680x0CP_ARIIl  : ComplexPattern<iPTR, 3, "selectARIIl",
-                                    [frameindex], [SDNPWantParent]>;
+def MxCP_PCD   : ComplexPattern<iPTR, 1, "selectPCD",
+                                [], [SDNPWantParent]>;
 
-def M680x0CP_PCD   : ComplexPattern<iPTR, 1, "selectPCD",
-                                    [frameindex], [SDNPWantParent]>;
-
-def M680x0CP_PCIw  : ComplexPattern<iPTR, 2, "selectPCIw",
-                                    [frameindex], [SDNPWantParent]>;
-
-def M680x0CP_PCIl  : ComplexPattern<iPTR, 2, "selectPCIl",
-                                    [frameindex], [SDNPWantParent]>;
+def MxCP_PCI   : ComplexPattern<iPTR, 2, "selectPCI",
+                                [], [SDNPWantParent]>;
 
 //===----------------------------------------------------------------------===//
 // Predicates
@@ -221,7 +257,7 @@ def FarData      : Predicate<"TM.getCodeModel() != CodeModel::Small &&"
                              "TM.getCodeModel() != CodeModel::Kernel">;
 def NearData     : Predicate<"TM.getCodeModel() == CodeModel::Small ||"
                              "TM.getCodeModel() == CodeModel::Kernel">;
-def IsNotPIC : Predicate<"!TM.isPositionIndependent()">;
+def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
 
 //===----------------------------------------------------------------------===//
 // Pattern Fragments
@@ -230,7 +266,7 @@ def IsNotPIC : Predicate<"!TM.isPositionIndependent()">;
 // Helper fragments for loads.
 // It's always safe to treat a anyext i16 load as a i32 load if the i16 is
 // known to be 32-bit aligned or better. Ditto for i8 to i16.
-def M680x0_loadi16 : PatFrag<(ops node:$ptr), (i16 (unindexedload node:$ptr)), [{
+def Mxloadi16 : PatFrag<(ops node:$ptr), (i16 (unindexedload node:$ptr)), [{
   LoadSDNode *LD = cast<LoadSDNode>(N);
   ISD::LoadExtType ExtType = LD->getExtensionType();
   if (ExtType == ISD::NON_EXTLOAD)
@@ -240,7 +276,7 @@ def M680x0_loadi16 : PatFrag<(ops node:$ptr), (i16 (unindexedload node:$ptr)), [
   return false;
 }]>;
 
-def M680x0_loadi32 : PatFrag<(ops node:$ptr), (i32 (unindexedload node:$ptr)), [{
+def Mxloadi32 : PatFrag<(ops node:$ptr), (i32 (unindexedload node:$ptr)), [{
   LoadSDNode *LD = cast<LoadSDNode>(N);
   ISD::LoadExtType ExtType = LD->getExtensionType();
   if (ExtType == ISD::NON_EXTLOAD)
@@ -250,29 +286,29 @@ def M680x0_loadi32 : PatFrag<(ops node:$ptr), (i32 (unindexedload node:$ptr)), [
   return false;
 }]>;
 
-def M680x0_loadi8         : PatFrag<(ops node:$ptr), (i8  (load node:$ptr))>;
+def Mxloadi8         : PatFrag<(ops node:$ptr), (i8  (load node:$ptr))>;
 
-def M680x0_sextloadi16i8  : PatFrag<(ops node:$ptr), (i16 (sextloadi8 node:$ptr))>;
-def M680x0_sextloadi32i8  : PatFrag<(ops node:$ptr), (i32 (sextloadi8 node:$ptr))>;
-def M680x0_sextloadi32i16 : PatFrag<(ops node:$ptr), (i32 (sextloadi16 node:$ptr))>;
+def Mxsextloadi16i8  : PatFrag<(ops node:$ptr), (i16 (sextloadi8 node:$ptr))>;
+def Mxsextloadi32i8  : PatFrag<(ops node:$ptr), (i32 (sextloadi8 node:$ptr))>;
+def Mxsextloadi32i16 : PatFrag<(ops node:$ptr), (i32 (sextloadi16 node:$ptr))>;
 
-def M680x0_zextloadi8i1   : PatFrag<(ops node:$ptr), (i8  (zextloadi1 node:$ptr))>;
-def M680x0_zextloadi16i1  : PatFrag<(ops node:$ptr), (i16 (zextloadi1 node:$ptr))>;
-def M680x0_zextloadi32i1  : PatFrag<(ops node:$ptr), (i32 (zextloadi1 node:$ptr))>;
-def M680x0_zextloadi16i8  : PatFrag<(ops node:$ptr), (i16 (zextloadi8 node:$ptr))>;
-def M680x0_zextloadi32i8  : PatFrag<(ops node:$ptr), (i32 (zextloadi8 node:$ptr))>;
-def M680x0_zextloadi32i16 : PatFrag<(ops node:$ptr), (i32 (zextloadi16 node:$ptr))>;
+def Mxzextloadi8i1   : PatFrag<(ops node:$ptr), (i8  (zextloadi1 node:$ptr))>;
+def Mxzextloadi16i1  : PatFrag<(ops node:$ptr), (i16 (zextloadi1 node:$ptr))>;
+def Mxzextloadi32i1  : PatFrag<(ops node:$ptr), (i32 (zextloadi1 node:$ptr))>;
+def Mxzextloadi16i8  : PatFrag<(ops node:$ptr), (i16 (zextloadi8 node:$ptr))>;
+def Mxzextloadi32i8  : PatFrag<(ops node:$ptr), (i32 (zextloadi8 node:$ptr))>;
+def Mxzextloadi32i16 : PatFrag<(ops node:$ptr), (i32 (zextloadi16 node:$ptr))>;
 
-def M680x0_extloadi8i1    : PatFrag<(ops node:$ptr), (i8  (extloadi1 node:$ptr))>;
-def M680x0_extloadi16i1   : PatFrag<(ops node:$ptr), (i16 (extloadi1 node:$ptr))>;
-def M680x0_extloadi32i1   : PatFrag<(ops node:$ptr), (i32 (extloadi1 node:$ptr))>;
-def M680x0_extloadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))>;
-def M680x0_extloadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
-def M680x0_extloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
+def Mxextloadi8i1    : PatFrag<(ops node:$ptr), (i8  (extloadi1 node:$ptr))>;
+def Mxextloadi16i1   : PatFrag<(ops node:$ptr), (i16 (extloadi1 node:$ptr))>;
+def Mxextloadi32i1   : PatFrag<(ops node:$ptr), (i32 (extloadi1 node:$ptr))>;
+def Mxextloadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))>;
+def Mxextloadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
+def Mxextloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 
-def immSExt8  : ImmLeaf<i8,  [{ return isInt<8>(Imm);  }]>;
-def immSExt16 : ImmLeaf<i16, [{ return isInt<16>(Imm); }]>;
-def immSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
+def MximmSExt8  : ImmLeaf<i8,  [{ return isInt<8>(Imm);  }]>;
+def MximmSExt16 : ImmLeaf<i16, [{ return isInt<16>(Imm); }]>;
+def MximmSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 
 //===----------------------------------------------------------------------===//
 // Instructions
@@ -283,10 +319,46 @@ def immSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 
 // NOP
 let hasSideEffects = 0 in {
-  def NOP : M680x0Inst<0x4E71, (outs), (ins), "nop", []>;
+  def NOP : MxInst<0x4E71, (outs), (ins), "nop", []>;
 }
 
-// FIXME these must conform to M680x0 EA operands described above
+multiclass MxMOV8Inst<MxOperand OPD, SDPatternOperator PAT = null_frag> {
+// Dn <- OPD
+def MOV8d#OPD.Letter
+  : MxInst<0x0, (outs MxDRD8:$dst), (ins OPD:$src), "move.b\t$src, $dst",
+           [(set i8:$dst, PAT)]>;
+
+// (An) <- OPD
+def MOV8m#OPD.Letter
+  : MxInst<0x0, (outs), (ins MxARI8:$dst, OPD:$src), "move.b\t$src, $dst",
+           [(store PAT, iPTR:$dst)]>;
+}
+
+multiclass MxMOVInst<MxOperand OPD, SDPatternOperator PAT = null_frag> {
+// Dn <- OPD
+def "MOV"#OPD.Size.Num#"d"#OPD.Letter
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+// An <- OPD
+def "MOV"#OPD.Size.Num#"a"#OPD.Letter
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+// Rn <- OPD
+def "MOV"#OPD.Size.Num#"r"#OPD.Letter
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+// (An) <- OPD
+def "MOV"#OPD.Size.Num#"m"#OPD.Letter
+  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARI"#OPD.Size.Num):$dst, OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(store PAT, iPTR:$dst)]>;
+}
 
 // MOVE
 // X - not affected
@@ -294,79 +366,29 @@ let hasSideEffects = 0 in {
 // V,C - cleared
 let Defs = [CCR] in {
 
-// Dn <- Dn
-def MOV8rr  : M680x0Inst<0x1000, (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src),
-                         "move.b\t$src, $dst",
-                         []>;
+defm MOV8_d  : MxMOV8Inst<MxDRD8, PatLeaf<(DR8:$src)>>;
+defm MOV16_d : MxMOVInst<MxDRD16, PatLeaf<(DR16:$src)>>;
+defm MOV32_d : MxMOVInst<MxDRD32, PatLeaf<(DR32:$src)>>;
 
-def MOV16rr : M680x0Inst<0x3000, (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src),
-                         "move.w\t$src, $dst",
-                         []>;
+defm MOV16_a : MxMOVInst<MxARD16, PatLeaf<(AR16:$src)>>;
+defm MOV32_a : MxMOVInst<MxARD32, PatLeaf<(AR32:$src)>>;
 
-def MOV32rr : M680x0Inst<0x2000, (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src),
-                         "move.l\t$src, $dst",
-                         []>;
-
+defm MOV16_r : MxMOVInst<MxXRD16, PatLeaf<(XR16:$src)>>;
+defm MOV32_r : MxMOVInst<MxXRD32, PatLeaf<(XR32:$src)>>;
 
 // Dn <- Imm
 // TODO what the hell this means?
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-def MOV8ri  : M680x0Inst<0x1000, (outs DR8 :$dst), (ins i8imm :$src),
-                         "move.b\t$src, $dst",
-                         [(set i8:$dst, immSExt8:$src)]>;
-
-def MOV16ri : M680x0Inst<0x3000, (outs DR16:$dst), (ins i16imm:$src),
-                         "move.w\t$src, $dst",
-                         [(set i16:$dst, immSExt16:$src)]>;
-
-def MOV32ri : M680x0Inst<0x2000, (outs DR32:$dst), (ins i32imm:$src),
-                         "move.l\t$src, $dst",
-                         [(set i32:$dst, immSExt32:$src)]>;
+defm MOV8_i  : MxMOV8Inst<Mxi8imm, PatLeaf<(MximmSExt8:$src)>>;
+defm MOV16_i : MxMOVInst<Mxi16imm, PatLeaf<(MximmSExt16:$src)>>;
+defm MOV32_i : MxMOVInst<Mxi32imm, PatLeaf<(MximmSExt32:$src)>>;
 } // let isReMaterializable = 1, isAsCheapAsAMove = 1
-
-
-// TODO check if DAG imm will be matched to i*imm operand
-// (An) <- Imm
-def MOV8mi  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, i8imm:$src),
-                         "move.b\t$src, $dst",
-                         [(store immSExt8:$src, iPTR:$dst)]>;
-
-def MOV16mi : M680x0Inst<0x3000, (outs), (ins M680x0_ARI16:$dst, i16imm:$src),
-                         "move.w\t$src, $dst",
-                         [(store immSExt16:$src, iPTR:$dst)]>;
-
-def MOV32mi : M680x0Inst<0x2000, (outs), (ins M680x0_ARI32:$dst, i32imm:$src),
-                         "move.l\t$src, $dst}",
-                         [(store immSExt32:$src, iPTR:$dst)]>;
-
 
 // Dn <- (An)
 let canFoldAsLoad = 1, isReMaterializable = 1 in {
-def MOV8rm  : M680x0Inst<0x1000, (outs DR8:$dst), (ins M680x0_ARI8 :$src),
-                         "move.b\t$src, $dst",
-                         [(set DR8:$dst, (M680x0_loadi8 iPTR:$src))]>;
-
-def MOV16rm : M680x0Inst<0x1000, (outs DR16:$dst), (ins M680x0_ARI16:$src),
-                         "move.w\t$src, $dst",
-                         [(set DR16:$dst, (M680x0_loadi16 iPTR:$src))]>;
-
-def MOV32rm : M680x0Inst<0x1000, (outs DR32:$dst), (ins M680x0_ARI32:$src),
-                         "move.l\t$src, $dst",
-                         [(set DR32:$dst, (M680x0_loadi32 iPTR:$src))]>;
-
-
-// (An) <- Dn
-def MOV8mr  : M680x0Inst<0x1000, (outs), (ins M680x0_ARI8:$dst, DR8:$src),
-                         "move.b\t$src, $dst",
-                         [(store DR8:$src, iPTR:$dst)]>;
-
-def MOV16mr : M680x0Inst<0x1000, (outs), (ins M680x0_ARI16:$dst, DR16:$src),
-                         "move.w\t$src, $dst",
-                         [(store DR16:$src, iPTR:$dst)]>;
-
-def MOV32mr : M680x0Inst<0x1000, (outs), (ins M680x0_ARI32:$dst, DR32:$src),
-                         "move.l\t$src, $dst",
-                         [(store DR32:$src, iPTR:$dst)]>;
+defm MOV8_m  : MxMOV8Inst<MxARI8, PatLeaf<(Mxloadi8  iPTR:$src)>>;
+defm MOV16_m : MxMOVInst<MxARI16, PatLeaf<(Mxloadi16 iPTR:$src)>>;
+defm MOV32_m : MxMOVInst<MxARI32, PatLeaf<(Mxloadi32 iPTR:$src)>>;
 } // let canFoldAsLoad = 1, isReMaterializable = 1
 } // Defs = [CCR]
 
@@ -376,21 +398,21 @@ let Defs = [SP], hasSideEffects = 0 in {
 
 // SP <- SP - <size>; (SP) <- Dn
 let mayStore = 1 in {
-def PUSH8r  : M680x0Inst<0x0, (outs), (ins DR8:$reg,  CSP:$sp),
+def PUSH8r  : MxInst<0x0, (outs), (ins DR8:$reg,  CSP:$sp),
                          "move.b\t$reg, -($sp)",[]>;
-def PUSH16r : M680x0Inst<0x0, (outs), (ins DR16:$reg, CSP:$sp),
+def PUSH16r : MxInst<0x0, (outs), (ins DR16:$reg, CSP:$sp),
                          "move.w\t$reg, -($sp)",[]>;
-def PUSH32r : M680x0Inst<0x0, (outs), (ins DR32:$reg, CSP:$sp),
+def PUSH32r : MxInst<0x0, (outs), (ins DR32:$reg, CSP:$sp),
                          "move.l\t$reg, -($sp)",[]>;
 } // let mayStore = 1
 
 // Dn <- (SP); SP <- SP + <size>
 let mayLoad = 1 in {
-def POP8r  : M680x0Inst<0x0, (outs DR8:$reg),  (ins CSP:$sp),
+def POP8r  : MxInst<0x0, (outs DR8:$reg),  (ins CSP:$sp),
                         "move.b\t($sp)+, $reg", []>;
-def POP16r : M680x0Inst<0x0, (outs DR16:$reg), (ins CSP:$sp),
+def POP16r : MxInst<0x0, (outs DR16:$reg), (ins CSP:$sp),
                         "move.w\t($sp)+, $reg", []>;
-def POP32r : M680x0Inst<0x0, (outs DR32:$reg), (ins CSP:$sp),
+def POP32r : MxInst<0x0, (outs DR32:$reg), (ins CSP:$sp),
                         "move.l\t($sp)+, $reg", []>;
 } // let mayLoad = 1
 
@@ -398,13 +420,13 @@ def POP32r : M680x0Inst<0x0, (outs DR32:$reg), (ins CSP:$sp),
 
 
 // LEA - Load Effective Address
-def LEA32r_ARID : M680x0Inst<0x0, (outs AR32:$dst), (ins M680x0_ARID32:$src),
+def LEA32r_ARID : MxInst<0x0, (outs AR32:$dst), (ins MxARID32:$src),
                         "lea\t$src, $dst",
-                        [(set i32:$dst, M680x0CP_ARID:$src)]>;
+                        [(set i32:$dst, MxCP_ARID:$src)]>;
 
-def LEA32r_ARIIl : M680x0Inst<0x0, (outs AR32:$dst), (ins M680x0_ARII32l:$src),
+def LEA32r_ARII : MxInst<0x0, (outs AR32:$dst), (ins MxARII32:$src),
                         "lea\t$src, $dst",
-                        [(set i32:$dst, M680x0CP_ARIIl:$src)]>;
+                        [(set i32:$dst, MxCP_ARII:$src)]>;
 
 
 // ARITHMETIC
@@ -422,67 +444,67 @@ let Constraints = "$src = $dst" in {
 let Defs = [CCR] in {
 
 // Dn <- Dn + Imm
-def ADD8ri  : M680x0Inst<0x000,
-               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
+def ADD8ri  : MxInst<0x000,
+               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
                "addi.b\t$imm, $dst",
-               [(set i8:$dst, (add i8:$src, immSExt8:$imm))]>;
+               [(set i8:$dst, (add i8:$src, MximmSExt8:$imm))]>;
 
-def ADD16ri : M680x0Inst<0x000,
-               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
+def ADD16ri : MxInst<0x000,
+               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
                "addi.w\t$imm, $dst",
-               [(set i16:$dst, (add i16:$src, immSExt16:$imm))]>;
+               [(set i16:$dst, (add i16:$src, MximmSExt16:$imm))]>;
 
-def ADD32ri : M680x0Inst<0x000,
-               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
+def ADD32ri : MxInst<0x000,
+               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
                "addi.l\t$imm, $dst",
-               [(set i32:$dst, (add i32:$src, immSExt32:$imm))]>;
+               [(set i32:$dst, (add i32:$src, MximmSExt32:$imm))]>;
 
 // Dn <- Dn + Dr
-def ADD8rr  : M680x0Inst<0x000,
-               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
+def ADD8rr  : MxInst<0x000,
+               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
                "add.b\t$reg, $dst",
                [(set i8:$dst, (add i8:$src, i8:$reg))]>;
 
-def ADD16rr : M680x0Inst<0x000,
-               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, M680x0_DRD16:$reg),
+def ADD16rr : MxInst<0x000,
+               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
                "add.w\t$reg, $dst",
                [(set i16:$dst, (add i16:$src, i16:$reg))]>;
 
-def ADD32rr : M680x0Inst<0x000,
-               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
+def ADD32rr : MxInst<0x000,
+               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
                "add.l\t$reg, $dst",
                [(set i32:$dst, (add i32:$src, i32:$reg))]>;
 
 
 // Dn <- Dn - Imm
-def SUB8ri  : M680x0Inst<0x000,
-               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
+def SUB8ri  : MxInst<0x000,
+               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
                "subi.b\t$imm, $dst",
-               [(set i8:$dst, (sub i8:$src, immSExt8:$imm))]>;
+               [(set i8:$dst, (sub i8:$src, MximmSExt8:$imm))]>;
 
-def SUB16ri : M680x0Inst<0x000,
-               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
+def SUB16ri : MxInst<0x000,
+               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
                "subi.w\t$imm, $dst",
-               [(set i16:$dst, (sub i16:$src, immSExt16:$imm))]>;
+               [(set i16:$dst, (sub i16:$src, MximmSExt16:$imm))]>;
 
-def SUB32ri : M680x0Inst<0x000,
-               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
+def SUB32ri : MxInst<0x000,
+               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
                "subi.l\t$imm, $dst",
-               [(set i32:$dst, (sub i32:$src, immSExt32:$imm))]>;
+               [(set i32:$dst, (sub i32:$src, MximmSExt32:$imm))]>;
 
 // Dn <- Dn - Dr
-def SUB8rr  : M680x0Inst<0x000,
-               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
+def SUB8rr  : MxInst<0x000,
+               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
                "sub.b\t$reg, $dst",
                [(set i8:$dst, (sub i8:$src, i8:$reg))]>;
 
-def SUB16rr : M680x0Inst<0x000,
-               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, M680x0_DRD16:$reg),
+def SUB16rr : MxInst<0x000,
+               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
                "sub.w\t$reg, $dst",
                [(set i16:$dst, (sub i16:$src, i16:$reg))]>;
 
-def SUB32rr : M680x0Inst<0x000,
-               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
+def SUB32rr : MxInst<0x000,
+               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
                "sub.l\t$reg, $dst",
                [(set i32:$dst, (sub i32:$src, i32:$reg))]>;
 } // CCR Defs
@@ -495,34 +517,34 @@ def SUB32rr : M680x0Inst<0x000,
 let Defs = [CCR] in {
 
 // Dn <- Dn AND Imm
-def AND8ri  : M680x0Inst<0x000,
-               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, i8imm:$imm),
+def AND8ri  : MxInst<0x000,
+               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
                "andi.b\t$imm, $dst",
-               [(set i8:$dst, (and i8:$src, immSExt8:$imm))]>;
+               [(set i8:$dst, (and i8:$src, MximmSExt8:$imm))]>;
 
-def AND16ri : M680x0Inst<0x000,
-               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, i16imm:$imm),
+def AND16ri : MxInst<0x000,
+               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
                "andi.w\t$imm, $dst",
-               [(set i16:$dst, (and i16:$src, immSExt16:$imm))]>;
+               [(set i16:$dst, (and i16:$src, MximmSExt16:$imm))]>;
 
-def AND32ri : M680x0Inst<0x000,
-               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, i32imm:$imm),
+def AND32ri : MxInst<0x000,
+               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
                "andi.l\t$imm, $dst",
-               [(set i32:$dst, (and i32:$src, immSExt32:$imm))]>;
+               [(set i32:$dst, (and i32:$src, MximmSExt32:$imm))]>;
 
 // Dn <- Dn AND Dr
-def AND8rr  : M680x0Inst<0x000,
-               (outs M680x0_DRD8:$dst), (ins M680x0_DRD8:$src, M680x0_DRD8:$reg),
+def AND8rr  : MxInst<0x000,
+               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
                "and.b\t$reg, $dst",
                [(set i8:$dst, (and i8:$src, i8:$reg))]>;
 
-def AND16rr : M680x0Inst<0x000,
-               (outs M680x0_DRD16:$dst), (ins M680x0_DRD16:$src, M680x0_DRD16:$reg),
+def AND16rr : MxInst<0x000,
+               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
                "and.w\t$reg, $dst",
                [(set i16:$dst, (and i16:$src, i16:$reg))]>;
 
-def AND32rr : M680x0Inst<0x000,
-               (outs M680x0_DRD32:$dst), (ins M680x0_DRD32:$src, M680x0_DRD32:$reg),
+def AND32rr : MxInst<0x000,
+               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
                "and.l\t$reg, $dst",
                [(set i32:$dst, (and i32:$src, i32:$reg))]>;
 } // CCR Defs
@@ -530,69 +552,11 @@ def AND32rr : M680x0Inst<0x000,
 } // isCommutable
 
 
-// CONTROL TODO move control into a separate file
-
-// Indirect branching
-let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
-// FIXME M680x0 does not allow 16 bit indirect jumps use sext operands
-/* def JMP16r     : M680x0Inst<0x0 (outs), (ins M680x0_ARI16:$dst), */
-/*                             "jmp\t$dst", */
-/*                             [(brind AR16:$dst)]>; */
-
-// jmp (An)
-def JMP32r     : M680x0Inst<0x0, (outs), (ins M680x0_ARI32:$dst),
-                            "jmp\t$dst",
-                            [(brind iPTR:$dst)]>;
-
-// FIXME how to jmp from mem?
-/* def JMP16m     : M680x0Inst<0x0 (outs), (ins M680x0_ARI16:$dst), */
-/*                             "jmp{w}\t{*}$dst", */
-/*                             [(brind (M680x0_loadi16 AR32:$dst))]>; */
-
-/* def JMP32m     : M680x0Inst<0x0 (outs), (ins M680x0_ARI32:$dst), */
-/*                             "jmp\t$dst", */
-/*                             [(brind (M680x0_loadi32 AR32:$dst))]>; */
-}
-
-// TODO don't forget about LINK/UNLK
-// JSR,LINK ... UNLK,RTS(RTR)
-// Return
-let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
-def RTS : M680x0Inst<0x0, (outs), (ins), "rts", []>;
-let isCodeGenOnly = 1 in {
-def RET : M680x0Pseudo<(outs), (ins i32imm:$adj, variable_ops),
-                        "", [(M680x0Ret timm:$adj)]>;
-} // let isCodeGenOnly = 1
-}
-
-// Tail call stuff.
-
-let isCodeGenOnly = 1 in {
-let Uses = [SP] in {
-let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1 in {
-
-def TCRETURNri : M680x0Pseudo<(outs), (ins R32_TC:$dst,       i32imm:$offset)>;
-def TCRETURNdi : M680x0Pseudo<(outs), (ins i32imm_pcrel:$dst, i32imm:$offset)>;
-
-// FIXME: The should be pseudo instructions that are lowered when going to
-// mcinst.
-/* def TAILJMPd : Ii32PCRel<0xE9, RawFrm, (outs), */
-/*                          (ins i32imm_pcrel:$dst), */
-/*                          "jmp\t$dst", */
-/*                          [], IIC_JMP_REL>; */
-/* def TAILJMPr : I<0xFF, MRM4r, (outs), (ins ptr_rc_tailcall:$dst), */
-/*                  "", [], IIC_JMP_REG>;  // FIXME: Remove encoding when JIT is dead. */
-/* let mayLoad = 1 in */
-/* def TAILJMPm : I<0xFF, MRM4m, (outs), (ins i32mem_TC:$dst), */
-/*                  "jmp{l}\t{*}$dst", [], IIC_JMP_MEM>; */
-}
-} // let Uses = [SP]
-} // let isCodeGenOnly = 1
-
-
 //===----------------------------------------------------------------------===//
 // Subsystems.
 //===----------------------------------------------------------------------===//
+
+include "M680x0InstrControl.td"
 
 // Compiler Pseudo Instructions and Pat Patterns
 include "M680x0InstrCompiler.td"
