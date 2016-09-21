@@ -22,26 +22,28 @@
 //  04   M68000    (An)+                    o       address register indirect with postincrement
 //  05   M68000    -(An)                    e       address register indirect with predecrement
 //  06   M68000    (i,An)                   p       address register indirect with displacement
-//  07   M68000    (i,An,Xn.W)              f       address register indirect with index and scale = 1
-//  10   M68000    (i,An,Xn.L)              F       address register indirect with index and scale = 1
-//  11   M68020    (i,An,Xn.W,SCALE)        g       address register indirect with index
-//  12   M68020    (i,An,Xn.L,SCALE)        G       address register indirect with index
-//  13   M68020    ([bd,An],Xn.W,SCALE,od)  u       memory indirect postindexed mode
-//  14   M68020    ([bd,An],Xn.L,SCALE,od)  U       memory indirect postindexed mode
-//  15   M68020    ([bd,An,Xn.W,SCALE],od)  v       memory indirect preindexed mode
-//  16   M68020    ([bd,An,Xn.L,SCALE],od)  V       memory indirect preindexed mode
-//  17   M68000    abs.W                    b       absolute short address
-//  20   M68000    abs.L                    B       absolute long address
+//  10   M68000    (i,An,Xn.L)              f       address register indirect with index and scale = 1
+//  07   M68000    (i,An,Xn.W)              F       address register indirect with index and scale = 1
+//  12   M68020    (i,An,Xn.L,SCALE)        g       address register indirect with index
+//  11   M68020    (i,An,Xn.W,SCALE)        G       address register indirect with index
+//  14   M68020    ([bd,An],Xn.L,SCALE,od)  u       memory indirect postindexed mode
+//  13   M68020    ([bd,An],Xn.W,SCALE,od)  U       memory indirect postindexed mode
+//  16   M68020    ([bd,An,Xn.L,SCALE],od)  v       memory indirect preindexed mode
+//  15   M68020    ([bd,An,Xn.W,SCALE],od)  V       memory indirect preindexed mode
+//  20   M68000    abs.L                    b       absolute long address
+//  17   M68000    abs.W                    B       absolute short address
 //  21   M68000    (i,PC)                   q       program counter with displacement
-//  22   M68000    (i,PC,Xn.W)              k       program counter with index and scale = 1
-//  23   M68000    (i,PC,Xn.L)              K       program counter with index and scale = 1
-//  24   M68020    (i,PC,Xn.W,SCALE)        l       program counter with index
-//  25   M68020    (i,PC,Xn.L,SCALE)        L       program counter with index
-//  26   M68020    ([bd,PC],Xn.W,SCALE,od)  x       program counter memory indirect postindexed mode
-//  27   M68020    ([bd,PC],Xn.L,SCALE,od)  X       program counter memory indirect postindexed mode
-//  30   M68020    ([bd,PC,Xn.W,SCALE],od)  y       program counter memory indirect preindexed mode
-//  31   M68020    ([bd,PC,Xn.L,SCALE],od)  Y       program counter memory indirect preindexed mode
+//  23   M68000    (i,PC,Xn.L)              k       program counter with index and scale = 1
+//  22   M68000    (i,PC,Xn.W)              K       program counter with index and scale = 1
+//  25   M68020    (i,PC,Xn.L,SCALE)        l       program counter with index
+//  24   M68020    (i,PC,Xn.W,SCALE)        L       program counter with index
+//  27   M68020    ([bd,PC],Xn.L,SCALE,od)  x       program counter memory indirect postindexed mode
+//  26   M68020    ([bd,PC],Xn.W,SCALE,od)  X       program counter memory indirect postindexed mode
+//  31   M68020    ([bd,PC,Xn.L,SCALE],od)  y       program counter memory indirect preindexed mode
+//  30   M68020    ([bd,PC,Xn.W,SCALE],od)  Y       program counter memory indirect preindexed mode
 //  32   M68000    #immediate               i       immediate data
+//
+// NOTE that long form is always lowercase, word variants are capitalized
 //
 // Operand can be quilified with size where appropriate to force a particular
 // instruction encoding, e.g.:

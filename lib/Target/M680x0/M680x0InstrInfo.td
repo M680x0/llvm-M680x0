@@ -54,7 +54,10 @@ class MxOperand<MxSize size, string letter> {
   string Letter = letter;
 }
 
-class MxRegOp<RegisterClass rc, MxSize size, string letter, string pm = "printOperand">
+class MxRegOp<RegisterClass rc,
+              MxSize size,
+              string letter,
+              string pm = "printOperand">
     : RegisterOperand<rc, pm>, MxOperand<size, letter>;
 
 // REGISTER DIRECT. The operand is in the data register specified by
@@ -62,16 +65,25 @@ class MxRegOp<RegisterClass rc, MxSize size, string letter, string pm = "printOp
 def MxXRD16 : MxRegOp<XR16, Mx16, "r", "printOperand">;
 def MxXRD32 : MxRegOp<XR32, Mx32, "r", "printOperand">;
 
+def MxXRD16_TC : MxRegOp<XR16_TC, Mx16, "r", "printOperand">;
+def MxXRD32_TC : MxRegOp<XR32_TC, Mx32, "r", "printOperand">;
+
 // DATA REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
 def MxDRD8  : MxRegOp<DR8,  Mx8,  "d", "printOperand">;
 def MxDRD16 : MxRegOp<DR16, Mx16, "d", "printOperand">;
 def MxDRD32 : MxRegOp<DR32, Mx32, "d", "printOperand">;
 
+def MxDRD16_TC : MxRegOp<DR16_TC, Mx16, "d", "printOperand">;
+def MxDRD32_TC : MxRegOp<DR32_TC, Mx32, "d", "printOperand">;
+
 // ADDRESS REGISTER DIRECT. The operand is in the address register specified by
 // the effective address register field.
 def MxARD16 : MxRegOp<AR16, Mx16, "a", "printARDOperand">;
 def MxARD32 : MxRegOp<AR32, Mx32, "a", "printARDOperand">;
+
+def MxARD16_TC : MxRegOp<AR16_TC, Mx16, "a", "printARDOperand">;
+def MxARD32_TC : MxRegOp<AR32_TC, Mx32, "a", "printARDOperand">;
 
 // TODO finish parser wiring
 def MxMemAsmOperand : AsmOperandClass {
@@ -149,13 +161,13 @@ def MxARID32_TC   : MxMemOp<(ops i16imm, AR32_TC), Mx32, "p", "printARID32Mem">;
 // bits of the extension word, and the contents of the index register.
 // The reference is classified as a data reference with the exception of the
 // jump and jump-to-subroutine instructions
-def MxARII8      : MxMemOp<(ops i8imm, AR32, XR32), Mx8,  "F", "printARII8Mem">;
-def MxARII16     : MxMemOp<(ops i8imm, AR32, XR32), Mx16, "F", "printARII16Mem">;
-def MxARII32     : MxMemOp<(ops i8imm, AR32, XR32), Mx32, "F", "printARII32Mem">;
+def MxARII8      : MxMemOp<(ops i8imm, AR32, XR32), Mx8,  "f", "printARII8Mem">;
+def MxARII16     : MxMemOp<(ops i8imm, AR32, XR32), Mx16, "f", "printARII16Mem">;
+def MxARII32     : MxMemOp<(ops i8imm, AR32, XR32), Mx32, "f", "printARII32Mem">;
 
-def MxARII8_TC   : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx8,  "F", "printARII8Mem">;
-def MxARII16_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx16, "F", "printARII16Mem">;
-def MxARII32_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx32, "F", "printARII32Mem">;
+def MxARII8_TC   : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx8,  "f", "printARII8Mem">;
+def MxARII16_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx16, "f", "printARII16Mem">;
+def MxARII32_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx32, "f", "printARII32Mem">;
 
 // ABSOLUTE SHORT ADDRESS. This addressing mode requires one word of extension.
 // The address of the operand is the extension word. The 16-bit address is sign
@@ -171,9 +183,9 @@ def MxAS32     : MxMemOp<(ops i16imm), Mx32, "b", "printAS32Mem">;
 // order part of the address is the second extension word. The reference is
 // classified as a data reference with the exception of the jump and jump
 // to-subroutine instructions.
-def MxAL8      : MxMemOp<(ops i32imm), Mx8,  "B", "printAL8Mem">;
-def MxAL16     : MxMemOp<(ops i32imm), Mx16, "B", "printAL16Mem">;
-def MxAL32     : MxMemOp<(ops i32imm), Mx32, "B", "printAL32Mem">;
+def MxAL8      : MxMemOp<(ops i32imm), Mx8,  "b", "printAL8Mem">;
+def MxAL16     : MxMemOp<(ops i32imm), Mx16, "b", "printAL16Mem">;
+def MxAL32     : MxMemOp<(ops i32imm), Mx32, "b", "printAL32Mem">;
 
 let OperandType = "OPERAND_PCREL" in {
 // PROGRAM COUNTER WITH DISPLACEMENT. This addressing mode requires one word of
@@ -191,9 +203,9 @@ def MxPCD32    : MxMemOp<(ops i16imm), Mx32, "q", "printPCD32Mem">;
 // word, and the contents of the index register.  The value in the program
 // counter is the address of the extension word. This reference is classified as
 // a program reference.
-def MxPCI8   : MxMemOp<(ops i8imm, XR32), Mx8,  "K", "printPCI8Mem">;
-def MxPCI16  : MxMemOp<(ops i8imm, XR32), Mx16, "K", "printPCI16Mem">;
-def MxPCI32  : MxMemOp<(ops i8imm, XR32), Mx32, "K", "printPCI32Mem">;
+def MxPCI8   : MxMemOp<(ops i8imm, XR32), Mx8,  "k", "printPCI8Mem">;
+def MxPCI16  : MxMemOp<(ops i8imm, XR32), Mx16, "k", "printPCI16Mem">;
+def MxPCI32  : MxMemOp<(ops i8imm, XR32), Mx32, "k", "printPCI32Mem">;
 } // OPERAND_PCREL
 
 class MxOp<ValueType vt, MxSize size, string letter>
@@ -216,9 +228,8 @@ def Mxi32imm : MxOp<i32, Mx32, "i">;
 let OperandType = "OPERAND_PCREL",
     /* ParserMatchClass = M680x0AbsMemAsmOperand, */
     PrintMethod = "printPCRelImm" in {
-def Mxi16_PCRel : Operand<i16>;
-def Mxi32_PCRel : Operand<i32>;
 
+// TODO do i need this?
 // Branch targets have OtherVT type and print as pc-relative values.
 def MxBrTarget  : Operand<OtherVT>;
 def MxBrTarget8 : Operand<OtherVT>;
@@ -314,83 +325,125 @@ def MximmSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 // Instructions
 //===----------------------------------------------------------------------===//
 
-// TODO make instr set CCR like M680x0 does
-// Do i need this?
-
 // NOP
 let hasSideEffects = 0 in {
   def NOP : MxInst<0x4E71, (outs), (ins), "nop", []>;
 }
 
-multiclass MxMOV8Inst<MxOperand OPD, SDPatternOperator PAT = null_frag> {
-// Dn <- OPD
-def MOV8d#OPD.Letter
-  : MxInst<0x0, (outs MxDRD8:$dst), (ins OPD:$src), "move.b\t$src, $dst",
-           [(set i8:$dst, PAT)]>;
 
-// (An) <- OPD
-def MOV8m#OPD.Letter
-  : MxInst<0x0, (outs), (ins MxARI8:$dst, OPD:$src), "move.b\t$src, $dst",
-           [(store PAT, iPTR:$dst)]>;
-}
-
-multiclass MxMOVInst<MxOperand OPD, SDPatternOperator PAT = null_frag> {
-// Dn <- OPD
-def "MOV"#OPD.Size.Num#"d"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-// An <- OPD
-def "MOV"#OPD.Size.Num#"a"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-// Rn <- OPD
-def "MOV"#OPD.Size.Num#"r"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-// (An) <- OPD
-def "MOV"#OPD.Size.Num#"j"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARI"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, iPTR:$dst)]>;
-}
+// TODO make move set imlicit CCR like M680x0 does
+// Do i need this?
 
 // MOVE
 // X - not affected
 // N,Z - set by operation
 // V,C - cleared
 let Defs = [CCR] in {
+multiclass MxMOV8Inst<MxOperand OPD, dag PAT> {
+// Dn <- OPD
+def "MOV8d"#OPD.Letter
+  : MxInst<0x0, (outs MxDRD8:$dst), (ins OPD:$src), "move.b\t$src, $dst",
+           [(set i8:$dst, PAT)]>;
 
-defm MOV8_d  : MxMOV8Inst<MxDRD8, PatLeaf<(DR8:$src)>>;
-defm MOV16_d : MxMOVInst<MxDRD16, PatLeaf<(DR16:$src)>>;
-defm MOV32_d : MxMOVInst<MxDRD32, PatLeaf<(DR32:$src)>>;
+// (An) <- OPD
+def "MOV8j"#OPD.Letter
+  : MxInst<0x0, (outs), (ins MxARI8:$dst, OPD:$src), "move.b\t$src, $dst",
+           [(store PAT, iPTR:$dst)]>;
 
-defm MOV16_a : MxMOVInst<MxARD16, PatLeaf<(AR16:$src)>>;
-defm MOV32_a : MxMOVInst<MxARD32, PatLeaf<(AR32:$src)>>;
+// (i,An) <- OPD
+def "MOV8p"#OPD.Letter
+  : MxInst<0x0, (outs), (ins MxARID8:$dst, OPD:$src), "move.b\t$src, $dst",
+           [(store PAT, MxCP_ARID:$dst)]>;
+}
 
-defm MOV16_r : MxMOVInst<MxXRD16, PatLeaf<(XR16:$src)>>;
-defm MOV32_r : MxMOVInst<MxXRD32, PatLeaf<(XR32:$src)>>;
+multiclass MxMOVInst<MxOperand OPD, dag PAT> {
 
-// Dn <- Imm
-// TODO what the hell this means?
-let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-defm MOV8_i  : MxMOV8Inst<Mxi8imm, PatLeaf<(MximmSExt8:$src)>>;
-defm MOV16_i : MxMOVInst<Mxi16imm, PatLeaf<(MximmSExt16:$src)>>;
-defm MOV32_i : MxMOVInst<Mxi32imm, PatLeaf<(MximmSExt32:$src)>>;
-} // let isReMaterializable = 1, isAsCheapAsAMove = 1
+// Set CS registers
 
-// Dn <- (An)
-let canFoldAsLoad = 1, isReMaterializable = 1 in {
-defm MOV8_j  : MxMOV8Inst<MxARI8, PatLeaf<(Mxloadi8  iPTR:$src)>>;
-defm MOV16_j : MxMOVInst<MxARI16, PatLeaf<(Mxloadi16 iPTR:$src)>>;
-defm MOV32_j : MxMOVInst<MxARI32, PatLeaf<(Mxloadi32 iPTR:$src)>>;
-} // let canFoldAsLoad = 1, isReMaterializable = 1
+let mayLoad = 1 in  {
+def "MOV"#OPD.Size.Num#"d"#OPD.Letter
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+def "MOV"#OPD.Size.Num#"a"#OPD.Letter
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+def "MOV"#OPD.Size.Num#"r"#OPD.Letter
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+
+// Set TC registers
+
+def "MOV"#OPD.Size.Num#"d"#OPD.Letter#"_TC"
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+def "MOV"#OPD.Size.Num#"a"#OPD.Letter#"_TC"
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+def "MOV"#OPD.Size.Num#"r"#OPD.Letter#"_TC"
+  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+
+} // mayLoad = 1
+
+
+// Store to MEM
+
+// (An) <- OPD
+def "MOV"#OPD.Size.Num#"j"#OPD.Letter
+  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARI"#OPD.Size.Num):$dst, OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(store PAT, iPTR:$dst)]>;
+
+// (i,An) <- OPD
+def "MOV"#OPD.Size.Num#"p"#OPD.Letter
+  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARID"#OPD.Size.Num):$dst, OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(store PAT, MxCP_ARID:$dst)]>;
+
+// (i,An) <- OPD
+def "MOV"#OPD.Size.Num#"f"#OPD.Letter
+  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARII"#OPD.Size.Num):$dst, OPD:$src),
+           "move."#OPD.Size.Id#"\t$src, $dst",
+           [(store PAT, MxCP_ARII:$dst)]>;
+}
 } // Defs = [CCR]
+
+defm MOV8_d  : MxMOV8Inst<MxDRD8, (i8  imm:$src)>;
+defm MOV16_d : MxMOVInst<MxDRD16, (i16 imm:$src)>;
+defm MOV32_d : MxMOVInst<MxDRD32, (i32 imm:$src)>;
+
+defm MOV16_a : MxMOVInst<MxARD16, (i16 imm:$src)>;
+defm MOV32_a : MxMOVInst<MxARD32, (i32 imm:$src)>;
+
+defm MOV16_r : MxMOVInst<MxXRD16, (i16 imm:$src)>;
+defm MOV32_r : MxMOVInst<MxXRD32, (i32 imm:$src)>;
+
+defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8 MximmSExt8:$src)>;
+defm MOV16_i : MxMOVInst<Mxi16imm, (i16 MximmSExt16:$src)>;
+defm MOV32_i : MxMOVInst<Mxi32imm, (i32 MximmSExt32:$src)>;
+
+defm MOV8_j  : MxMOV8Inst<MxARI8, (Mxloadi8  iPTR:$src)>;
+defm MOV16_j : MxMOVInst<MxARI16, (Mxloadi16 iPTR:$src)>;
+defm MOV32_j : MxMOVInst<MxARI32, (Mxloadi32 iPTR:$src)>;
+
+defm MOV8_p  : MxMOV8Inst<MxARID8, (i8 MxCP_ARID:$src)>;
+defm MOV16_p : MxMOVInst<MxARID16, (i16 MxCP_ARID:$src)>;
+defm MOV32_p : MxMOVInst<MxARID32, (i32 MxCP_ARID:$src)>;
+
+defm MOV8_f  : MxMOV8Inst<MxARII8, (i8 MxCP_ARII:$src)>;
+defm MOV16_f : MxMOVInst<MxARII16, (i16 MxCP_ARII:$src)>;
+defm MOV32_f : MxMOVInst<MxARII32, (i32 MxCP_ARII:$src)>;
 
 
 // FIXME Could these be specialized from normal MOVrPIm and MOVrpDm?

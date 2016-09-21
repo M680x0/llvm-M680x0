@@ -25,15 +25,15 @@
 // FIXME: This is disabled for PIC mode because the global base
 // register which is part of the address mode may be assigned a
 // callee-saved register.
-def : Pat<(MxTCRet (load MxCP_ARII:$dst), imm:$off),
-          (TCRETURNmi MxCP_ARII:$dst, imm:$off)>,
+def : Pat<(MxTCRet (load MxCP_ARII:$dst), imm:$adj),
+          (TCRETURNj (MOV32af_TC MxARII32:$dst), imm:$adj)>,
       Requires<[IsNotPIC]>;
 
-def : Pat<(MxTCRet AR32_TC:$dst, imm:$off),
-          (TCRETURNri AR32_TC:$dst, imm:$off)>;
+def : Pat<(MxTCRet AR32_TC:$dst, imm:$adj),
+          (TCRETURNj MxARI32_TC:$dst, imm:$adj)>;
 
-def : Pat<(MxTCRet (i32 tglobaladdr:$dst), imm:$off),
-          (TCRETURNdi tglobaladdr:$dst, imm:$off)>;
+def : Pat<(MxTCRet (i32 tglobaladdr:$dst), imm:$adj),
+          (TCRETURNq MxPCI32:$dst, imm:$adj)>;
 
-def : Pat<(MxTCRet (i32 texternalsym:$dst), imm:$off),
-          (TCRETURNdi texternalsym:$dst, imm:$off)>;
+def : Pat<(MxTCRet (i32 texternalsym:$dst), imm:$adj),
+          (TCRETURNq MxPCI32:$dst, imm:$adj)>;

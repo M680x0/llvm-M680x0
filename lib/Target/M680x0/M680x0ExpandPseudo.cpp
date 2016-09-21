@@ -75,6 +75,52 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   switch (Opcode) {
   default:
     return false;
+  case M680x0::TCRETURNq:
+  case M680x0::TCRETURNj: {
+    MachineOperand &JumpTarget = MI.getOperand(0);
+    MachineOperand &StackAdjust = MI.getOperand(1);
+    assert(StackAdjust.isImm() && "Expecting immediate value.");
+
+    // Adjust stack pointer.
+    int StackAdj = StackAdjust.getImm();
+    int MaxTCDelta = MFI->getTCReturnAddrDelta();
+    int Offset = 0;
+    assert(MaxTCDelta <= 0 && "MaxTCDelta should never be positive");
+
+    // Incoporate the retaddr area.
+    Offset = StackAdj-MaxTCDelta;
+    assert(Offset >= 0 && "Offset should never be negative");
+
+    if (Offset) {
+      // Check for possible merge with preceding ADD instruction.
+      Offset += FL->mergeSPUpdates(MBB, MBBI, true);
+      FL->emitSPUpdate(MBB, MBBI, Offset, /*InEpilogue=*/true);
+    }
+
+    // Jump to label or value in register.
+    if (Opcode == M680x0::TCRETURNq) {
+      MachineInstrBuilder MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::TAILJMPq));
+      if (JumpTarget.isGlobal())
+        MIB.addGlobalAddress(JumpTarget.getGlobal(), JumpTarget.getOffset(),
+                             JumpTarget.getTargetFlags());
+      else {
+        assert(JumpTarget.isSymbol());
+        MIB.addExternalSymbol(JumpTarget.getSymbolName(),
+                              JumpTarget.getTargetFlags());
+      }
+    } else {
+      BuildMI(MBB, MBBI, DL, TII->get(M680x0::TAILJMPj))
+          .addReg(JumpTarget.getReg(), RegState::Kill);
+    }
+
+    MachineInstr &NewMI = *std::prev(MBBI);
+    NewMI.copyImplicitOps(*MBBI->getParent()->getParent(), *MBBI);
+
+    // Delete the pseudo instruction TCRETURN.
+    MBB.erase(MBBI);
+
+    return true;
+  }
   case M680x0::RET: {
     // Adjust stack to erase error code
     int64_t StackAdj = MBBI->getOperand(0).getImm();
@@ -91,6 +137,7 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
              "not implemented, RTD is available since M68020 i think");
       // RTD can only handle immediates as big as 2**16-1.  If we need to pop
       // off bytes before the return address, we must do it manually.
+      //
       // BuildMI(MBB, MBBI, DL, TII->get(M680x0::POP32r)).addReg(M680x0::ECX, RegState::Define);
       // FL->emitSPUpdate(MBB, MBBI, StackAdj, #<{(|InEpilogue=|)}>#true);
       // BuildMI(MBB, MBBI, DL, TII->get(M680x0::PUSH32r)).addReg(M680x0::ECX);

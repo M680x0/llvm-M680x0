@@ -9,6 +9,10 @@
 //
 // This file describes the M680x0 jump, return, call, and related instructions.
 //
+// NOTE: Though branch and jump instructions are using memory operands they
+// DO NOT read the jump address from memory, they just calculate EA and jump
+// there.
+//
 //===----------------------------------------------------------------------===//
 
 // Indirect branching
@@ -19,17 +23,8 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
 /*                             [(brind AR16:$dst)]>; */
 
 // jmp (An)
-def JMP32r : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst",
+def JMP32j : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst",
                     [(brind iPTR:$dst)]>;
-
-// FIXME how to jmp from mem?
-/* def JMP16m     : MxInst<0x0 (outs), (ins M680x0_ARI16:$dst), */
-/*                             "jmp{w}\t{*}$dst", */
-/*                             [(brind (M680x0_loadi16 AR32:$dst))]>; */
-
-/* def JMP32m     : MxInst<0x0 (outs), (ins M680x0_ARI32:$dst), */
-/*                             "jmp\t$dst", */
-/*                             [(brind (M680x0_loadi32 AR32:$dst))]>; */
 }
 
 // TODO don't forget about LINK/UNLK
@@ -50,17 +45,13 @@ let isCodeGenOnly = 1 in {
 let Uses = [SP] in {
 let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1 in {
 
-def TCRETURNdi : MxPseudo<(outs), (ins Mxi32_PCRel:$dst, i32imm:$offset)>;
-def TCRETURNri : MxPseudo<(outs), (ins AR32_TC:$dst,     i32imm:$offset)>;
+def TCRETURNq : MxPseudo<(outs), (ins MxPCI32:$dst,    i32imm:$adj)>;
+def TAILJMPq  : MxPseudo<(outs), (ins MxPCI32:$dst)>;
 
-let mayLoad = 1 in
-def TCRETURNmi : MxPseudo<(outs), (ins MxARII32_TC:$dst,  i32imm:$offset)>;
-
-def TAILJMPd : MxPseudo<(outs), (ins Mxi32_PCRel:$dst)>;
-def TAILJMPr : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
-
-let mayLoad = 1 in
-def TAILJMPm : MxPseudo<(outs), (ins MxARII32_TC:$dst)>;
+// NOTE j does not mean load and jump M680x0 jmp just calculates EA and jumps
+// and it is using Mem form like (An) thus j letter.
+def TCRETURNj : MxPseudo<(outs), (ins MxARI32_TC:$dst, i32imm:$adj)>;
+def TAILJMPj  : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
 }
 } // let Uses = [SP]
 } // let isCodeGenOnly = 1
