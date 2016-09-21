@@ -92,13 +92,13 @@ class MxMemOp<dag ops, MxSize size, string letter,
 // register specified by the register field. The reference is classified as
 // a data reference with the exception of the jump and jump-to-subroutine
 // instructions.
-def MxARI8        : MxMemOp<(ops AR32), Mx8,  "m", "printARI8Mem">;
-def MxARI16       : MxMemOp<(ops AR32), Mx16, "m", "printARI16Mem">;
-def MxARI32       : MxMemOp<(ops AR32), Mx32, "m", "printARI32Mem">;
+def MxARI8        : MxMemOp<(ops AR32), Mx8,  "j", "printARI8Mem">;
+def MxARI16       : MxMemOp<(ops AR32), Mx16, "j", "printARI16Mem">;
+def MxARI32       : MxMemOp<(ops AR32), Mx32, "j", "printARI32Mem">;
 
-def MxARI8_TC     : MxMemOp<(ops AR32_TC), Mx8,  "m", "printARI8Mem">;
-def MxARI16_TC    : MxMemOp<(ops AR32_TC), Mx16, "m", "printARI16Mem">;
-def MxARI32_TC    : MxMemOp<(ops AR32_TC), Mx32, "m", "printARI32Mem">;
+def MxARI8_TC     : MxMemOp<(ops AR32_TC), Mx8,  "j", "printARI8Mem">;
+def MxARI16_TC    : MxMemOp<(ops AR32_TC), Mx16, "j", "printARI16Mem">;
+def MxARI32_TC    : MxMemOp<(ops AR32_TC), Mx32, "j", "printARI32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH POSTINCREMENT. The address of the operand is
 // in the address register specified by the register field. After the operand
@@ -354,7 +354,7 @@ def "MOV"#OPD.Size.Num#"r"#OPD.Letter
            [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
 
 // (An) <- OPD
-def "MOV"#OPD.Size.Num#"m"#OPD.Letter
+def "MOV"#OPD.Size.Num#"j"#OPD.Letter
   : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARI"#OPD.Size.Num):$dst, OPD:$src),
            "move."#OPD.Size.Id#"\t$src, $dst",
            [(store PAT, iPTR:$dst)]>;
@@ -386,9 +386,9 @@ defm MOV32_i : MxMOVInst<Mxi32imm, PatLeaf<(MximmSExt32:$src)>>;
 
 // Dn <- (An)
 let canFoldAsLoad = 1, isReMaterializable = 1 in {
-defm MOV8_m  : MxMOV8Inst<MxARI8, PatLeaf<(Mxloadi8  iPTR:$src)>>;
-defm MOV16_m : MxMOVInst<MxARI16, PatLeaf<(Mxloadi16 iPTR:$src)>>;
-defm MOV32_m : MxMOVInst<MxARI32, PatLeaf<(Mxloadi32 iPTR:$src)>>;
+defm MOV8_j  : MxMOV8Inst<MxARI8, PatLeaf<(Mxloadi8  iPTR:$src)>>;
+defm MOV16_j : MxMOVInst<MxARI16, PatLeaf<(Mxloadi16 iPTR:$src)>>;
+defm MOV32_j : MxMOVInst<MxARI32, PatLeaf<(Mxloadi32 iPTR:$src)>>;
 } // let canFoldAsLoad = 1, isReMaterializable = 1
 } // Defs = [CCR]
 

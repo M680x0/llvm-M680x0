@@ -18,7 +18,7 @@
 //  00   M68000    Dn or An                 r       any register
 //  01   M68000    Dn                       d       data register direct
 //  02   M68000    An                       a       address register direct
-//  03   M68000    (An)                     m       address register indirect
+//  03   M68000    (An)                     j       address register indirect
 //  04   M68000    (An)+                    o       address register indirect with postincrement
 //  05   M68000    -(An)                    e       address register indirect with predecrement
 //  06   M68000    (i,An)                   p       address register indirect with displacement
@@ -45,18 +45,18 @@
 //
 // Operand can be quilified with size where appropriate to force a particular
 // instruction encoding, e.g.:
-//    (i8,An,Rn)               x8      1 extension word
-//    (i16,An,Rn)              x16     2 extension words
-//    (i32,An,Rn)              x32     3 extension words
+//    (i8,An,Xn.W)             f8      1 extension word
+//    (i16,An,Xn.W)            f16     2 extension words
+//    (i32,An,Xn.W)            f32     3 extension words
 //
 // Form without size qualifier will adapt to operand size automatically, e.g.:
-//    (i,An,Rn)                x       1, 2 or 3 extension words
+//    (i,An,Xn.W)              f       1, 2 or 3 extension words
 //
 // Some forms alreay imply a particular size of their operands, e.g.:
-//    (i,An)                   j       1 extension word and i is 16bit
+//    (i,An)                   p       1 extension word and i is 16bit
 //
 // Operand order follows x86 Intel order(destination before source), e.g.:
-//    MOV8dx                   MOVE (4,A0,D0), D1
+//    MOV8df                   MOVE (4,A0,D0), D1
 //
 // Number after instruction mnemonics determines the size of the data
 //
