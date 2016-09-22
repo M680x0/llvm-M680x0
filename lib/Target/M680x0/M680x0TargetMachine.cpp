@@ -16,7 +16,6 @@
 
 #include "M680x0Subtarget.h"
 #include "M680x0TargetObjectFile.h"
-#include "M680x0ISelDAGToDAG.h"
 
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/Passes.h"

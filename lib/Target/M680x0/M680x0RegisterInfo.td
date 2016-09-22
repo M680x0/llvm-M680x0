@@ -78,22 +78,27 @@ def DR32 : MxRegClass<[i32], 32, (sequence "D%u", 0, 7)>;
 
 // Address Registers
 // A7 is not part of address class due to its strict use as Stack Pointer
-def AR16 : MxRegClass<[i16], 16, (sequence "A%u", 0, 6)>;
-def AR32 : MxRegClass<[i32], 32, (sequence "A%u", 0, 6)>;
+def AR16 : MxRegClass<[i16], 16, (sequence "A%u", 0, 7)>;
+def AR32 : MxRegClass<[i32], 32, (sequence "A%u", 0, 7)>;
 
 // Index Register Classes
 def XR16 : MxRegClass<[i16], 16, (add DR16, AR16)>;
 def XR32 : MxRegClass<[i32], 32, (add DR32, AR32)>;
 
 // Control Registers
-let CopyCost = -1, isAllocatable = 0 in {
+/* let CopyCost = -1, isAllocatable = 0 in { */
   def CR8  : MxRegClass<[i8],  16, (add CCR)>;
   def CR16 : MxRegClass<[i16], 16, (add SR)>;
-  def CR32 : MxRegClass<[i32], 32, (add PC)>;
+  def CPC  : MxRegClass<[i32], 32, (add PC)>;
   def CSP  : MxRegClass<[i32], 32, (add SP)>;
-}
+/* } */
 
 // Register used with tail call
+def DR16_TC : MxRegClass<[i16], 16, (add D0, D1)>;
 def DR32_TC : MxRegClass<[i32], 32, (add D0, D1)>;
+
+def AR16_TC : MxRegClass<[i16], 16, (add A0, A1)>;
 def AR32_TC : MxRegClass<[i32], 32, (add A0, A1)>;
+
+def XR16_TC : MxRegClass<[i16], 16, (add DR16_TC, AR16_TC)>;
 def XR32_TC : MxRegClass<[i32], 32, (add DR32_TC, AR32_TC)>;

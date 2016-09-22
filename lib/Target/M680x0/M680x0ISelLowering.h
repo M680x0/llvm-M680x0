@@ -96,6 +96,9 @@ namespace llvm {
 
     SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
 
+    /// LowerFormalArguments - transform physical registers into virtual
+    /// registers and generate load operations for arguments places on the
+    /// stack.
     SDValue
     LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
                          const SmallVectorImpl<ISD::InputArg> &Ins,

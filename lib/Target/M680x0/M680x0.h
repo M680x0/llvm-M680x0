@@ -8,7 +8,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains the entry points for global functions defined in the x86
+// This file contains the entry points for global functions defined in the M680x0
 // target library, as used by the LLVM JIT.
 //
 //===----------------------------------------------------------------------===//
@@ -23,6 +23,10 @@ namespace llvm {
 class FunctionPass;
 class M680x0TargetMachine;
 
+/// This pass converts a legalized DAG into a M680x0-specific DAG, ready for
+/// instruction scheduling.
+FunctionPass *createM680x0ISelDag(M680x0TargetMachine &TM);
+                               
 /// Return a Machine IR pass that expands M680x0-specific pseudo
 /// instructions into a sequence of actual instructions. This pass
 /// must run after prologue/epilogue insertion and before lowering

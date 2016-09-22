@@ -62,13 +62,12 @@ M680x0RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 const uint32_t *
 M680x0RegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const {
-  return CSR_STD_RegMask; 
+  return CSR_STD_RegMask;
 }
 
 const TargetRegisterClass * M680x0RegisterInfo::
 getRegsForTailCall(const MachineFunction &MF) const {
-  const Function *F = MF.getFunction();
-  return &M680x0::R32_TCRegClass;
+  return &M680x0::XR32_TCRegClass;
 }
 
 BitVector M680x0RegisterInfo::
@@ -84,11 +83,63 @@ getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-// FrameIndex represent objects inside a abstract stack. We must replace
-// FrameIndex with an stack/frame pointer direct reference.
 void M680x0RegisterInfo::
 eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
                     unsigned FIOperandNum, RegScavenger *RS) const {
+  MachineInstr &MI = *II;
+  MachineFunction &MF = *MI.getParent()->getParent();
+  const M680x0FrameLowering *TFI = getFrameLowering(MF);
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
+  unsigned BasePtr;
+
+  // unsigned Opc = MI.getOpcode();
+  // FIXME there is no jmp from mem yet
+  // bool AfterFPPop =  Opc == M680x0::TAILJMPm || Opc == M680x0::TCRETURNmi;
+  bool AfterFPPop =  false;
+
+  if (hasBasePointer(MF))
+    BasePtr = (FrameIndex < 0 ? FramePtr : getBaseRegister());
+  else if (needsStackRealignment(MF))
+    BasePtr = (FrameIndex < 0 ? FramePtr : StackPtr);
+  else if (AfterFPPop)
+    BasePtr = StackPtr;
+  else
+    BasePtr = (TFI->hasFP(MF) ? FramePtr : StackPtr);
+
+  unsigned IgnoredFrameReg;
+
+  /// We have either (i,An,Rn) or (i,An) EA form
+  MachineOperand &Disp = MI.getOperand(FIOperandNum + 0);
+  MachineOperand &Base = MI.getOperand(FIOperandNum + 1);
+
+  // FIXME This is not very pretty, is there another way to get imm size?
+  // TODO do not forget to implement the matcher
+  int Imm = (int)(Disp.getIndex());
+  int Size = (int)(Base.getImm());
+
+  Base.ChangeToRegister(BasePtr, false);
+
+  // Now add the frame object offset to the offset from FP.
+  int FIOffset;
+  if (AfterFPPop) {
+    // Tail call jmp happens after FP is popped.
+    const MachineFrameInfo &MFI = MF.getFrameInfo();
+    FIOffset = MFI.getObjectOffset(FrameIndex) - TFI->getOffsetOfLocalArea();
+  } else {
+    FIOffset = TFI->getFrameIndexReference(MF, FrameIndex, IgnoredFrameReg);
+  }
+
+  if (BasePtr == StackPtr)
+    FIOffset += SPAdj;
+
+  long long Offset = FIOffset + Imm;
+  if (Size == 16) {
+      assert(isInt<16>(Offset) && "Cannot use disp greater 16 bit");
+  } else if (Size == 8) {
+      assert(isInt<8>(Offset) && "Cannot use disp greater 8 bit");
+  } else {
+  }
+  Disp.ChangeToImmediate(Offset);
 }
 
 bool M680x0RegisterInfo::
@@ -144,12 +195,15 @@ canRealignStack(const MachineFunction &MF) const {
 unsigned M680x0RegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
-  return TFI->hasFP(MF) ? (M680x0::FP) :
-                          (M680x0::SP);
+  return TFI->hasFP(MF) ? M680x0::FP : M680x0::SP;
 }
 
-// FIXME use size
 const TargetRegisterClass * M680x0RegisterInfo::
 intRegClass(unsigned size) const {
+  // if (isInt<8>(size)) {
+  //     return &M680x0::DR8RegClass;
+  // } else if (isInt<16>(size)) {
+  //     return &M680x0::DR16RegClass;
+  // }
   return &M680x0::DR32RegClass;
 }

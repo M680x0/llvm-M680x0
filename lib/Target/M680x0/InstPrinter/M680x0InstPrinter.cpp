@@ -87,18 +87,17 @@ printARIPDMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printARIDMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (i,An)
+  // FIXME use offsets from M680x0Base
+  O << '(';
+  printOperand(MI, opNum + 0, O);
+  O << ',';
+  printOperand(MI, opNum + 1, O);
+  O << ')';
 }
 
 void M680x0InstPrinter::
-printARIIwMem(const MCInst *MI, int opNum, raw_ostream &O) {
+printARIIMem(const MCInst *MI, int opNum, raw_ostream &O) {
     // TODO print (i,An,Rn.W)
-    // HMM... is it allowed for M68000 to use this form?
-}
-
-void M680x0InstPrinter::
-printARIIlMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (i,An,Rn.L)
     // HMM... is it allowed for M68000 to use this form?
 }
 
@@ -114,13 +113,7 @@ printPCDMem(const MCInst *MI, int opNum, raw_ostream &O) {
 }
 
 void M680x0InstPrinter::
-printPCIwMem(const MCInst *MI, int opNum, raw_ostream &O) {
+printPCIMem(const MCInst *MI, int opNum, raw_ostream &O) {
     // TODO print (i,PC,Rn.W)
-    // HMM... is it allowed for M68000 to use this form?
-}
-
-void M680x0InstPrinter::
-printPCIlMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (i,PC,Rn.L)
     // HMM... is it allowed for M68000 to use this form?
 }

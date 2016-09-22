@@ -62,28 +62,28 @@ class MxRegOp<RegisterClass rc,
 
 // REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def MxXRD16 : MxRegOp<XR16, Mx16, "r", "printOperand">;
-def MxXRD32 : MxRegOp<XR32, Mx32, "r", "printOperand">;
+def MxXRD16 : MxRegOp<XR16, Mx16, "r">;
+def MxXRD32 : MxRegOp<XR32, Mx32, "r">;
 
-def MxXRD16_TC : MxRegOp<XR16_TC, Mx16, "r", "printOperand">;
-def MxXRD32_TC : MxRegOp<XR32_TC, Mx32, "r", "printOperand">;
+def MxXRD16_TC : MxRegOp<XR16_TC, Mx16, "r">;
+def MxXRD32_TC : MxRegOp<XR32_TC, Mx32, "r">;
 
 // DATA REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def MxDRD8  : MxRegOp<DR8,  Mx8,  "d", "printOperand">;
-def MxDRD16 : MxRegOp<DR16, Mx16, "d", "printOperand">;
-def MxDRD32 : MxRegOp<DR32, Mx32, "d", "printOperand">;
+def MxDRD8  : MxRegOp<DR8,  Mx8,  "d">;
+def MxDRD16 : MxRegOp<DR16, Mx16, "d">;
+def MxDRD32 : MxRegOp<DR32, Mx32, "d">;
 
-def MxDRD16_TC : MxRegOp<DR16_TC, Mx16, "d", "printOperand">;
-def MxDRD32_TC : MxRegOp<DR32_TC, Mx32, "d", "printOperand">;
+def MxDRD16_TC : MxRegOp<DR16_TC, Mx16, "d">;
+def MxDRD32_TC : MxRegOp<DR32_TC, Mx32, "d">;
 
 // ADDRESS REGISTER DIRECT. The operand is in the address register specified by
 // the effective address register field.
-def MxARD16 : MxRegOp<AR16, Mx16, "a", "printARDOperand">;
-def MxARD32 : MxRegOp<AR32, Mx32, "a", "printARDOperand">;
+def MxARD16 : MxRegOp<AR16, Mx16, "a">;
+def MxARD32 : MxRegOp<AR32, Mx32, "a">;
 
-def MxARD16_TC : MxRegOp<AR16_TC, Mx16, "a", "printARDOperand">;
-def MxARD32_TC : MxRegOp<AR32_TC, Mx32, "a", "printARDOperand">;
+def MxARD16_TC : MxRegOp<AR16_TC, Mx16, "a">;
+def MxARD32_TC : MxRegOp<AR32_TC, Mx32, "a">;
 
 // TODO finish parser wiring
 def MxMemAsmOperand : AsmOperandClass {
@@ -334,16 +334,21 @@ let hasSideEffects = 0 in {
 // TODO make move set imlicit CCR like M680x0 does
 // Do i need this?
 
-// MOVE
+multiclass MxMOV8Inst<MxOperand OPD, dag PAT> {
+
 // X - not affected
 // N,Z - set by operation
 // V,C - cleared
 let Defs = [CCR] in {
-multiclass MxMOV8Inst<MxOperand OPD, dag PAT> {
+let mayLoad = 1 in  {
+
 // Dn <- OPD
 def "MOV8d"#OPD.Letter
   : MxInst<0x0, (outs MxDRD8:$dst), (ins OPD:$src), "move.b\t$src, $dst",
            [(set i8:$dst, PAT)]>;
+
+} // mayLoad = 1
+} // Defs = [CCR]
 
 // (An) <- OPD
 def "MOV8j"#OPD.Letter
@@ -358,9 +363,13 @@ def "MOV8p"#OPD.Letter
 
 multiclass MxMOVInst<MxOperand OPD, dag PAT> {
 
-// Set CS registers
-
+// X - not affected
+// N,Z - set by operation
+// V,C - cleared
+let Defs = [CCR] in {
 let mayLoad = 1 in  {
+
+// Set CS registers
 def "MOV"#OPD.Size.Num#"d"#OPD.Letter
   : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num):$dst), (ins OPD:$src),
            "move."#OPD.Size.Id#"\t$src, $dst",
@@ -395,6 +404,7 @@ def "MOV"#OPD.Size.Num#"r"#OPD.Letter#"_TC"
            [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
 
 } // mayLoad = 1
+} // Defs = [CCR]
 
 
 // Store to MEM
@@ -411,13 +421,12 @@ def "MOV"#OPD.Size.Num#"p"#OPD.Letter
            "move."#OPD.Size.Id#"\t$src, $dst",
            [(store PAT, MxCP_ARID:$dst)]>;
 
-// (i,An) <- OPD
+// (i,An,Xn) <- OPD
 def "MOV"#OPD.Size.Num#"f"#OPD.Letter
   : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARII"#OPD.Size.Num):$dst, OPD:$src),
            "move."#OPD.Size.Id#"\t$src, $dst",
            [(store PAT, MxCP_ARII:$dst)]>;
 }
-} // Defs = [CCR]
 
 defm MOV8_d  : MxMOV8Inst<MxDRD8, (i8  imm:$src)>;
 defm MOV16_d : MxMOVInst<MxDRD16, (i16 imm:$src)>;
@@ -433,40 +442,43 @@ defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8 MximmSExt8:$src)>;
 defm MOV16_i : MxMOVInst<Mxi16imm, (i16 MximmSExt16:$src)>;
 defm MOV32_i : MxMOVInst<Mxi32imm, (i32 MximmSExt32:$src)>;
 
-defm MOV8_j  : MxMOV8Inst<MxARI8, (Mxloadi8  iPTR:$src)>;
-defm MOV16_j : MxMOVInst<MxARI16, (Mxloadi16 iPTR:$src)>;
-defm MOV32_j : MxMOVInst<MxARI32, (Mxloadi32 iPTR:$src)>;
+defm MOV8_j  : MxMOV8Inst<MxARI8, (iPTR iPTR:$src)>;
+defm MOV16_j : MxMOVInst<MxARI16, (iPTR iPTR:$src)>;
+defm MOV32_j : MxMOVInst<MxARI32, (iPTR iPTR:$src)>;
 
-defm MOV8_p  : MxMOV8Inst<MxARID8, (i8 MxCP_ARID:$src)>;
-defm MOV16_p : MxMOVInst<MxARID16, (i16 MxCP_ARID:$src)>;
-defm MOV32_p : MxMOVInst<MxARID32, (i32 MxCP_ARID:$src)>;
+defm MOV8_p  : MxMOV8Inst<MxARID8, (iPTR MxCP_ARID:$src)>;
+defm MOV16_p : MxMOVInst<MxARID16, (iPTR MxCP_ARID:$src)>;
+defm MOV32_p : MxMOVInst<MxARID32, (iPTR MxCP_ARID:$src)>;
 
-defm MOV8_f  : MxMOV8Inst<MxARII8, (i8 MxCP_ARII:$src)>;
-defm MOV16_f : MxMOVInst<MxARII16, (i16 MxCP_ARII:$src)>;
-defm MOV32_f : MxMOVInst<MxARII32, (i32 MxCP_ARII:$src)>;
+defm MOV8_f  : MxMOV8Inst<MxARII8, (iPTR MxCP_ARII:$src)>;
+defm MOV16_f : MxMOVInst<MxARII16, (iPTR MxCP_ARII:$src)>;
+defm MOV32_f : MxMOVInst<MxARII32, (iPTR MxCP_ARII:$src)>;
 
 
 // FIXME Could these be specialized from normal MOVrPIm and MOVrpDm?
 let Defs = [SP], hasSideEffects = 0 in {
 
+// FIXME
+// FIXME Solve bulshit with SP
+// FIXME
 // SP <- SP - <size>; (SP) <- Dn
 let mayStore = 1 in {
-def PUSH8r  : MxInst<0x0, (outs), (ins DR8:$reg,  CSP:$sp),
-                         "move.b\t$reg, -($sp)",[]>;
-def PUSH16r : MxInst<0x0, (outs), (ins DR16:$reg, CSP:$sp),
-                         "move.w\t$reg, -($sp)",[]>;
-def PUSH32r : MxInst<0x0, (outs), (ins DR32:$reg, CSP:$sp),
-                         "move.l\t$reg, -($sp)",[]>;
+def PUSH8r  : MxInst<0x0, (outs), (ins DR8:$reg),
+                         "move.b\t$reg, -(SP)",[]>;
+def PUSH16r : MxInst<0x0, (outs), (ins DR16:$reg),
+                         "move.w\t$reg, -(SP)",[]>;
+def PUSH32r : MxInst<0x0, (outs), (ins DR32:$reg),
+                         "move.l\t$reg, -(SP)",[]>;
 } // let mayStore = 1
 
 // Dn <- (SP); SP <- SP + <size>
 let mayLoad = 1 in {
-def POP8r  : MxInst<0x0, (outs DR8:$reg),  (ins CSP:$sp),
-                        "move.b\t($sp)+, $reg", []>;
-def POP16r : MxInst<0x0, (outs DR16:$reg), (ins CSP:$sp),
-                        "move.w\t($sp)+, $reg", []>;
-def POP32r : MxInst<0x0, (outs DR32:$reg), (ins CSP:$sp),
-                        "move.l\t($sp)+, $reg", []>;
+def POP8r  : MxInst<0x0, (outs DR8:$reg),  (ins),
+                        "move.b\t(SP)+, $reg", []>;
+def POP16r : MxInst<0x0, (outs DR16:$reg), (ins),
+                        "move.w\t(SP)+, $reg", []>;
+def POP32r : MxInst<0x0, (outs DR32:$reg), (ins),
+                        "move.l\t(SP)+, $reg", []>;
 } // let mayLoad = 1
 
 } // let Defs = [SP], hasSideEffects = 0

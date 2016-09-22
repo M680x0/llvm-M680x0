@@ -39,22 +39,24 @@ public:
                                unsigned PrintMethodIdx, raw_ostream &O);
 
 private:
-  void printOperand(const MCInst *MI, unsigned opNo, raw_ostream &O);
-  void printUnsignedImm(const MCInst *MI, int opNo, raw_ostream &O);
-  void printARIMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printARIPIMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printARIPDMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printARIDMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printARIIwMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printARIIlMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printAbsMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printPCDMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printPCIwMem(const MCInst *MI, int opNo, raw_ostream &O);
-  void printPCIlMem(const MCInst *MI, int opNo, raw_ostream &O);
+  void printOperand(const MCInst *MI, unsigned opNum, raw_ostream &O);
+  void printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O);
+  void printARIMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printARIPIMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printARIPDMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printARIDMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printARIIMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printAbsMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printPCDMem(const MCInst *MI, int opNum, raw_ostream &O);
+  void printPCIMem(const MCInst *MI, int opNum, raw_ostream &O);
 
 //===----------------------------------------------------------------------===//
-// Sized variants
+// Specializations
 //===----------------------------------------------------------------------===//
+//
+  void printPCRelImm(const MCInst *MI, int opNum, raw_ostream &O) {
+    printOperand(MI, opNum, O);
+  }
 
   void printARI8Mem(const MCInst *MI, int opNum, raw_ostream &O) {
       printARIMem(MI, opNum, O);
@@ -96,24 +98,14 @@ private:
       printARIDMem(MI, opNum, O);
   }
 
-  void printARII8wMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printARIIwMem(MI, opNum, O);
+  void printARII8Mem(const MCInst *MI, int opNum, raw_ostream &O) {
+      printARIIMem(MI, opNum, O);
   }
-  void printARII16wMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printARIIwMem(MI, opNum, O);
+  void printARII16Mem(const MCInst *MI, int opNum, raw_ostream &O) {
+      printARIIMem(MI, opNum, O);
   }
-  void printARII32wMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printARIIwMem(MI, opNum, O);
-  }
-
-  void printARII8lMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printARIIlMem(MI, opNum, O);
-  }
-  void printARII16lMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printARIIlMem(MI, opNum, O);
-  }
-  void printARII32lMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printARIIlMem(MI, opNum, O);
+  void printARII32Mem(const MCInst *MI, int opNum, raw_ostream &O) {
+      printARIIMem(MI, opNum, O);
   }
 
   void printAS8Mem(const MCInst *MI, int opNum, raw_ostream &O) {
@@ -146,24 +138,14 @@ private:
       printPCDMem(MI, opNum, O);
   }
 
-  void printPCI8wMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printPCIwMem(MI, opNum, O);
+  void printPCI8Mem(const MCInst *MI, int opNum, raw_ostream &O) {
+      printPCIMem(MI, opNum, O);
   }
-  void printPCI16wMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printPCIwMem(MI, opNum, O);
+  void printPCI16Mem(const MCInst *MI, int opNum, raw_ostream &O) {
+      printPCIMem(MI, opNum, O);
   }
-  void printPCI32wMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printPCIwMem(MI, opNum, O);
-  }
-
-  void printPCI8lMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printPCIlMem(MI, opNum, O);
-  }
-  void printPCI16lMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printPCIlMem(MI, opNum, O);
-  }
-  void printPCI32lMem(const MCInst *MI, int opNum, raw_ostream &O) {
-      printPCIlMem(MI, opNum, O);
+  void printPCI32Mem(const MCInst *MI, int opNum, raw_ostream &O) {
+      printPCIMem(MI, opNum, O);
   }
 };
 } // end namespace llvm

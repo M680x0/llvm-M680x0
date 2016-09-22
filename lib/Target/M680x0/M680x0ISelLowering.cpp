@@ -58,8 +58,8 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
 
   // Set up the register classes.
   addRegisterClass(MVT::i8,  &M680x0::DR8RegClass);
-  addRegisterClass(MVT::i16, &M680x0::ALL16RegClass);
-  addRegisterClass(MVT::i32, &M680x0::ALL32RegClass);
+  addRegisterClass(MVT::i16, &M680x0::XR16RegClass);
+  addRegisterClass(MVT::i32, &M680x0::XR32RegClass);
 
   computeRegisterProperties(STI.getRegisterInfo());
 
@@ -79,8 +79,6 @@ SDValue M680x0TargetLowering::LowerOperation(SDValue Op,
 //            Formal Arguments Calling Convention Implementation
 //===----------------------------------------------------------------------===//
 
-/// LowerFormalArguments - transform physical registers into virtual registers
-/// and generate load operations for arguments places on the stack.
 SDValue M680x0TargetLowering::
 LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
                      const SmallVectorImpl<ISD::InputArg> &Ins,
@@ -93,12 +91,11 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
 //              Return Value Calling Convention Implementation
 //===----------------------------------------------------------------------===//
 
-SDValue
-M680x0TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CCID,
-                               bool isVarArg,
-                               const SmallVectorImpl<ISD::OutputArg> &Outs,
-                               const SmallVectorImpl<SDValue> &OutVals,
-                               const SDLoc &DL, SelectionDAG &DAG) const {
+SDValue M680x0TargetLowering::
+LowerReturn(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
+            const SmallVectorImpl<ISD::OutputArg> &Outs,
+            const SmallVectorImpl<SDValue> &OutVals,
+            const SDLoc &DL, SelectionDAG &DAG) const {
   MachineFunction &MF = DAG.getMachineFunction();
   M680x0MachineFunctionInfo *MFI = MF.getInfo<M680x0MachineFunctionInfo>();
 

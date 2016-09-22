@@ -55,18 +55,6 @@ private:
   void BuildCFI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                 const DebugLoc &DL, const MCCFIInstruction &CFIInst) const;
 
-  /// Check the instruction before/after the passed instruction. If
-  /// it is an ADD/SUB/LEA instruction it is deleted argument and the
-  /// stack adjustment is returned as a positive value for ADD/LEA and
-  /// a negative for SUB.
-  int mergeSPUpdates(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-                     bool doMergeWithPrevious) const;
-
-  /// Emit a series of instructions to increment / decrement the stack
-  /// pointer by a constant value.
-  void emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-                    int64_t NumBytes, bool InEpilogue) const;
-
   void emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MBBI,
                                  const DebugLoc &DL) const;
@@ -110,6 +98,24 @@ public:
   // So, this is required for M680x0 functions that have push sequences even
   // when there are no stack objects.
   bool needsFrameIndexResolution(const MachineFunction &MF) const override;
+
+  /// getFrameIndexReference - This method should return the base register
+  /// and offset used to reference a frame index location. The offset is
+  /// returned directly, and the base register is returned via FrameReg.
+  int getFrameIndexReference(const MachineFunction &MF, int FI,
+                             unsigned &FrameReg) const override;
+
+  /// Check the instruction before/after the passed instruction. If
+  /// it is an ADD/SUB/LEA instruction it is deleted argument and the
+  /// stack adjustment is returned as a positive value for ADD/LEA and
+  /// a negative for SUB.
+  int mergeSPUpdates(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
+                     bool doMergeWithPrevious) const;
+
+  /// Emit a series of instructions to increment / decrement the stack
+  /// pointer by a constant value.
+  void emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
+                    int64_t NumBytes, bool InEpilogue) const;
 };
 
 } // End llvm namespace

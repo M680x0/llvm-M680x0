@@ -66,6 +66,69 @@ needsFrameIndexResolution(const MachineFunction &MF) const {
          MF.getInfo<M680x0MachineFunctionInfo>()->getHasPushSequences();
 }
 
+// NOTE: this only has a subset of the full frame index logic. In
+// particular, the FI < 0 and AfterFPPop logic is handled in
+// M680x0RegisterInfo::eliminateFrameIndex, but not here. Possibly
+// (probably?) it should be moved into here.
+int M680x0FrameLowering::
+getFrameIndexReference(const MachineFunction &MF, int FI,
+                       unsigned &FrameReg) const {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  // We can't calculate offset from frame pointer if the stack is realigned,
+  // so enforce usage of stack/base pointer.  The base pointer is used when we
+  // have dynamic allocas in addition to dynamic realignment.
+  if (TRI->hasBasePointer(MF))
+    FrameReg = TRI->getBaseRegister();
+  else if (TRI->needsStackRealignment(MF))
+    FrameReg = TRI->getStackRegister();
+  else
+    FrameReg = TRI->getFrameRegister(MF);
+
+  // Offset will hold the offset from the stack pointer at function entry to the
+  // object.
+  // We need to factor in additional offsets applied during the prologue to the
+  // frame, base, and stack pointer depending on which is used.
+  int Offset = MFI.getObjectOffset(FI) - getOffsetOfLocalArea();
+  const M680x0MachineFunctionInfo *MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
+  uint64_t StackSize = MFI.getStackSize();
+  bool HasFP = hasFP(MF);
+  int64_t FPDelta = 0;
+
+  if (TRI->hasBasePointer(MF)) {
+    assert(HasFP && "VLAs and dynamic stack realign, but no FP?!");
+    if (FI < 0) {
+      // Skip the saved FP.
+      return Offset + SlotSize + FPDelta;
+    } else {
+      assert((-(Offset + StackSize)) % MFI.getObjectAlignment(FI) == 0);
+      return Offset + StackSize;
+    }
+  } else if (TRI->needsStackRealignment(MF)) {
+    if (FI < 0) {
+      // Skip the saved FP.
+      return Offset + SlotSize + FPDelta;
+    } else {
+      assert((-(Offset + StackSize)) % MFI.getObjectAlignment(FI) == 0);
+      return Offset + StackSize;
+    }
+    // FIXME: Support tail calls
+  } else {
+    if (!HasFP)
+      return Offset + StackSize;
+
+    // Skip the saved FP.
+    Offset += SlotSize;
+
+    // Skip the RETADDR move area
+    int TailCallReturnAddrDelta = MMFI->getTCReturnAddrDelta();
+    if (TailCallReturnAddrDelta < 0)
+      Offset -= TailCallReturnAddrDelta;
+  }
+
+  return Offset + FPDelta;
+}
+
 static unsigned getSUBriOpcode(int64_t Imm) {
   return M680x0::SUB32ri;
 }
@@ -419,18 +482,18 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
     if (TRI->needsStackRealignment(MF))
       NumBytes = alignTo(NumBytes, MaxAlign);
 
-    // Get the offset of the stack slot for the BP register, which is
+    // Get the offset of the stack slot for the FP register, which is
     // guaranteed to be the last slot by processFunctionBeforeFrameFinalized.
     // Update the frame offset adjustment.
     MFI.setOffsetAdjustment(-NumBytes);
 
-    // Save BP into the appropriate stack slot.
+    // Save FP into the appropriate stack slot.
     BuildMI(MBB, MBBI, DL, TII.get(M680x0::PUSH32r))
       .addReg(MachineFramePtr, RegState::Kill)
       .setMIFlag(MachineInstr::FrameSetup);
 
     if (NeedsDwarfCFI) {
-      // Mark the place where BP was saved.
+      // Mark the place where FP was saved.
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
       BuildCFI(MBB, MBBI, DL,
@@ -442,14 +505,14 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
                                   nullptr, DwarfFramePtr, 2 * stackGrowth));
     }
 
-    // Update BP with the new base value.
-    BuildMI(MBB, MBBI, DL, TII.get(M680x0::MOV32rr), FramePtr)
+    // Update FP with the new base value.
+    BuildMI(MBB, MBBI, DL, TII.get(M680x0::MOV32aa), FramePtr)
         .addReg(StackPtr)
         .setMIFlag(MachineInstr::FrameSetup);
 
     if (NeedsDwarfCFI) {
       // Mark effective beginning of when frame pointer becomes valid.
-      // Define the current CFA to use the BP register.
+      // Define the current CFA to use the FP register.
       unsigned DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
       BuildCFI(MBB, MBBI, DL, MCCFIInstruction::createDefCfaRegister(
                                   nullptr, DwarfFramePtr));
@@ -504,13 +567,13 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   // to reference locals.
   if (TRI->hasBasePointer(MF)) {
     // Update the base pointer with the current stack pointer.
-    BuildMI(MBB, MBBI, DL, TII.get(M680x0::MOV32rr), BasePtr)
+    BuildMI(MBB, MBBI, DL, TII.get(M680x0::MOV32aa), BasePtr)
       .addReg(SPOrEstablisher)
       .setMIFlag(MachineInstr::FrameSetup);
     if (MMFI->getRestoreBasePointer()) {
-      // Stash value of base pointer.  Saving SP instead of BP shortens
+      // Stash value of base pointer.  Saving SP instead of FP shortens
       // dependence chain. Used by SjLj EH.
-      unsigned Opm =  M680x0::MOV32mr;
+      unsigned Opm =  M680x0::MOV32ja;
       addRegIndirectWithDisp(BuildMI(MBB, MBBI, DL, TII.get(Opm)),
                    FramePtr, true, MMFI->getRestoreBasePointerOffset())
         .addReg(SPOrEstablisher)
@@ -547,7 +610,7 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
 }
 
 static bool isTailCallOpcode(unsigned Opc) {
-    return Opc == M680x0::TCRETURNri || Opc == M680x0::TCRETURNdi;
+    return Opc == M680x0::TCRETURNj || Opc == M680x0::TCRETURNq;
 }
 
 void M680x0FrameLowering::
@@ -580,7 +643,7 @@ emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const {
     if (TRI->needsStackRealignment(MF))
       NumBytes = alignTo(FrameSize, MaxAlign);
 
-    // Pop BP.
+    // Pop FP.
     BuildMI(MBB, MBBI, DL, TII.get(M680x0::POP32r), MachineFramePtr)
         .setMIFlag(MachineInstr::FrameDestroy);
   } else {

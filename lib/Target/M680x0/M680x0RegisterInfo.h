@@ -61,7 +61,8 @@ public:
 
   bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override;
 
-  /// Stack Frame Processing Methods
+  // FrameIndex represent objects inside a abstract stack. We must replace
+  // FrameIndex with an stack/frame pointer direct reference.
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
                            int SPAdj, unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
