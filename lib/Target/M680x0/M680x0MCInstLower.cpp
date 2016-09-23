@@ -34,8 +34,7 @@ void M680x0MCInstLower::Initialize(MCContext* C) {
   Ctx = C;
 }
 
-static void CreateMCInst(MCInst& Inst, unsigned Opc,
-                         const MCOperand& Opnd0,
+static void CreateMCInst(MCInst& Inst, unsigned Opc, const MCOperand& Opnd0,
                          const MCOperand& Opnd1,
                          const MCOperand& Opnd2 = MCOperand()) {
   Inst.setOpcode(Opc);
@@ -52,12 +51,10 @@ MCOperand M680x0MCInstLower::LowerOperand(const MachineOperand& MO,
   switch (MOTy) {
   default: llvm_unreachable("unknown operand type");
   case MachineOperand::MO_Register:
-    dbgs() << "\tREG " << MO.getReg() << ", IMPL " << MO.isImplicit() << '\n';
     // Ignore all implicit register operands.
     if (MO.isImplicit()) break;
     return MCOperand::createReg(MO.getReg());
   case MachineOperand::MO_Immediate:
-    dbgs() << "\tIMM " << MO.getImm() << '\n';
     return MCOperand::createImm(MO.getImm() + offset);
   case MachineOperand::MO_RegisterMask:
     break;
@@ -69,16 +66,11 @@ MCOperand M680x0MCInstLower::LowerOperand(const MachineOperand& MO,
 void M680x0MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
 
-  dbgs() << "OP "; MI->dump();
-  dbgs() << '\n';
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
     MCOperand MCOp = LowerOperand(MO);
 
-    dbgs() << "\t VALID " << MCOp.isValid() << '\n';
-    if (MCOp.isValid()) {
+    if (MCOp.isValid())
       OutMI.addOperand(MCOp);
-    }
   }
-  dbgs() << '\n';
 }
