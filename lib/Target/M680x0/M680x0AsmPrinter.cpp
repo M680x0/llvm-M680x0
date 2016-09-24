@@ -47,7 +47,7 @@ using namespace llvm;
 #define DEBUG_TYPE "m680x0-asm-printer"
 
 bool M680x0AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
-  M680x0FI = MF.getInfo<M680x0MachineFunctionInfo>();
+  MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
   AsmPrinter::runOnMachineFunction(MF);
   return true;
 }
@@ -61,10 +61,6 @@ void M680x0AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   OutStreamer->EmitInstruction(TmpInst0, getSubtargetInfo());
 }
 
-void M680x0AsmPrinter::EmitFunctionEntryLabel() {
-    // TODO
-}
-
 void M680x0AsmPrinter::EmitFunctionBodyStart() {
     // TODO
 }
@@ -74,7 +70,10 @@ void M680x0AsmPrinter::EmitFunctionBodyEnd() {
 }
 
 void M680x0AsmPrinter::EmitStartOfAsmFile(Module &M) {
-    // TODO
+  OutStreamer->EmitSyntaxDirective();
+}
+
+void M680x0AsmPrinter::EmitEndOfAsmFile(Module &M) {
 }
 
 extern "C" void LLVMInitializeM680x0AsmPrinter() {

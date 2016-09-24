@@ -40,13 +40,12 @@ private:
 public:
 
   const M680x0Subtarget *Subtarget;
-  const M680x0MachineFunctionInfo *M680x0FI;
+  const M680x0MachineFunctionInfo *MMFI;
   M680x0MCInstLower MCInstLowering;
 
   explicit M680x0AsmPrinter(TargetMachine &TM,
                             std::unique_ptr<MCStreamer> Streamer)
-    : AsmPrinter(TM, std::move(Streamer)), 
-      MCInstLowering(*this) {
+    : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {
     Subtarget = static_cast<M680x0TargetMachine &>(TM).getSubtargetImpl();
   }
 
@@ -57,10 +56,10 @@ public:
   virtual bool runOnMachineFunction(MachineFunction &MF) override;
 
   void EmitInstruction(const MachineInstr *MI) override;
-  void EmitFunctionEntryLabel() override;
   void EmitFunctionBodyStart() override;
   void EmitFunctionBodyEnd() override;
   void EmitStartOfAsmFile(Module &M) override;
+  void EmitEndOfAsmFile(Module &M) override;
 };
 }
 
