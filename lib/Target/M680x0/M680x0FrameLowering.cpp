@@ -282,25 +282,6 @@ emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
     }
 
     uint64_t ThisVal = std::min(Offset, Chunk);
-    if (ThisVal == 4) {
-      // Use push / pop instead.
-      unsigned Reg = isSub
-        ? (unsigned)(M680x0::D0)
-        : findDeadCallerSavedReg(MBB, MBBI, TRI);
-      if (Reg) {
-        unsigned Opc = isSub
-          ? (M680x0::PUSH32r)
-          : (M680x0::POP32r);
-        MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(Opc))
-          .addReg(Reg, getDefRegState(!isSub) | getUndefRegState(isSub));
-        if (isSub)
-          MI->setFlag(MachineInstr::FrameSetup);
-        else
-          MI->setFlag(MachineInstr::FrameDestroy);
-        Offset -= ThisVal;
-        continue;
-      }
-    }
 
     MachineInstrBuilder MI = BuildStackAdjustment(
         MBB, MBBI, DL, isSub ? -ThisVal : ThisVal, InEpilogue);
@@ -372,7 +353,7 @@ BuildStackAdjustment(MachineBasicBlock &MBB,
     .addReg(StackPtr)
     .addImm(AbsOffset);
   // FIXME ATM there is no CCR in these inst
-  // MI->getOperand(3).setIsDead(); // The CCR implicit def is dead.
+  MI->getOperand(3).setIsDead(); // The CCR implicit def is dead.
   return MI;
 }
 
@@ -522,6 +503,8 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
     // funclet prologues.
     for (MachineBasicBlock &EveryMBB : MF)
       EveryMBB.addLiveIn(MachineFramePtr);
+  } else {
+    NumBytes = StackSize - MMFI->getCalleeSavedFrameSize();
   }
 
   // Skip the callee-saved push instructions.
