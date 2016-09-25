@@ -23,6 +23,27 @@ def MxSDT_Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
 
 def MxSDT_TCRet : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
+// RES, CCR <- op OPD
+def MxSDT_UArithCCROut : SDTypeProfile<2, 1,
+                                      [SDTCisSameAs<0, 2>, SDTCisInt<0>,
+                                       SDTCisVT<1, i32>]>;
+
+// RES, CCR <- op LHS, RHS
+def MxSDT_BArithCCROut : SDTypeProfile<2, 2,
+                                      [SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,
+                                       SDTCisInt<0>, SDTCisVT<1, i32>]>;
+
+// RES, CCR <- op LHS, RHS, CCR
+def MxSDT_BArithCCRInOut : SDTypeProfile<2, 3,
+                                        [SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,
+                                         SDTCisInt<0>, SDTCisVT<1, i32>,
+                                         SDTCisVT<4, i32>]>;
+// RES1, RES2, CCR <- op LHS, RHS
+def MxSDT_2BArithCCROut : SDTypeProfile<3, 2,
+                                       [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
+                                        SDTCisSameAs<0, 3>, SDTCisInt<0>,
+                                        SDTCisVT<1, i32>]>;
+
 //===----------------------------------------------------------------------===//
 // Nodes
 //===----------------------------------------------------------------------===//
@@ -321,306 +342,13 @@ def MximmSExt8  : ImmLeaf<i8,  [{ return isInt<8>(Imm);  }]>;
 def MximmSExt16 : ImmLeaf<i16, [{ return isInt<16>(Imm); }]>;
 def MximmSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 
-//===----------------------------------------------------------------------===//
-// Instructions
-//===----------------------------------------------------------------------===//
-
-// NOP
-let hasSideEffects = 0 in {
-  def NOP : MxInst<0x4E71, (outs), (ins), "nop", []>;
-}
-
-
-// TODO make move set imlicit CCR like M680x0 does
-// Do i need this?
-
-multiclass MxMOV8Inst<MxOperand OPD, dag PAT> {
-
-// X - not affected
-// N,Z - set by operation
-// V,C - cleared
-let Defs = [CCR] in {
-let mayLoad = 1 in  {
-
-// Dn <- OPD
-def "MOV8d"#OPD.Letter
-  : MxInst<0x0, (outs MxDRD8:$dst), (ins OPD:$src), "move.b\t$src, $dst",
-           [(set i8:$dst, PAT)]>;
-
-} // mayLoad = 1
-} // Defs = [CCR]
-
-// (An) <- OPD
-def "MOV8j"#OPD.Letter
-  : MxInst<0x0, (outs), (ins MxARI8:$dst, OPD:$src), "move.b\t$src, $dst",
-           [(store PAT, iPTR:$dst)]>;
-
-// (i,An) <- OPD
-def "MOV8p"#OPD.Letter
-  : MxInst<0x0, (outs), (ins MxARID8:$dst, OPD:$src), "move.b\t$src, $dst",
-           [(store PAT, MxCP_ARID:$dst)]>;
-}
-
-multiclass MxMOVInst<MxOperand OPD, dag PAT> {
-
-// X - not affected
-// N,Z - set by operation
-// V,C - cleared
-let Defs = [CCR] in {
-let mayLoad = 1 in  {
-
-// Set CS registers
-def "MOV"#OPD.Size.Num#"d"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-def "MOV"#OPD.Size.Num#"a"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-def "MOV"#OPD.Size.Num#"r"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-
-// Set TC registers
-
-def "MOV"#OPD.Size.Num#"d"#OPD.Letter#"_TC"
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-def "MOV"#OPD.Size.Num#"a"#OPD.Letter#"_TC"
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-def "MOV"#OPD.Size.Num#"r"#OPD.Letter#"_TC"
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-} // mayLoad = 1
-} // Defs = [CCR]
-
-
-// Store to MEM
-
-// (An) <- OPD
-def "MOV"#OPD.Size.Num#"j"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARI"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, iPTR:$dst)]>;
-
-// (i,An) <- OPD
-def "MOV"#OPD.Size.Num#"p"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARID"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, MxCP_ARID:$dst)]>;
-
-// (i,An,Xn) <- OPD
-def "MOV"#OPD.Size.Num#"f"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARII"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, MxCP_ARII:$dst)]>;
-}
-
-defm MOV8_d  : MxMOV8Inst<MxDRD8, (i8  imm:$src)>;
-defm MOV16_d : MxMOVInst<MxDRD16, (i16 imm:$src)>;
-defm MOV32_d : MxMOVInst<MxDRD32, (i32 imm:$src)>;
-
-defm MOV16_a : MxMOVInst<MxARD16, (i16 imm:$src)>;
-defm MOV32_a : MxMOVInst<MxARD32, (i32 imm:$src)>;
-
-defm MOV16_r : MxMOVInst<MxXRD16, (i16 imm:$src)>;
-defm MOV32_r : MxMOVInst<MxXRD32, (i32 imm:$src)>;
-
-defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8 MximmSExt8:$src)>;
-defm MOV16_i : MxMOVInst<Mxi16imm, (i16 MximmSExt16:$src)>;
-defm MOV32_i : MxMOVInst<Mxi32imm, (i32 MximmSExt32:$src)>;
-
-defm MOV8_j  : MxMOV8Inst<MxARI8, (iPTR iPTR:$src)>;
-defm MOV16_j : MxMOVInst<MxARI16, (iPTR iPTR:$src)>;
-defm MOV32_j : MxMOVInst<MxARI32, (iPTR iPTR:$src)>;
-
-defm MOV8_p  : MxMOV8Inst<MxARID8, (iPTR MxCP_ARID:$src)>;
-defm MOV16_p : MxMOVInst<MxARID16, (iPTR MxCP_ARID:$src)>;
-defm MOV32_p : MxMOVInst<MxARID32, (iPTR MxCP_ARID:$src)>;
-
-defm MOV8_f  : MxMOV8Inst<MxARII8, (iPTR MxCP_ARII:$src)>;
-defm MOV16_f : MxMOVInst<MxARII16, (iPTR MxCP_ARII:$src)>;
-defm MOV32_f : MxMOVInst<MxARII32, (iPTR MxCP_ARII:$src)>;
-
-
-// FIXME Could these be specialized from normal MOVrPIm and MOVrpDm?
-let Defs = [SP], hasSideEffects = 0 in {
-
-// FIXME
-// FIXME Solve bulshit with SP
-// FIXME
-// SP <- SP - <size>; (SP) <- Dn
-let mayStore = 1 in {
-def PUSH8r  : MxInst<0x0, (outs), (ins DR8:$reg),
-                         "move.b\t$reg, -(SP)",[]>;
-def PUSH16r : MxInst<0x0, (outs), (ins DR16:$reg),
-                         "move.w\t$reg, -(SP)",[]>;
-def PUSH32r : MxInst<0x0, (outs), (ins DR32:$reg),
-                         "move.l\t$reg, -(SP)",[]>;
-} // let mayStore = 1
-
-// Dn <- (SP); SP <- SP + <size>
-let mayLoad = 1 in {
-def POP8r  : MxInst<0x0, (outs DR8:$reg),  (ins),
-                        "move.b\t(SP)+, $reg", []>;
-def POP16r : MxInst<0x0, (outs DR16:$reg), (ins),
-                        "move.w\t(SP)+, $reg", []>;
-def POP32r : MxInst<0x0, (outs DR32:$reg), (ins),
-                        "move.l\t(SP)+, $reg", []>;
-} // let mayLoad = 1
-
-} // let Defs = [SP], hasSideEffects = 0
-
-
-// LEA - Load Effective Address
-def LEA32r_ARID : MxInst<0x0, (outs AR32:$dst), (ins MxARID32:$src),
-                        "lea\t$src, $dst",
-                        [(set i32:$dst, MxCP_ARID:$src)]>;
-
-def LEA32r_ARII : MxInst<0x0, (outs AR32:$dst), (ins MxARII32:$src),
-                        "lea\t$src, $dst",
-                        [(set i32:$dst, MxCP_ARII:$src)]>;
-
-
-// ARITHMETIC
-//FIXME extend to proper multiclasses
-let isCommutable = 1 in { // FIXME is it really a commutable form?
-
-// M680x0 instruction is dyadic where the second operand is destination
-let Constraints = "$src = $dst" in {
-
-// X — Set the same as the carry bit.
-// N — Set if the result is negative; cleared otherwise.
-// Z — Set if the result is zero; cleared otherwise.
-// V — Set if an overflow is generated; cleared otherwise.
-// C — Set if a carry is generated; cleared otherwise.
-let Defs = [CCR] in {
-
-// Dn <- Dn + Imm
-def ADD8ri  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
-               "addi.b\t$imm, $dst",
-               [(set i8:$dst, (add i8:$src, MximmSExt8:$imm))]>;
-
-def ADD16ri : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
-               "addi.w\t$imm, $dst",
-               [(set i16:$dst, (add i16:$src, MximmSExt16:$imm))]>;
-
-def ADD32ri : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
-               "addi.l\t$imm, $dst",
-               [(set i32:$dst, (add i32:$src, MximmSExt32:$imm))]>;
-
-// Dn <- Dn + Dr
-def ADD8rr  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
-               "add.b\t$reg, $dst",
-               [(set i8:$dst, (add i8:$src, i8:$reg))]>;
-
-def ADD16rr : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
-               "add.w\t$reg, $dst",
-               [(set i16:$dst, (add i16:$src, i16:$reg))]>;
-
-def ADD32rr : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
-               "add.l\t$reg, $dst",
-               [(set i32:$dst, (add i32:$src, i32:$reg))]>;
-
-
-// Dn <- Dn - Imm
-def SUB8ri  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
-               "subi.b\t$imm, $dst",
-               [(set i8:$dst, (sub i8:$src, MximmSExt8:$imm))]>;
-
-def SUB16ri : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
-               "subi.w\t$imm, $dst",
-               [(set i16:$dst, (sub i16:$src, MximmSExt16:$imm))]>;
-
-def SUB32ri : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
-               "subi.l\t$imm, $dst",
-               [(set i32:$dst, (sub i32:$src, MximmSExt32:$imm))]>;
-
-// Dn <- Dn - Dr
-def SUB8rr  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
-               "sub.b\t$reg, $dst",
-               [(set i8:$dst, (sub i8:$src, i8:$reg))]>;
-
-def SUB16rr : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
-               "sub.w\t$reg, $dst",
-               [(set i16:$dst, (sub i16:$src, i16:$reg))]>;
-
-def SUB32rr : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
-               "sub.l\t$reg, $dst",
-               [(set i32:$dst, (sub i32:$src, i32:$reg))]>;
-} // CCR Defs
-
-// X — Not affected.
-// N — Set if the most significant bit of the result is set; cleared otherwise.
-// Z — Set if the result is zero; cleared otherwise.
-// V — Always cleared.
-// C — Always cleared.
-let Defs = [CCR] in {
-
-// Dn <- Dn AND Imm
-def AND8ri  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
-               "andi.b\t$imm, $dst",
-               [(set i8:$dst, (and i8:$src, MximmSExt8:$imm))]>;
-
-def AND16ri : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
-               "andi.w\t$imm, $dst",
-               [(set i16:$dst, (and i16:$src, MximmSExt16:$imm))]>;
-
-def AND32ri : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
-               "andi.l\t$imm, $dst",
-               [(set i32:$dst, (and i32:$src, MximmSExt32:$imm))]>;
-
-// Dn <- Dn AND Dr
-def AND8rr  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
-               "and.b\t$reg, $dst",
-               [(set i8:$dst, (and i8:$src, i8:$reg))]>;
-
-def AND16rr : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
-               "and.w\t$reg, $dst",
-               [(set i16:$dst, (and i16:$src, i16:$reg))]>;
-
-def AND32rr : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
-               "and.l\t$reg, $dst",
-               [(set i32:$dst, (and i32:$src, i32:$reg))]>;
-} // CCR Defs
-} // Constraints
-} // isCommutable
-
 
 //===----------------------------------------------------------------------===//
 // Subsystems.
 //===----------------------------------------------------------------------===//
 
+include "M680x0InstrData.td"
+include "M680x0InstrArithmetic.td"
 include "M680x0InstrControl.td"
 
 // Compiler Pseudo Instructions and Pat Patterns

@@ -52,6 +52,10 @@ def USP : MxAliasReg<"usp", A7>;
 def SSP : MxAliasReg<"ssp", A7>;
 def ISP : MxAliasReg<"isp", A7>;
 
+// TODO get rid of "pseudo" registers and use just MxReg variants and use
+// HWEncoding's other 13 bits to encode type(and potentially other info) of
+// register.
+
 // Pseudo Registers
 class MxPseudoReg<string n, list<Register> subregs = []>
     : MxReg<n, 0, subregs>;

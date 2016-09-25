@@ -8,12 +8,40 @@
 //===----------------------------------------------------------------------===//
 //
 // This file describes the M680x0 jump, return, call, and related instructions.
+// Here is the current status of the file:
+// 
+//  Machine:
 //
-// NOTE: Though branch and jump instructions are using memory operands they
-// DO NOT read the jump address from memory, they just calculate EA and jump
-// there.
+//       BRA   [ ]     BSR  [ ]     Bcc [ ]     DBcc [ ]     FBcc [ ]
+//       FDBcc [ ]     FNOP [ ]     FPn [ ]     FScc [ ]     FTST [ ]
+//       JMP   [~]     JSR  [ ]     NOP [x]     RTD  [ ]     RTR  [ ]
+//       RTS   [x]     Scc  [ ]     TST [ ]
+//
+//  Pseudo:
+//
+//          RET [x]   
+//    TCRETURNj [x]   TCRETURNq [x]
+//     TAILJMPj [x]    TAILJMPq [x]
+//
+//  Map:
+//
+//   [ ] - was not touched at all
+//   [!] - requires extarnal stuff implemented
+//   [~] - in progress but usable
+//   [x] - done
+//
+//
+//                                   NOTE
+//      Though branch and jump instructions are using memory operands they
+//      DO NOT read the jump address from memory, they just calculate EA
+//      and jump there.
 //
 //===----------------------------------------------------------------------===//
+
+// NOP
+let hasSideEffects = 0 in {
+  def NOP : MxInst<0x4E71, (outs), (ins), "nop", []>;
+}
 
 // Indirect branching
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
