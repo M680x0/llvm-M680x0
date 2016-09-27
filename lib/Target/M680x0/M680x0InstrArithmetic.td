@@ -12,7 +12,7 @@
 //
 //  Machine:
 //
-//    ADD       [~]   ADDA      [~]   ADDI        [~]   ADDQ [~]   ADDX [~]
+//    ADD       [~]   ADDA      [ ]   ADDI        [ ]   ADDQ [ ]   ADDX [ ]
 //    CLR       [ ]   CMP       [ ]   CMPA        [ ]   CMPI [ ]   CMPM [ ]
 //    CMP2      [ ]   DIVS/DIVU [ ]   DIVSL/DIVUL [ ]   EXT  [ ]   EXTB [ ]
 //    MULS/MULU [ ]   NEG       [ ]   NEGX        [ ]   SUB  [ ]   SUBA [ ]
@@ -27,123 +27,177 @@
 //
 //===----------------------------------------------------------------------===//
 
-//FIXME extend to proper multiclasses
-let isCommutable = 1 in { // FIXME is it really a commutable form?
+// $reg <- $reg op $reg
+class MxBiArOp_RFRR<string mnemonic, MxOperand DST, MxOperand OPD, SDNode node>
+    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
+           mnemonic#"."#DST.Size.Id#"\t$opd, $dst",
+           [(set DST.VT:$dst, CCR, (node DST.VT:$src, OPD.VT:$opd))]>;
 
-// M680x0 instruction is dyadic where the second operand is destination
+// $reg <- $reg op $imm
+class MxBiArOp_RFRI<string mnemonic, MxOperand DST, MxOperand OPD,
+                    SDPatternOperator PAT, SDNode node>
+    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
+           mnemonic#"."#DST.Size.Id#"\t$opd, $dst",
+           [(set DST.VT:$dst, CCR, (node DST.VT:$src, PAT:$opd))]>;
+
+
+// Allows use of An registers
+multiclass MxBiArOp_RF<string mnemonic, SDNode mxnode, SDNode node> {
+
+let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
+let isCommutable = 1 in {
 
-// X — Set the same as the carry bit.
-// N — Set if the result is negative; cleared otherwise.
-// Z — Set if the result is zero; cleared otherwise.
-// V — Set if an overflow is generated; cleared otherwise.
-// C — Set if a carry is generated; cleared otherwise.
+def NAME#"8dd"  : MxBiArOp_RFRR<mnemonic, MxDRD8,  MxDRD8,  mxnode>;
+def NAME#"16rr" : MxBiArOp_RFRR<mnemonic, MxXRD16, MxXRD16, mxnode>;
+def NAME#"32rr" : MxBiArOp_RFRR<mnemonic, MxXRD32, MxXRD32, mxnode>;
+
+} // isCommutable = 1
+
+def NAME#"8di"  : MxBiArOp_RFRI<mnemonic, MxDRD8,  Mxi8imm,  MximmSExt8,  mxnode>;
+def NAME#"16ri" : MxBiArOp_RFRI<mnemonic, MxXRD16, Mxi16imm, MximmSExt16, mxnode>;
+def NAME#"32ri" : MxBiArOp_RFRI<mnemonic, MxXRD32, Mxi32imm, MximmSExt32, mxnode>;
+
+} // $src = $dst
+} // Defs = [CCR]
+
+} // MxBiArOp_RF
+
+// Does not allow use of An registers
+multiclass MxBiArOp_DF<string mnemonic, SDNode mxnode, SDNode node> {
+
 let Defs = [CCR] in {
+let Constraints = "$src = $dst" in {
+let isCommutable = 1 in {
 
-// Dn <- Dn + Imm
-def ADD8ri  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
-               "addi.b\t$imm, $dst",
-               [(set i8:$dst, (add i8:$src, MximmSExt8:$imm))]>;
+def NAME#"8dd"  : MxBiArOp_RFRR<mnemonic, MxDRD8,  MxDRD8,  mxnode>;
+def NAME#"16dd" : MxBiArOp_RFRR<mnemonic, MxDRD16, MxDRD16, mxnode>;
+def NAME#"32dd" : MxBiArOp_RFRR<mnemonic, MxDRD32, MxDRD32, mxnode>;
 
-def ADD16ri : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
-               "addi.w\t$imm, $dst",
-               [(set i16:$dst, (add i16:$src, MximmSExt16:$imm))]>;
+} // isCommutable = 1
 
-def ADD32ri : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
-               "addi.l\t$imm, $dst",
-               [(set i32:$dst, (add i32:$src, MximmSExt32:$imm))]>;
+def NAME#"8di"  : MxBiArOp_RFRI<mnemonic, MxDRD8,  Mxi8imm,  MximmSExt8,  mxnode>;
+def NAME#"16di" : MxBiArOp_RFRI<mnemonic, MxDRD16, Mxi16imm, MximmSExt16, mxnode>;
+def NAME#"32di" : MxBiArOp_RFRI<mnemonic, MxDRD32, Mxi32imm, MximmSExt32, mxnode>;
 
-// Dn <- Dn + Dr
-def ADD8rr  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
-               "add.b\t$reg, $dst",
-               [(set i8:$dst, (add i8:$src, i8:$reg))]>;
+} // $src = $dst
+} // Defs = [CCR]
 
-def ADD16rr : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
-               "add.w\t$reg, $dst",
-               [(set i16:$dst, (add i16:$src, i16:$reg))]>;
+} // MxBiArOp_RF
 
-def ADD32rr : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
-               "add.l\t$reg, $dst",
-               [(set i32:$dst, (add i32:$src, i32:$reg))]>;
+defm ADD : MxBiArOp_RF<"add", MxAdd, add>;
+defm SUB : MxBiArOp_RF<"sub", MxSub, sub>;
+
+defm AND : MxBiArOp_DF<"and", MxAnd, and>;
+defm XOR : MxBiArOp_DF<"eor", MxXor, xor>;
+defm OR  : MxBiArOp_DF<"or",  MxOr,  or>;
 
 
-// Dn <- Dn - Imm
-def SUB8ri  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
-               "subi.b\t$imm, $dst",
-               [(set i8:$dst, (sub i8:$src, MximmSExt8:$imm))]>;
+//===----------------------------------------------------------------------===//
+// no-CCR Patterns
+//===----------------------------------------------------------------------===//
 
-def SUB16ri : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
-               "subi.w\t$imm, $dst",
-               [(set i16:$dst, (sub i16:$src, MximmSExt16:$imm))]>;
+// TODO figure out why the fuck i cannot use Mxi8/16/32imm as operand,
+// but only imm.
 
-def SUB32ri : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
-               "subi.l\t$imm, $dst",
-               [(set i32:$dst, (sub i32:$src, MximmSExt32:$imm))]>;
+// add reg, reg
+def : Pat<(add i8 :$src, i8 :$opd), (ADD8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(add i16:$src, i16:$opd), (ADD16rr MxXRD16:$src, MxXRD16:$opd)>;
+def : Pat<(add i32:$src, i32:$opd), (ADD32rr MxXRD32:$src, MxXRD32:$opd)>;
 
-// Dn <- Dn - Dr
-def SUB8rr  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
-               "sub.b\t$reg, $dst",
-               [(set i8:$dst, (sub i8:$src, i8:$reg))]>;
+/* // add reg, mem */
+/* def : Pat<(add GR8:$src, (loadi8 addr:$opd)), */
+/*           (ADD8rm GR8:$src, addr:$opd)>; */
+/* def : Pat<(add GR16:$src, (loadi16 addr:$opd)), */
+/*           (ADD16rm GR16:$src, addr:$opd)>; */
+/* def : Pat<(add GR32:$src, (loadi32 addr:$opd)), */
+/*           (ADD32rm GR32:$src, addr:$opd)>; */
 
-def SUB16rr : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
-               "sub.w\t$reg, $dst",
-               [(set i16:$dst, (sub i16:$src, i16:$reg))]>;
+// add reg, imm
+def : Pat<(add i8: $src, MximmSExt8:$opd) , (ADD8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(add i16:$src, MximmSExt16:$opd), (ADD16ri MxXRD16:$src, imm:$opd)>;
+def : Pat<(add i32:$src, MximmSExt32:$opd), (ADD32ri MxXRD32:$src, imm:$opd)>;
 
-def SUB32rr : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
-               "sub.l\t$reg, $dst",
-               [(set i32:$dst, (sub i32:$src, i32:$reg))]>;
-} // CCR Defs
+// TODO checkout if i need a similar patters and for sub too
+/* def : Pat<(add GR16:$src, i16immSExt8:$opd), */
+/*           (ADD16ri8 GR16:$src, i16immSExt8:$opd)>; */
+/* def : Pat<(add GR32:$src, i32immSExt8:$opd), */
+/*           (ADD32ri8 GR32:$src, i32immSExt8:$opd)>; */
 
-// X — Not affected.
-// N — Set if the most significant bit of the result is set; cleared otherwise.
-// Z — Set if the result is zero; cleared otherwise.
-// V — Always cleared.
-// C — Always cleared.
-let Defs = [CCR] in {
+// sub reg, reg
+def : Pat<(sub i8 :$src, i8 :$opd), (SUB8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(sub i16:$src, i16:$opd), (SUB16rr MxXRD16:$src, MxXRD16:$opd)>;
+def : Pat<(sub i32:$src, i32:$opd), (SUB32rr MxXRD32:$src, MxXRD32:$opd)>;
 
-// Dn <- Dn AND Imm
-def AND8ri  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, i8imm:$imm),
-               "andi.b\t$imm, $dst",
-               [(set i8:$dst, (and i8:$src, MximmSExt8:$imm))]>;
+/* // sub reg, mem */
+/* def : Pat<(sub GR8:$src, (loadi8 addr:$opd)), */
+/*           (SUB8rm GR8:$src, addr:$opd)>; */
+/* def : Pat<(sub GR16:$src, (loadi16 addr:$opd)), */
+/*           (SUB16rm GR16:$src, addr:$opd)>; */
+/* def : Pat<(sub GR32:$src, (loadi32 addr:$opd)), */
+/*           (SUB32rm GR32:$src, addr:$opd)>; */
 
-def AND16ri : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, i16imm:$imm),
-               "andi.w\t$imm, $dst",
-               [(set i16:$dst, (and i16:$src, MximmSExt16:$imm))]>;
+// sub reg, imm
+def : Pat<(sub i8 :$src, MximmSExt8 :$opd), (SUB8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(sub i16:$src, MximmSExt16:$opd), (SUB16ri MxXRD16:$src, imm:$opd)>;
+def : Pat<(sub i32:$src, MximmSExt32:$opd), (SUB32ri MxXRD32:$src, imm:$opd)>;
 
-def AND32ri : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, i32imm:$imm),
-               "andi.l\t$imm, $dst",
-               [(set i32:$dst, (and i32:$src, MximmSExt32:$imm))]>;
+// and reg, reg
+def : Pat<(and i8 :$src1, i8 :$src2), (AND8dd  MxDRD8 :$src1, MxDRD8 :$src2)>;
+def : Pat<(and i16:$src1, i16:$src2), (AND16dd MxDRD16:$src1, MxDRD16:$src2)>;
+def : Pat<(and i32:$src1, i32:$src2), (AND32dd MxDRD32:$src1, MxDRD32:$src2)>;
 
-// Dn <- Dn AND Dr
-def AND8rr  : MxInst<0x000,
-               (outs MxDRD8:$dst), (ins MxDRD8:$src, MxDRD8:$reg),
-               "and.b\t$reg, $dst",
-               [(set i8:$dst, (and i8:$src, i8:$reg))]>;
+// and reg, mem
+/* def : Pat<(and GR8:$src1, (loadi8 addr:$src2)), */
+/*           (AND8rm GR8:$src1, addr:$src2)>; */
+/* def : Pat<(and GR16:$src1, (loadi16 addr:$src2)), */
+/*           (AND16rm GR16:$src1, addr:$src2)>; */
+/* def : Pat<(and GR32:$src1, (loadi32 addr:$src2)), */
+/*           (AND32rm GR32:$src1, addr:$src2)>; */
+/* def : Pat<(and GR64:$src1, (loadi64 addr:$src2)), */
+/*           (AND64rm GR64:$src1, addr:$src2)>; */
 
-def AND16rr : MxInst<0x000,
-               (outs MxDRD16:$dst), (ins MxDRD16:$src, MxDRD16:$reg),
-               "and.w\t$reg, $dst",
-               [(set i16:$dst, (and i16:$src, i16:$reg))]>;
+// and reg, imm
+def : Pat<(and i8: $src, MximmSExt8 :$opd), (AND8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(and i16:$src, MximmSExt16:$opd), (AND16di MxDRD16:$src, imm:$opd)>;
+def : Pat<(and i32:$src, MximmSExt32:$opd), (AND32di MxDRD32:$src, imm:$opd)>;
 
-def AND32rr : MxInst<0x000,
-               (outs MxDRD32:$dst), (ins MxDRD32:$src, MxDRD32:$reg),
-               "and.l\t$reg, $dst",
-               [(set i32:$dst, (and i32:$src, i32:$reg))]>;
-} // CCR Defs
-} // Constraints
-} // isCommutable
+// xor reg,reg
+def : Pat<(xor i8 :$src1, i8 :$src2), (XOR8dd  MxDRD8 :$src1, MxDRD8 :$src2)>;
+def : Pat<(xor i16:$src1, i16:$src2), (XOR16dd MxDRD16:$src1, MxDRD16:$src2)>;
+def : Pat<(xor i32:$src1, i32:$src2), (XOR32dd MxDRD32:$src1, MxDRD32:$src2)>;
+
+// xor reg, mem
+/* def : Pat<(xor GR8:$src1, (loadi8 addr:$src2)), */
+/*           (XOR8rm GR8:$src1, addr:$src2)>; */
+/* def : Pat<(xor GR16:$src1, (loadi16 addr:$src2)), */
+/*           (XOR16rm GR16:$src1, addr:$src2)>; */
+/* def : Pat<(xor GR32:$src1, (loadi32 addr:$src2)), */
+/*           (XOR32rm GR32:$src1, addr:$src2)>; */
+/* def : Pat<(xor GR64:$src1, (loadi64 addr:$src2)), */
+/*           (XOR64rm GR64:$src1, addr:$src2)>; */
+
+// xor reg, imm
+def : Pat<(xor i8: $src, MximmSExt8 :$opd), (XOR8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(xor i16:$src, MximmSExt16:$opd), (XOR16di MxDRD16:$src, imm:$opd)>;
+def : Pat<(xor i32:$src, MximmSExt32:$opd), (XOR32di MxDRD32:$src, imm:$opd)>;
+
+// or reg, reg
+def : Pat<(or i8 :$src1, i8 :$src2), (OR8dd  MxDRD8 :$src1, MxDRD8 :$src2)>;
+def : Pat<(or i16:$src1, i16:$src2), (OR16dd MxDRD16:$src1, MxDRD16:$src2)>;
+def : Pat<(or i32:$src1, i32:$src2), (OR32dd MxDRD32:$src1, MxDRD32:$src2)>;
+
+// or reg/mem
+/* def : Pat<(or GR8:$src1, (loadi8 addr:$src2)), */
+/*           (OR8rm GR8:$src1, addr:$src2)>; */
+/* def : Pat<(or GR16:$src1, (loadi16 addr:$src2)), */
+/*           (OR16rm GR16:$src1, addr:$src2)>; */
+/* def : Pat<(or GR32:$src1, (loadi32 addr:$src2)), */
+/*           (OR32rm GR32:$src1, addr:$src2)>; */
+/* def : Pat<(or GR64:$src1, (loadi64 addr:$src2)), */
+/*           (OR64rm GR64:$src1, addr:$src2)>; */
+
+// or reg, imm
+def : Pat<(or i8: $src, MximmSExt8 :$opd), (OR8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(or i16:$src, MximmSExt16:$opd), (OR16di MxDRD16:$src, imm:$opd)>;
+def : Pat<(or i32:$src, MximmSExt32:$opd), (OR32di MxDRD32:$src, imm:$opd)>;

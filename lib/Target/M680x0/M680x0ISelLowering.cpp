@@ -38,20 +38,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "M680x0-isel"
 
-const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
-  switch (Opcode) {
-  case M680x0ISD::CALL:      return "M680x0ISD::CALL";
-  case M680x0ISD::TAIL_CALL: return "M680x0ISD::TAIL_CALL";
-  case M680x0ISD::GP_REL:    return "M680x0ISD::GP_REL";
-  case M680x0ISD::RET:       return "M680x0ISD::RET";
-  case M680x0ISD::TC_RETURN: return "M680x0ISD::TC_RETURN";
-  case M680x0ISD::DivRem:    return "M680x0ISD::DivRem";
-  case M680x0ISD::DivRemU:   return "M680x0ISD::DivRemU";
-  case M680x0ISD::Wrapper:   return "M680x0ISD::Wrapper";
-  default:                   return NULL;
-  }
-}
-
 M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
                                            const M680x0Subtarget &STI)
     : TargetLowering(TM), Subtarget(STI), ABI(TM.getABI()) {
@@ -63,7 +49,7 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
 
   computeRegisterProperties(STI.getRegisterInfo());
 
-  setMinFunctionAlignment(2); // 2^2 bytes // HMM... can it be just 2^1?
+  setMinFunctionAlignment(2); // 2^2 bytes // ??? can it be just 2^1?
 
 }
 
@@ -203,4 +189,26 @@ LowerReturn(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
     RetOps.push_back(Flag);
 
   return DAG.getNode(M680x0ISD::RET, DL, MVT::Other, RetOps);
+}
+
+const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
+  switch (Opcode) {
+  case M680x0ISD::CALL:      return "M680x0ISD::CALL";
+  case M680x0ISD::TAIL_CALL: return "M680x0ISD::TAIL_CALL";
+  case M680x0ISD::GP_REL:    return "M680x0ISD::GP_REL";
+  case M680x0ISD::RET:       return "M680x0ISD::RET";
+  case M680x0ISD::TC_RETURN: return "M680x0ISD::TC_RETURN";
+  case M680x0ISD::ADD:       return "M680x0ISD::ADD";
+  case M680x0ISD::SUB:       return "M680x0ISD::SUB";
+  case M680x0ISD::ADDX:      return "M680x0ISD::ADDX";
+  case M680x0ISD::SUBX:      return "M680x0ISD::SUBX";
+  case M680x0ISD::SMUL:      return "M680x0ISD::SMUL";
+  case M680x0ISD::INC:       return "M680x0ISD::INC";
+  case M680x0ISD::DEC:       return "M680x0ISD::DEC";
+  case M680x0ISD::OR:        return "M680x0ISD::OR";
+  case M680x0ISD::XOR:       return "M680x0ISD::XOR";
+  case M680x0ISD::AND:       return "M680x0ISD::AND";
+  case M680x0ISD::Wrapper:   return "M680x0ISD::Wrapper";
+  default:                   return NULL;
+  }
 }

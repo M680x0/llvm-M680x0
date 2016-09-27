@@ -89,56 +89,53 @@ eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
   MachineInstr &MI = *II;
   MachineFunction &MF = *MI.getParent()->getParent();
   const M680x0FrameLowering *TFI = getFrameLowering(MF);
-  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
-  unsigned BasePtr;
+
+  // We have either (i,An,Rn) or (i,An) EA form
+  // NOTE Base contains the FI and we need to backtrace a bit to get Disp
+  MachineOperand &Disp = MI.getOperand(FIOperandNum - 1);
+  MachineOperand &Base = MI.getOperand(FIOperandNum);
+
+  int Imm = (int)(Disp.getImm());
+  int FIndex = (int)(Base.getIndex());
 
   // unsigned Opc = MI.getOpcode();
   // FIXME there is no jmp from mem yet
   // bool AfterFPPop =  Opc == M680x0::TAILJMPm || Opc == M680x0::TCRETURNmi;
   bool AfterFPPop =  false;
 
+  unsigned BasePtr;
   if (hasBasePointer(MF))
-    BasePtr = (FrameIndex < 0 ? FramePtr : getBaseRegister());
+    BasePtr = (FIndex < 0 ? FramePtr : getBaseRegister());
   else if (needsStackRealignment(MF))
-    BasePtr = (FrameIndex < 0 ? FramePtr : StackPtr);
+    BasePtr = (FIndex < 0 ? FramePtr : StackPtr);
   else if (AfterFPPop)
     BasePtr = StackPtr;
   else
     BasePtr = (TFI->hasFP(MF) ? FramePtr : StackPtr);
 
-  unsigned IgnoredFrameReg;
-
-  /// We have either (i,An,Rn) or (i,An) EA form
-  MachineOperand &Disp = MI.getOperand(FIOperandNum + 0);
-  MachineOperand &Base = MI.getOperand(FIOperandNum + 1);
-
-  // FIXME This is not very pretty, is there another way to get imm size?
-  // TODO do not forget to implement the matcher
-  int Imm = (int)(Disp.getIndex());
-  int Size = (int)(Base.getImm());
-
   Base.ChangeToRegister(BasePtr, false);
 
   // Now add the frame object offset to the offset from FP.
   int FIOffset;
+  unsigned IgnoredFrameReg;
   if (AfterFPPop) {
     // Tail call jmp happens after FP is popped.
     const MachineFrameInfo &MFI = MF.getFrameInfo();
-    FIOffset = MFI.getObjectOffset(FrameIndex) - TFI->getOffsetOfLocalArea();
+    FIOffset = MFI.getObjectOffset(FIndex) - TFI->getOffsetOfLocalArea();
   } else {
-    FIOffset = TFI->getFrameIndexReference(MF, FrameIndex, IgnoredFrameReg);
+    FIOffset = TFI->getFrameIndexReference(MF, FIndex, IgnoredFrameReg);
   }
 
   if (BasePtr == StackPtr)
     FIOffset += SPAdj;
 
   long long Offset = FIOffset + Imm;
-  if (Size == 16) {
-      assert(isInt<16>(Offset) && "Cannot use disp greater 16 bit");
-  } else if (Size == 8) {
-      assert(isInt<8>(Offset) && "Cannot use disp greater 8 bit");
-  } else {
-  }
+  // if (Size == 16) {
+  //     assert(isInt<16>(Offset) && "Cannot use disp greater 16 bit");
+  // } else if (Size == 8) {
+  //     assert(isInt<8>(Offset) && "Cannot use disp greater 8 bit");
+  // } else {
+  // }
   Disp.ChangeToImmediate(Offset);
 }
 

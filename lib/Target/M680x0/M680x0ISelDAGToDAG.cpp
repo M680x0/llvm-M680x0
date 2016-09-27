@@ -198,10 +198,10 @@ private:
                                    SDValue &Disp, SDValue &Base) {
     if (AM.BaseType == M680x0ISelAddressMode::FrameIndexBase)
     {
-      Disp = CurDAG->getTargetFrameIndex(
+      Disp = getI32Imm(AM.Disp, DL);
+      Base = CurDAG->getTargetFrameIndex(
           AM.BaseFrameIndex,
           TLI->getPointerTy(CurDAG->getDataLayout()));
-      Base = getI32Imm(AM.getDispSize(), DL);
       return true;
     }
 

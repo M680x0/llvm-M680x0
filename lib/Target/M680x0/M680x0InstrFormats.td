@@ -1,9 +1,4 @@
 //=== M680x0InstrFormats.td - Motorola 680x0 Instruction Formats tablegen -===//
-// ADDRESS REGISTER INDIRECT WITH DISPLACEMENT. This addressing mode requires one
-// word of extension. The address of the operand is the sum of the address in
-// the address register and the sign-extended 16-bit displacement integer in the
-// extension word. The reference is classified as a data reference with the
-// exception of the jump and jump-to-subroutine instructions.
 //
 //                     The LLVM Compiler Infrastructure
 //

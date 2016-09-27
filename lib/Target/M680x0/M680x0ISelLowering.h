@@ -43,11 +43,11 @@ namespace llvm {
 
       TC_RETURN,
 
-      // DivRem(u)
-      DivRem,
-      DivRemU,
+      // Arithmetic operations with CCR results.
+      ADD, SUB, ADDX, SUBX, SMUL,
+      INC, DEC, OR, XOR, AND,
 
-      Wrapper,
+      Wrapper
     };
   }
 

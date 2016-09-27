@@ -137,17 +137,17 @@ defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8 MximmSExt8:$src)>;
 defm MOV16_i : MxMOVInst<Mxi16imm, (i16 MximmSExt16:$src)>;
 defm MOV32_i : MxMOVInst<Mxi32imm, (i32 MximmSExt32:$src)>;
 
-defm MOV8_j  : MxMOV8Inst<MxARI8, (iPTR iPTR:$src)>;
-defm MOV16_j : MxMOVInst<MxARI16, (iPTR iPTR:$src)>;
-defm MOV32_j : MxMOVInst<MxARI32, (iPTR iPTR:$src)>;
+defm MOV8_j  : MxMOV8Inst<MxARI8, (Mxloadi8  iPTR:$src)>;
+defm MOV16_j : MxMOVInst<MxARI16, (Mxloadi16 iPTR:$src)>;
+defm MOV32_j : MxMOVInst<MxARI32, (Mxloadi32 iPTR:$src)>;
 
-defm MOV8_p  : MxMOV8Inst<MxARID8, (iPTR MxCP_ARID:$src)>;
-defm MOV16_p : MxMOVInst<MxARID16, (iPTR MxCP_ARID:$src)>;
-defm MOV32_p : MxMOVInst<MxARID32, (iPTR MxCP_ARID:$src)>;
+defm MOV8_p  : MxMOV8Inst<MxARID8, (Mxloadi8  MxCP_ARID:$src)>;
+defm MOV16_p : MxMOVInst<MxARID16, (Mxloadi16 MxCP_ARID:$src)>;
+defm MOV32_p : MxMOVInst<MxARID32, (Mxloadi32 MxCP_ARID:$src)>;
 
-defm MOV8_f  : MxMOV8Inst<MxARII8, (iPTR MxCP_ARII:$src)>;
-defm MOV16_f : MxMOVInst<MxARII16, (iPTR MxCP_ARII:$src)>;
-defm MOV32_f : MxMOVInst<MxARII32, (iPTR MxCP_ARII:$src)>;
+defm MOV8_f  : MxMOV8Inst<MxARII8, (Mxloadi8  MxCP_ARII:$src)>;
+defm MOV16_f : MxMOVInst<MxARII16, (Mxloadi16 MxCP_ARII:$src)>;
+defm MOV32_f : MxMOVInst<MxARII32, (Mxloadi32 MxCP_ARII:$src)>;
 
 
 // FIXME Could these be specialized from normal MOVrPIm and MOVrpDm?

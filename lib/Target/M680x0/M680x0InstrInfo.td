@@ -24,25 +24,25 @@ def MxSDT_Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
 def MxSDT_TCRet : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
 // RES, CCR <- op OPD
-def MxSDT_UArithCCROut : SDTypeProfile<2, 1,
+def MxSDT_UnArithCCROut : SDTypeProfile<2, 1,
                                       [SDTCisSameAs<0, 2>, SDTCisInt<0>,
-                                       SDTCisVT<1, i32>]>;
+                                       SDTCisVT<1, i8>]>;
 
 // RES, CCR <- op LHS, RHS
-def MxSDT_BArithCCROut : SDTypeProfile<2, 2,
+def MxSDT_BiArithCCROut : SDTypeProfile<2, 2,
                                       [SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,
-                                       SDTCisInt<0>, SDTCisVT<1, i32>]>;
+                                       SDTCisInt<0>, SDTCisVT<1, i8>]>;
 
 // RES, CCR <- op LHS, RHS, CCR
-def MxSDT_BArithCCRInOut : SDTypeProfile<2, 3,
+def MxSDT_BiArithCCRInOut : SDTypeProfile<2, 3,
                                         [SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,
-                                         SDTCisInt<0>, SDTCisVT<1, i32>,
-                                         SDTCisVT<4, i32>]>;
+                                         SDTCisInt<0>, SDTCisVT<1, i8>,
+                                         SDTCisVT<4, i8>]>;
 // RES1, RES2, CCR <- op LHS, RHS
-def MxSDT_2BArithCCROut : SDTypeProfile<3, 2,
+def MxSDT_2BiArithCCROut : SDTypeProfile<3, 2,
                                        [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
                                         SDTCisSameAs<0, 3>, SDTCisInt<0>,
-                                        SDTCisVT<1, i32>]>;
+                                        SDTCisVT<1, i8>]>;
 
 //===----------------------------------------------------------------------===//
 // Nodes
@@ -53,6 +53,21 @@ def MxRet   : SDNode<"M680x0ISD::RET", MxSDT_Ret,
 
 def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
                      [SDNPHasChain,  SDNPOptInGlue, SDNPVariadic]>;
+
+def MxAdd  : SDNode<"M680x0ISD::ADD",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxSub  : SDNode<"M680x0ISD::SUB",  MxSDT_BiArithCCROut>;
+def MxOr   : SDNode<"M680x0ISD::OR",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxXor  : SDNode<"M680x0ISD::XOR",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxAnd  : SDNode<"M680x0ISD::AND",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+
+def MxAdc  : SDNode<"M680x0ISD::ADC",  MxSDT_BiArithCCRInOut>;
+def MxSbb  : SDNode<"M680x0ISD::SBB",  MxSDT_BiArithCCRInOut>;
+
+def MxInc  : SDNode<"M680x0ISD::INC",  MxSDT_UnArithCCROut>;
+def MxDec  : SDNode<"M680x0ISD::DEC",  MxSDT_UnArithCCROut>;
+
+def MxSMul : SDNode<"M680x0ISD::SMUL", MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxUMul : SDNode<"M680x0ISD::UMUL", MxSDT_2BiArithCCROut, [SDNPCommutative]>;
 
 //===----------------------------------------------------------------------===//
 // Operands
@@ -70,41 +85,45 @@ def Mx8  : MxSize<8,  "b", "byte">;
 def Mx16 : MxSize<16, "w", "word">;
 def Mx32 : MxSize<32, "l", "long">;
 
-class MxOperand<MxSize size, string letter> {
-  MxSize Size = size;
+class MxOperand<ValueType vt, MxSize size, string letter, RegisterClass rc> {
+  ValueType VT = vt;
   string Letter = letter;
+  MxSize Size = size;
+  RegisterClass RC = rc;
 }
 
-class MxRegOp<RegisterClass rc,
+class MxRegOp<ValueType vt,
+              RegisterClass rc,
               MxSize size,
               string letter,
               string pm = "printOperand">
-    : RegisterOperand<rc, pm>, MxOperand<size, letter>;
+    : RegisterOperand<rc, pm>,
+      MxOperand<vt, size, letter, rc>;
 
 // REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def MxXRD16 : MxRegOp<XR16, Mx16, "r">;
-def MxXRD32 : MxRegOp<XR32, Mx32, "r">;
+def MxXRD16 : MxRegOp<i16, XR16, Mx16, "r">;
+def MxXRD32 : MxRegOp<i32, XR32, Mx32, "r">;
 
-def MxXRD16_TC : MxRegOp<XR16_TC, Mx16, "r">;
-def MxXRD32_TC : MxRegOp<XR32_TC, Mx32, "r">;
+def MxXRD16_TC : MxRegOp<i16, XR16_TC, Mx16, "r">;
+def MxXRD32_TC : MxRegOp<i32, XR32_TC, Mx32, "r">;
 
 // DATA REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def MxDRD8  : MxRegOp<DR8,  Mx8,  "d">;
-def MxDRD16 : MxRegOp<DR16, Mx16, "d">;
-def MxDRD32 : MxRegOp<DR32, Mx32, "d">;
+def MxDRD8  : MxRegOp<i8,  DR8,  Mx8,  "d">;
+def MxDRD16 : MxRegOp<i16, DR16, Mx16, "d">;
+def MxDRD32 : MxRegOp<i32, DR32, Mx32, "d">;
 
-def MxDRD16_TC : MxRegOp<DR16_TC, Mx16, "d">;
-def MxDRD32_TC : MxRegOp<DR32_TC, Mx32, "d">;
+def MxDRD16_TC : MxRegOp<i16, DR16_TC, Mx16, "d">;
+def MxDRD32_TC : MxRegOp<i32, DR32_TC, Mx32, "d">;
 
 // ADDRESS REGISTER DIRECT. The operand is in the address register specified by
 // the effective address register field.
-def MxARD16 : MxRegOp<AR16, Mx16, "a">;
-def MxARD32 : MxRegOp<AR32, Mx32, "a">;
+def MxARD16 : MxRegOp<i16, AR16, Mx16, "a">;
+def MxARD32 : MxRegOp<i32, AR32, Mx32, "a">;
 
-def MxARD16_TC : MxRegOp<AR16_TC, Mx16, "a">;
-def MxARD32_TC : MxRegOp<AR32_TC, Mx32, "a">;
+def MxARD16_TC : MxRegOp<i16, AR16_TC, Mx16, "a">;
+def MxARD32_TC : MxRegOp<i32, AR32_TC, Mx32, "a">;
 
 // TODO finish parser wiring
 def MxMemAsmOperand : AsmOperandClass {
@@ -114,7 +133,7 @@ def MxMemAsmOperand : AsmOperandClass {
 class MxMemOp<dag ops, MxSize size, string letter,
               string printMethod = "printOperand",
               AsmOperandClass parserMatchClass = MxMemAsmOperand>
-    : Operand<iPTR>, MxOperand<size, letter> {
+    : Operand<iPTR>, MxOperand<iPTR, size, letter, ?> {
   let PrintMethod = printMethod;
   let MIOperandInfo = ops;
   let ParserMatchClass = parserMatchClass;
@@ -230,7 +249,8 @@ def MxPCI32  : MxMemOp<(ops i8imm, XR32), Mx32, "k", "printPCI32Mem">;
 } // OPERAND_PCREL
 
 class MxOp<ValueType vt, MxSize size, string letter>
-    : Operand<vt>, MxOperand<size, letter>;
+    : Operand<vt>,
+      MxOperand<vt, size, letter, ?>;
 
 let OperandType = "OPERAND_IMMEDIATE" in {
 // IMMEDIATE DATA. This addressing mode requires either one or two words of
@@ -295,6 +315,10 @@ def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
 // Pattern Fragments
 //===----------------------------------------------------------------------===//
 
+def MximmSExt8  : PatLeaf<(i8  imm)>;
+def MximmSExt16 : PatLeaf<(i16 imm)>;
+def MximmSExt32 : PatLeaf<(i32 imm)>;
+
 // Helper fragments for loads.
 // It's always safe to treat a anyext i16 load as a i32 load if the i16 is
 // known to be 32-bit aligned or better. Ditto for i8 to i16.
@@ -337,10 +361,6 @@ def Mxextloadi32i1   : PatFrag<(ops node:$ptr), (i32 (extloadi1 node:$ptr))>;
 def Mxextloadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))>;
 def Mxextloadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
 def Mxextloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
-
-def MximmSExt8  : ImmLeaf<i8,  [{ return isInt<8>(Imm);  }]>;
-def MximmSExt16 : ImmLeaf<i16, [{ return isInt<16>(Imm); }]>;
-def MximmSExt32 : ImmLeaf<i32, [{ return isInt<32>(Imm); }]>;
 
 
 //===----------------------------------------------------------------------===//

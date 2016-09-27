@@ -146,7 +146,7 @@ static unsigned getADDrrOpcode() {
 }
 
 static unsigned getANDriOpcode(int64_t Imm) {
-  return M680x0::AND32ri;
+  return M680x0::AND32di;
 }
 
 static unsigned getLEArOpcode() {
