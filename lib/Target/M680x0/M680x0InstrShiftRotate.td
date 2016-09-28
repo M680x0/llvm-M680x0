@@ -12,8 +12,8 @@
 //
 //  Machine:
 //
-//    SHL     [ ]   ASR     [ ]   LSR      [ ]   SWAP     [ ]
-//    ROL     [ ]   ROR     [ ]   ROXL     [ ]   ROXR     [ ]
+//    SHL     [~]   ASR     [~]   LSR      [~]   SWAP     [ ]
+//    ROL     [~]   ROR     [~]   ROXL     [ ]   ROXR     [ ]
 //
 //  Map:
 //
@@ -57,3 +57,6 @@ def NAME#"32di" : MxSROp_DI<mnemonic, MxDRD32, node>;
 defm SHL : MxSROp<"lsl", shl>;
 defm ASR : MxSROp<"asr", srl>;
 defm LSR : MxSROp<"lsr", sra>;
+
+defm ROL : MxSROp<"rol", rotl>;
+defm ROR : MxSROp<"ror", rotr>;
