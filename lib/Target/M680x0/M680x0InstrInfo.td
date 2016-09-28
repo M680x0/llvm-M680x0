@@ -319,6 +319,8 @@ def MximmSExt8  : PatLeaf<(i8  imm)>;
 def MximmSExt16 : PatLeaf<(i16 imm)>;
 def MximmSExt32 : PatLeaf<(i32 imm)>;
 
+def Mximm1to8   : ImmLeaf<i32, [{ return Imm >= 1 && Imm <= 8; }]>;
+
 // Helper fragments for loads.
 // It's always safe to treat a anyext i16 load as a i32 load if the i16 is
 // known to be 32-bit aligned or better. Ditto for i8 to i16.
@@ -369,6 +371,7 @@ def Mxextloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 
 include "M680x0InstrData.td"
 include "M680x0InstrArithmetic.td"
+include "M680x0InstrShiftRotate.td"
 include "M680x0InstrControl.td"
 
 // Compiler Pseudo Instructions and Pat Patterns
