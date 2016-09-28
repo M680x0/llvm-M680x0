@@ -16,6 +16,7 @@
 #include "M680x0InstrInfo.h"
 #include "M680x0MachineFunction.h"
 #include "M680x0Subtarget.h"
+#include "M680x0InstrBuilder.h"
 
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -201,16 +202,6 @@ static bool isRegLiveIn(MachineBasicBlock &MBB, unsigned Reg) {
   }
 
   return false;
-}
-
-/// addRegIndirectWithDisp - This function is used to add a memory reference of the form
-/// [Reg + Offset], i.e., one with no scale or index, but with a
-/// displacement. An example is: (4,D0).
-/// TODO move it to some helper file
-static const MachineInstrBuilder &
-addRegIndirectWithDisp(const MachineInstrBuilder &MIB,
-             unsigned Reg, bool isKill, int Offset) {
-  return MIB.addImm(Offset).addReg(Reg, getKillRegState(isKill));
 }
 
 uint64_t M680x0FrameLowering::
