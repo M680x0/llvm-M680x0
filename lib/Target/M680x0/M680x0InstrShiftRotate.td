@@ -55,8 +55,8 @@ def NAME#"32di" : MxSROp_DI<mnemonic, MxDRD32, node>;
 } // MxBiArOp_RF
 
 defm SHL : MxSROp<"lsl", shl>;
-defm ASR : MxSROp<"asr", srl>;
-defm LSR : MxSROp<"lsr", sra>;
+defm LSR : MxSROp<"lsr", srl>;
+defm ASR : MxSROp<"asr", sra>;
 
 defm ROL : MxSROp<"rol", rotl>;
 defm ROR : MxSROp<"ror", rotr>;

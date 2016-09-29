@@ -23,6 +23,8 @@ def MxSDT_Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
 
 def MxSDT_TCRet : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
+/* def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>; */
+
 // RES, CCR <- op OPD
 def MxSDT_UnArithCCROut : SDTypeProfile<2, 1,
                                       [SDTCisSameAs<0, 2>, SDTCisInt<0>,
@@ -53,6 +55,8 @@ def MxRet   : SDNode<"M680x0ISD::RET", MxSDT_Ret,
 
 def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
                      [SDNPHasChain,  SDNPOptInGlue, SDNPVariadic]>;
+
+/* def MxWrapper : SDNode<"M680x0ISD::Wrapper", MxSDT_Wrapper>; */
 
 def MxAdd  : SDNode<"M680x0ISD::ADD",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
 def MxSub  : SDNode<"M680x0ISD::SUB",  MxSDT_BiArithCCROut>;
@@ -319,6 +323,12 @@ def MximmSExt8  : PatLeaf<(i8  imm)>;
 def MximmSExt16 : PatLeaf<(i16 imm)>;
 def MximmSExt32 : PatLeaf<(i32 imm)>;
 
+// Used for Shifts and Rotations, since M680x0 immediates in these
+// instructions are 1 <= i <= 8.
+// Generally, if immediate is bigger than 8 it will be moved to a register
+// and then an operation is performed. TODO you need to evaluate whether
+// splitting one big shift(or rotate) into a few smaller is faster than doing
+// a move, if so do custom lowering
 def Mximm1to8   : ImmLeaf<i32, [{ return Imm >= 1 && Imm <= 8; }]>;
 
 // Helper fragments for loads.
@@ -369,9 +379,9 @@ def Mxextloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 // Subsystems.
 //===----------------------------------------------------------------------===//
 
-include "M680x0InstrData.td"
-include "M680x0InstrArithmetic.td"
 include "M680x0InstrShiftRotate.td"
+include "M680x0InstrArithmetic.td"
+include "M680x0InstrData.td"
 include "M680x0InstrControl.td"
 
 // Compiler Pseudo Instructions and Pat Patterns

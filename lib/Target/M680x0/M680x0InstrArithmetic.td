@@ -143,19 +143,19 @@ def : Pat<(sub i16:$src, MximmSExt16:$opd), (SUB16ri MxXRD16:$src, imm:$opd)>;
 def : Pat<(sub i32:$src, MximmSExt32:$opd), (SUB32ri MxXRD32:$src, imm:$opd)>;
 
 // and reg, reg
-def : Pat<(and i8 :$src1, i8 :$src2), (AND8dd  MxDRD8 :$src1, MxDRD8 :$src2)>;
-def : Pat<(and i16:$src1, i16:$src2), (AND16dd MxDRD16:$src1, MxDRD16:$src2)>;
-def : Pat<(and i32:$src1, i32:$src2), (AND32dd MxDRD32:$src1, MxDRD32:$src2)>;
+def : Pat<(and i8 :$src, i8 :$opd), (AND8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(and i16:$src, i16:$opd), (AND16dd MxDRD16:$src, MxDRD16:$opd)>;
+def : Pat<(and i32:$src, i32:$opd), (AND32dd MxDRD32:$src, MxDRD32:$opd)>;
 
 // and reg, mem
-/* def : Pat<(and GR8:$src1, (loadi8 addr:$src2)), */
-/*           (AND8rm GR8:$src1, addr:$src2)>; */
-/* def : Pat<(and GR16:$src1, (loadi16 addr:$src2)), */
-/*           (AND16rm GR16:$src1, addr:$src2)>; */
-/* def : Pat<(and GR32:$src1, (loadi32 addr:$src2)), */
-/*           (AND32rm GR32:$src1, addr:$src2)>; */
-/* def : Pat<(and GR64:$src1, (loadi64 addr:$src2)), */
-/*           (AND64rm GR64:$src1, addr:$src2)>; */
+/* def : Pat<(and GR8:$src, (loadi8 addr:$opd)), */
+/*           (AND8rm GR8:$src, addr:$opd)>; */
+/* def : Pat<(and GR16:$src, (loadi16 addr:$opd)), */
+/*           (AND16rm GR16:$src, addr:$opd)>; */
+/* def : Pat<(and GR32:$src, (loadi32 addr:$opd)), */
+/*           (AND32rm GR32:$src, addr:$opd)>; */
+/* def : Pat<(and GR64:$src, (loadi64 addr:$opd)), */
+/*           (AND64rm GR64:$src, addr:$opd)>; */
 
 // and reg, imm
 def : Pat<(and i8: $src, MximmSExt8 :$opd), (AND8di  MxDRD8 :$src, imm:$opd)>;
@@ -163,19 +163,19 @@ def : Pat<(and i16:$src, MximmSExt16:$opd), (AND16di MxDRD16:$src, imm:$opd)>;
 def : Pat<(and i32:$src, MximmSExt32:$opd), (AND32di MxDRD32:$src, imm:$opd)>;
 
 // xor reg,reg
-def : Pat<(xor i8 :$src1, i8 :$src2), (XOR8dd  MxDRD8 :$src1, MxDRD8 :$src2)>;
-def : Pat<(xor i16:$src1, i16:$src2), (XOR16dd MxDRD16:$src1, MxDRD16:$src2)>;
-def : Pat<(xor i32:$src1, i32:$src2), (XOR32dd MxDRD32:$src1, MxDRD32:$src2)>;
+def : Pat<(xor i8 :$src, i8 :$opd), (XOR8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(xor i16:$src, i16:$opd), (XOR16dd MxDRD16:$src, MxDRD16:$opd)>;
+def : Pat<(xor i32:$src, i32:$opd), (XOR32dd MxDRD32:$src, MxDRD32:$opd)>;
 
 // xor reg, mem
-/* def : Pat<(xor GR8:$src1, (loadi8 addr:$src2)), */
-/*           (XOR8rm GR8:$src1, addr:$src2)>; */
-/* def : Pat<(xor GR16:$src1, (loadi16 addr:$src2)), */
-/*           (XOR16rm GR16:$src1, addr:$src2)>; */
-/* def : Pat<(xor GR32:$src1, (loadi32 addr:$src2)), */
-/*           (XOR32rm GR32:$src1, addr:$src2)>; */
-/* def : Pat<(xor GR64:$src1, (loadi64 addr:$src2)), */
-/*           (XOR64rm GR64:$src1, addr:$src2)>; */
+/* def : Pat<(xor GR8:$src, (loadi8 addr:$opd)), */
+/*           (XOR8rm GR8:$src, addr:$opd)>; */
+/* def : Pat<(xor GR16:$src, (loadi16 addr:$opd)), */
+/*           (XOR16rm GR16:$src, addr:$opd)>; */
+/* def : Pat<(xor GR32:$src, (loadi32 addr:$opd)), */
+/*           (XOR32rm GR32:$src, addr:$opd)>; */
+/* def : Pat<(xor GR64:$src, (loadi64 addr:$opd)), */
+/*           (XOR64rm GR64:$src, addr:$opd)>; */
 
 // xor reg, imm
 def : Pat<(xor i8: $src, MximmSExt8 :$opd), (XOR8di  MxDRD8 :$src, imm:$opd)>;
@@ -183,19 +183,19 @@ def : Pat<(xor i16:$src, MximmSExt16:$opd), (XOR16di MxDRD16:$src, imm:$opd)>;
 def : Pat<(xor i32:$src, MximmSExt32:$opd), (XOR32di MxDRD32:$src, imm:$opd)>;
 
 // or reg, reg
-def : Pat<(or i8 :$src1, i8 :$src2), (OR8dd  MxDRD8 :$src1, MxDRD8 :$src2)>;
-def : Pat<(or i16:$src1, i16:$src2), (OR16dd MxDRD16:$src1, MxDRD16:$src2)>;
-def : Pat<(or i32:$src1, i32:$src2), (OR32dd MxDRD32:$src1, MxDRD32:$src2)>;
+def : Pat<(or i8 :$src, i8 :$opd), (OR8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(or i16:$src, i16:$opd), (OR16dd MxDRD16:$src, MxDRD16:$opd)>;
+def : Pat<(or i32:$src, i32:$opd), (OR32dd MxDRD32:$src, MxDRD32:$opd)>;
 
 // or reg/mem
-/* def : Pat<(or GR8:$src1, (loadi8 addr:$src2)), */
-/*           (OR8rm GR8:$src1, addr:$src2)>; */
-/* def : Pat<(or GR16:$src1, (loadi16 addr:$src2)), */
-/*           (OR16rm GR16:$src1, addr:$src2)>; */
-/* def : Pat<(or GR32:$src1, (loadi32 addr:$src2)), */
-/*           (OR32rm GR32:$src1, addr:$src2)>; */
-/* def : Pat<(or GR64:$src1, (loadi64 addr:$src2)), */
-/*           (OR64rm GR64:$src1, addr:$src2)>; */
+/* def : Pat<(or GR8:$src, (loadi8 addr:$opd)), */
+/*           (OR8rm GR8:$src, addr:$opd)>; */
+/* def : Pat<(or GR16:$src, (loadi16 addr:$opd)), */
+/*           (OR16rm GR16:$src, addr:$opd)>; */
+/* def : Pat<(or GR32:$src, (loadi32 addr:$opd)), */
+/*           (OR32rm GR32:$src, addr:$opd)>; */
+/* def : Pat<(or GR64:$src, (loadi64 addr:$opd)), */
+/*           (OR64rm GR64:$src, addr:$opd)>; */
 
 // or reg, imm
 def : Pat<(or i8: $src, MximmSExt8 :$opd), (OR8di  MxDRD8 :$src, imm:$opd)>;

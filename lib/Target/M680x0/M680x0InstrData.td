@@ -123,19 +123,21 @@ def "MOV"#OPD.Size.Num#"f"#OPD.Letter
            [(store PAT, MxCP_ARII:$dst)]>;
 }
 
-defm MOV8_d  : MxMOV8Inst<MxDRD8, (i8  imm:$src)>;
-defm MOV16_d : MxMOVInst<MxDRD16, (i16 imm:$src)>;
-defm MOV32_d : MxMOVInst<MxDRD32, (i32 imm:$src)>;
+// TODO split multiclass into 3 separate for reg imm and mem to relax this bullshit
 
-defm MOV16_a : MxMOVInst<MxARD16, (i16 imm:$src)>;
-defm MOV32_a : MxMOVInst<MxARD32, (i32 imm:$src)>;
-
-defm MOV16_r : MxMOVInst<MxXRD16, (i16 imm:$src)>;
-defm MOV32_r : MxMOVInst<MxXRD32, (i32 imm:$src)>;
-
-defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8 MximmSExt8:$src)>;
+defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8  MximmSExt8:$src)>;
 defm MOV16_i : MxMOVInst<Mxi16imm, (i16 MximmSExt16:$src)>;
 defm MOV32_i : MxMOVInst<Mxi32imm, (i32 MximmSExt32:$src)>;
+
+defm MOV8_d  : MxMOV8Inst<MxDRD8, (i8   i8:$src)>;
+defm MOV16_d : MxMOVInst<MxDRD16, (i16 i16:$src)>;
+defm MOV32_d : MxMOVInst<MxDRD32, (i32 i32:$src)>;
+
+defm MOV16_a : MxMOVInst<MxARD16, (i16 i16:$src)>;
+defm MOV32_a : MxMOVInst<MxARD32, (i32 i32:$src)>;
+
+defm MOV16_r : MxMOVInst<MxXRD16, (i16 i16:$src)>;
+defm MOV32_r : MxMOVInst<MxXRD32, (i32 i32:$src)>;
 
 defm MOV8_j  : MxMOV8Inst<MxARI8, (Mxloadi8  iPTR:$src)>;
 defm MOV16_j : MxMOVInst<MxARI16, (Mxloadi16 iPTR:$src)>;
