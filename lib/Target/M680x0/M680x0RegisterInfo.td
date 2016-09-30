@@ -21,26 +21,44 @@ class MxReg<string n, bits<16> enc, list<Register> subregs = []>
 
 // Subregister indices.
 let Namespace = "M680x0" in {
-  def SubRegIndex8Lo : SubRegIndex<8, 0>;
+  def MxSubRegIndex8Lo  : SubRegIndex<8, 0>;
+  def MxSubRegIndex16Lo : SubRegIndex<16, 0>;
 }
 
 // Data Registers
-class MxDataReg<string n, bits<16> enc> : MxReg<n, enc>;
+class MxDataReg<string n, bits<16> enc, list<Register> subregs = []>
+    : MxReg<n, enc, subregs>;
 
-foreach  Index = 0-7 in {
-  def D#Index : MxDataReg<"d"#Index, #Index>;
-}
+// Generate Data registers and theirs smaller variants
+foreach Index = 0-7 in {
+  def "BD"#Index : MxDataReg<"d"#Index, #Index>;
+
+  let SubRegIndices = [ MxSubRegIndex8Lo ] in {
+    def "WD"#Index : MxDataReg<"d"#Index, #Index, [ !cast<Register>("BD"#Index) ]>;
+  }
+
+  let SubRegIndices = [ MxSubRegIndex16Lo ] in {
+    def "D"#Index : MxDataReg<"d"#Index, #Index, [ !cast<Register>("WD"#Index) ]>;
+  }
+
+} // foreach
 
 // Address Registers
-class MxAddressReg<string n, bits<16> enc> : MxReg<n, enc>;
+class MxAddressReg<string n, bits<16> enc, list<Register> subregs = []> 
+    : MxReg<n, enc, subregs>;
 
-foreach  Index = 0-7 in {
-  def A#Index : MxAddressReg<"a"#Index, #Index>;
+// Generate Address registers and theirs smaller variants
+foreach Index = 0-7 in {
+  def "WA"#Index : MxDataReg<"a"#Index, #Index>;
+
+  let SubRegIndices = [ MxSubRegIndex16Lo ] in {
+    def "A"#Index : MxAddressReg<"a"#Index, #Index, [ !cast<Register>("WA"#Index) ]>;
+  }
 }
 
 // Alias Registers
 class MxAliasReg<string n, MxReg reg>
-    : MxReg<n, reg.HWEncoding, reg.SubRegs> {
+    : MxReg<n, reg.HWEncoding> {
   let Aliases = [reg];
 }
 
@@ -62,7 +80,7 @@ class MxPseudoReg<string n, list<Register> subregs = []>
 
 def CCR : MxPseudoReg<"ccr">;
 
-let SubRegIndices = [SubRegIndex8Lo] in {
+let SubRegIndices = [MxSubRegIndex8Lo] in {
   def SR : MxPseudoReg<"sr", [CCR]>;
 }
 
@@ -76,13 +94,13 @@ class MxRegClass<list<ValueType> regTypes, int alignment, dag regList>
     : RegisterClass<"M680x0", regTypes, alignment, regList>;
 
 // Data Registers
-def DR8  : MxRegClass<[i8],  16, (sequence "D%u", 0, 7)>;
-def DR16 : MxRegClass<[i16], 16, (sequence "D%u", 0, 7)>;
+def DR8  : MxRegClass<[i8],  16, (sequence "BD%u", 0, 7)>;
+def DR16 : MxRegClass<[i16], 16, (sequence "WD%u", 0, 7)>;
 def DR32 : MxRegClass<[i32], 32, (sequence "D%u", 0, 7)>;
 
 // Address Registers
 // A7 is not part of address class due to its strict use as Stack Pointer
-def AR16 : MxRegClass<[i16], 16, (sequence "A%u", 0, 7)>;
+def AR16 : MxRegClass<[i16], 16, (sequence "WA%u", 0, 7)>;
 def AR32 : MxRegClass<[i32], 32, (sequence "A%u", 0, 7)>;
 
 // Index Register Classes
