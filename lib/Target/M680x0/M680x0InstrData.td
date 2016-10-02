@@ -166,7 +166,7 @@ defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat>;
 //===----------------------------------------------------------------------===//
 
 // FIXME Make it nicier, mb as Pseudos?
-let Defs = [SP], hasSideEffects = 1 in {
+let Defs = [SP], hasSideEffects = 0 in {
 
 // SP <- SP - <size>; (SP) <- Dn
 let mayStore = 1 in {
@@ -188,7 +188,7 @@ def POP32r : MxInst<0x0, (outs AR32:$reg), (ins),
                         "move.l\t(SP)+, $reg", []>;
 } // let mayLoad = 1
 
-} // let Defs = [SP], hasSideEffects = 1
+} // let Defs = [SP], hasSideEffects = 0
 
 
 //===----------------------------------------------------------------------===//
@@ -201,3 +201,8 @@ class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat>
 
 def LEA32p : LEA32<MxARID32, MxCP_ARID>;
 def LEA32f : LEA32<MxARII32, MxCP_ARII>;
+
+
+//===----------------------------------------------------------------------===//
+// Pseudos
+//===----------------------------------------------------------------------===//
