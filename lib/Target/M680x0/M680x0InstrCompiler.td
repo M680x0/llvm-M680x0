@@ -41,6 +41,22 @@
 /* def : Pat<(store (i32 (MxWrapper tblockaddress:$src)), MxARI32:$dst), */
 /*           (MOV32ji MxARI32:$dst, tblockaddress:$src)>; */
 
+//===----------------------------------------------------------------------===//
+// Some peepholes
+//===----------------------------------------------------------------------===//
+
+// trunc patterns
+def : Pat<(i16 (trunc i32:$src)),
+          (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex16Lo)>;
+def : Pat<(i8  (trunc i32:$src)),
+          (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex8Lo)>;
+def : Pat<(i8  (trunc i16:$src)),
+          (EXTRACT_SUBREG MxXRD16:$src, MxSubRegIndex8Lo)>;
+
+//===----------------------------------------------------------------------===//
+// Tail Call
+//===----------------------------------------------------------------------===//
+
 // FIXME need to read more about TC in llvm
 
 // Tailcall stuff. The TCRETURN instructions execute after the epilog, so they

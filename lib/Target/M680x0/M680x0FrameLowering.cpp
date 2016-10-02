@@ -151,7 +151,7 @@ static unsigned getANDriOpcode(int64_t Imm) {
 }
 
 static unsigned getLEArOpcode() {
-  return M680x0::LEA32r_ARID;
+  return M680x0::LEA32p;
 }
 
 /// findDeadCallerSavedReg - Return a caller-saved register that isn't live
@@ -309,12 +309,13 @@ mergeSPUpdates(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
     Offset += PI->getOperand(2).getImm();
     MBB.erase(PI);
     if (!doMergeWithPrevious) MBBI = NI;
-  } else if (Opc == M680x0::LEA32r_ARID &&
-             PI->getOperand(0).getReg() == StackPtr &&
-             PI->getOperand(2).getReg() == StackPtr) {
-    Offset += PI->getOperand(1).getImm();
-    MBB.erase(PI);
-    if (!doMergeWithPrevious) MBBI = NI;
+  // TODO check this
+  // } else if (Opc == M680x0::LEA32p &&
+  //            PI->getOperand(0).getReg() == StackPtr &&
+  //            PI->getOperand(2).getReg() == StackPtr) {
+  //   Offset += PI->getOperand(1).getImm();
+  //   MBB.erase(PI);
+  //   if (!doMergeWithPrevious) MBBI = NI;
   } else if (Opc == M680x0::SUB32ri && PI->getOperand(0).getReg() == StackPtr) {
     assert(PI->getOperand(1).getReg() == StackPtr);
     Offset -= PI->getOperand(2).getImm();

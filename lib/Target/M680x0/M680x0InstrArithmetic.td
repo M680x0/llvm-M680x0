@@ -14,7 +14,7 @@
 //
 //    ADD       [~]   ADDA      [ ]   ADDI        [ ]   ADDQ [ ]   ADDX [ ]
 //    CLR       [ ]   CMP       [ ]   CMPA        [ ]   CMPI [ ]   CMPM [ ]
-//    CMP2      [ ]   DIVS/DIVU [ ]   DIVSL/DIVUL [ ]   EXT  [ ]   EXTB [ ]
+//    CMP2      [ ]   DIVS/DIVU [x]   DIVSL/DIVUL [ ]   EXT  [x]   EXTB [ ]
 //    MULS/MULU [ ]   NEG       [ ]   NEGX        [ ]   SUB  [ ]   SUBA [ ]
 //    SUBI      [ ]   SUBQ      [ ]   SUBX        [ ]
 //
@@ -25,6 +25,10 @@
 //   [~] - in progress but usable
 //   [x] - done
 //
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Add/Sub
 //===----------------------------------------------------------------------===//
 
 // $reg <- $reg op $reg
@@ -63,6 +67,13 @@ def NAME#"32ri" : MxBiArOp_RFRI<mnemonic, MxXRD32, Mxi32imm, MximmSExt32, mxnode
 
 } // MxBiArOp_RF
 
+defm ADD : MxBiArOp_RF<"add", MxAdd, add>;
+defm SUB : MxBiArOp_RF<"sub", MxSub, sub>;
+
+//===----------------------------------------------------------------------===//
+// And/Xor/Or
+//===----------------------------------------------------------------------===//
+
 // Does not allow use of An registers
 multiclass MxBiArOp_DF<string mnemonic, SDNode mxnode, SDNode node> {
 
@@ -85,12 +96,78 @@ def NAME#"32di" : MxBiArOp_RFRI<mnemonic, MxDRD32, Mxi32imm, MximmSExt32, mxnode
 
 } // MxBiArOp_RF
 
-defm ADD : MxBiArOp_RF<"add", MxAdd, add>;
-defm SUB : MxBiArOp_RF<"sub", MxSub, sub>;
-
 defm AND : MxBiArOp_DF<"and", MxAnd, and>;
 defm XOR : MxBiArOp_DF<"eor", MxXor, xor>;
 defm OR  : MxBiArOp_DF<"or",  MxOr,  or>;
+
+//===----------------------------------------------------------------------===//
+// Ext
+//===----------------------------------------------------------------------===//
+
+let Constraints = "$src = $dst" in {
+
+def EXT16 : MxInst<0x0, (outs MxDRD16:$dst), (ins MxDRD8 :$src), "ext.w\t$src">;
+def EXT32 : MxInst<0x0, (outs MxDRD32:$dst), (ins MxDRD16:$src), "ext.l\t$src">;
+
+} // $src = $dst
+
+def : Pat<(i16 (sext i8 :$src)), (EXT16 $src)>;
+def : Pat<(i32 (sext i16:$src)), (EXT32 $src)>;
+
+//===----------------------------------------------------------------------===//
+// Div/Mul
+//===----------------------------------------------------------------------===//
+
+// $reg <- $reg op $reg
+class MxDiMuOp_DD<string mnemonic, MxOperand DST, MxOperand OPD>
+    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
+           mnemonic#"\t$opd, $dst", []>;
+
+// $reg <- $reg op $imm
+class MxDiMuOp_DI<string mnemonic, MxOperand DST, MxOperand OPD>
+    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
+           mnemonic#"\t$opd, $dst", []>;
+
+multiclass MxDiMuOp<string mnemonic> {
+
+let Defs = [CCR] in {
+let Constraints = "$src = $dst" in {
+
+def "S"#NAME#"d32d16" : MxDiMuOp_DD<mnemonic#"s", MxDRD32, MxDRD16>;
+def "U"#NAME#"d32d16" : MxDiMuOp_DD<mnemonic#"u", MxDRD32, MxDRD16>;
+
+def "S"#NAME#"d32i16" : MxDiMuOp_DI<mnemonic#"s", MxDRD32, Mxi16imm>;
+def "U"#NAME#"d32i16" : MxDiMuOp_DI<mnemonic#"u", MxDRD32, Mxi16imm>;
+
+} // $src = $dst
+} // Defs = [CCR]
+
+}
+
+defm DIV : MxDiMuOp<"div">;
+
+def : Pat<(sdiv i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (SDIVd32d16 (EXT32 $dst), $opd),
+            MxSubRegIndex16Lo)>;
+
+def : Pat<(udiv i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (UDIVd32d16 (EXT32 $dst), $opd),
+            MxSubRegIndex16Lo)>;
+
+def : Pat<(srem i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (ASR32di (ASR32di (SDIVd32d16 (EXT32 $dst), $opd), 8), 8),
+            MxSubRegIndex16Lo)>;
+
+def : Pat<(urem i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (LSR32di (LSR32di (UDIVd32d16 (EXT32 $dst), $opd), 8), 8),
+            MxSubRegIndex16Lo)>;
+
+
+defm MUL : MxDiMuOp<"mul">;
 
 
 //===----------------------------------------------------------------------===//

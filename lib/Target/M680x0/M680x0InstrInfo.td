@@ -85,15 +85,16 @@ class MxSize<int num, string id, string full> {
   string Full = full;
 }
 
-def Mx8  : MxSize<8,  "b", "byte">;
-def Mx16 : MxSize<16, "w", "word">;
-def Mx32 : MxSize<32, "l", "long">;
+def MxSize8  : MxSize<8,  "b", "byte">;
+def MxSize16 : MxSize<16, "w", "word">;
+def MxSize32 : MxSize<32, "l", "long">;
 
-class MxOperand<ValueType vt, MxSize size, string letter, RegisterClass rc> {
+class MxOperand<ValueType vt, MxSize size, string letter, RegisterClass rc, dag pat = (null_frag)> {
   ValueType VT = vt;
   string Letter = letter;
   MxSize Size = size;
   RegisterClass RC = rc;
+  dag Pat = pat;
 }
 
 class MxRegOp<ValueType vt,
@@ -106,28 +107,28 @@ class MxRegOp<ValueType vt,
 
 // REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def MxXRD16 : MxRegOp<i16, XR16, Mx16, "r">;
-def MxXRD32 : MxRegOp<i32, XR32, Mx32, "r">;
+def MxXRD16 : MxRegOp<i16, XR16, MxSize16, "r">;
+def MxXRD32 : MxRegOp<i32, XR32, MxSize32, "r">;
 
-def MxXRD16_TC : MxRegOp<i16, XR16_TC, Mx16, "r">;
-def MxXRD32_TC : MxRegOp<i32, XR32_TC, Mx32, "r">;
+def MxXRD16_TC : MxRegOp<i16, XR16_TC, MxSize16, "r">;
+def MxXRD32_TC : MxRegOp<i32, XR32_TC, MxSize32, "r">;
 
 // DATA REGISTER DIRECT. The operand is in the data register specified by
 // the effective address register field.
-def MxDRD8  : MxRegOp<i8,  DR8,  Mx8,  "d">;
-def MxDRD16 : MxRegOp<i16, DR16, Mx16, "d">;
-def MxDRD32 : MxRegOp<i32, DR32, Mx32, "d">;
+def MxDRD8  : MxRegOp<i8,  DR8,  MxSize8,  "d">;
+def MxDRD16 : MxRegOp<i16, DR16, MxSize16, "d">;
+def MxDRD32 : MxRegOp<i32, DR32, MxSize32, "d">;
 
-def MxDRD16_TC : MxRegOp<i16, DR16_TC, Mx16, "d">;
-def MxDRD32_TC : MxRegOp<i32, DR32_TC, Mx32, "d">;
+def MxDRD16_TC : MxRegOp<i16, DR16_TC, MxSize16, "d">;
+def MxDRD32_TC : MxRegOp<i32, DR32_TC, MxSize32, "d">;
 
 // ADDRESS REGISTER DIRECT. The operand is in the address register specified by
 // the effective address register field.
-def MxARD16 : MxRegOp<i16, AR16, Mx16, "a">;
-def MxARD32 : MxRegOp<i32, AR32, Mx32, "a">;
+def MxARD16 : MxRegOp<i16, AR16, MxSize16, "a">;
+def MxARD32 : MxRegOp<i32, AR32, MxSize32, "a">;
 
-def MxARD16_TC : MxRegOp<i16, AR16_TC, Mx16, "a">;
-def MxARD32_TC : MxRegOp<i32, AR32_TC, Mx32, "a">;
+def MxARD16_TC : MxRegOp<i16, AR16_TC, MxSize16, "a">;
+def MxARD32_TC : MxRegOp<i32, AR32_TC, MxSize32, "a">;
 
 // TODO finish parser wiring
 def MxMemAsmOperand : AsmOperandClass {
@@ -148,13 +149,13 @@ class MxMemOp<dag ops, MxSize size, string letter,
 // register specified by the register field. The reference is classified as
 // a data reference with the exception of the jump and jump-to-subroutine
 // instructions.
-def MxARI8        : MxMemOp<(ops AR32), Mx8,  "j", "printARI8Mem">;
-def MxARI16       : MxMemOp<(ops AR32), Mx16, "j", "printARI16Mem">;
-def MxARI32       : MxMemOp<(ops AR32), Mx32, "j", "printARI32Mem">;
+def MxARI8        : MxMemOp<(ops AR32), MxSize8,  "j", "printARI8Mem">;
+def MxARI16       : MxMemOp<(ops AR32), MxSize16, "j", "printARI16Mem">;
+def MxARI32       : MxMemOp<(ops AR32), MxSize32, "j", "printARI32Mem">;
 
-def MxARI8_TC     : MxMemOp<(ops AR32_TC), Mx8,  "j", "printARI8Mem">;
-def MxARI16_TC    : MxMemOp<(ops AR32_TC), Mx16, "j", "printARI16Mem">;
-def MxARI32_TC    : MxMemOp<(ops AR32_TC), Mx32, "j", "printARI32Mem">;
+def MxARI8_TC     : MxMemOp<(ops AR32_TC), MxSize8,  "j", "printARI8Mem">;
+def MxARI16_TC    : MxMemOp<(ops AR32_TC), MxSize16, "j", "printARI16Mem">;
+def MxARI32_TC    : MxMemOp<(ops AR32_TC), MxSize32, "j", "printARI32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH POSTINCREMENT. The address of the operand is
 // in the address register specified by the register field. After the operand
@@ -163,13 +164,13 @@ def MxARI32_TC    : MxMemOp<(ops AR32_TC), Mx32, "j", "printARI32Mem">;
 // is the stack pointer and the operand size is byte, the address is incremented
 // by two rather than one to keep the stack pointer on a word boundary.
 // The reference is classified as a data reference.
-def MxARIPI8      : MxMemOp<(ops AR32), Mx8,  "o", "printARIPI8Mem">;
-def MxARIPI16     : MxMemOp<(ops AR32), Mx16, "o", "printARIPI16Mem">;
-def MxARIPI32     : MxMemOp<(ops AR32), Mx32, "o", "printARIPI32Mem">;
+def MxARIPI8      : MxMemOp<(ops AR32), MxSize8,  "o", "printARIPI8Mem">;
+def MxARIPI16     : MxMemOp<(ops AR32), MxSize16, "o", "printARIPI16Mem">;
+def MxARIPI32     : MxMemOp<(ops AR32), MxSize32, "o", "printARIPI32Mem">;
 
-def MxARIPI8_TC   : MxMemOp<(ops AR32_TC), Mx8,  "o", "printARIPI8Mem">;
-def MxARIPI16_TC  : MxMemOp<(ops AR32_TC), Mx16, "o", "printARIPI16Mem">;
-def MxARIPI32_TC  : MxMemOp<(ops AR32_TC), Mx32, "o", "printARIPI32Mem">;
+def MxARIPI8_TC   : MxMemOp<(ops AR32_TC), MxSize8,  "o", "printARIPI8Mem">;
+def MxARIPI16_TC  : MxMemOp<(ops AR32_TC), MxSize16, "o", "printARIPI16Mem">;
+def MxARIPI32_TC  : MxMemOp<(ops AR32_TC), MxSize32, "o", "printARIPI32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH PREDECREMENT. The address of the operand is in
 // the address register specified by the register field. Before the operand
@@ -178,26 +179,26 @@ def MxARIPI32_TC  : MxMemOp<(ops AR32_TC), Mx32, "o", "printARIPI32Mem">;
 // the stack pointer and the operand size is byte, the address is decremented by
 // two rather than one to keep the stack pointer on a word boundary.
 // The reference is classified as a data reference.
-def MxARIPD8      : MxMemOp<(ops AR32), Mx8,  "e", "printARIPD8Mem">;
-def MxARIPD16     : MxMemOp<(ops AR32), Mx16, "e", "printARIPD16Mem">;
-def MxARIPD32     : MxMemOp<(ops AR32), Mx32, "e", "printARIPD32Mem">;
+def MxARIPD8      : MxMemOp<(ops AR32), MxSize8,  "e", "printARIPD8Mem">;
+def MxARIPD16     : MxMemOp<(ops AR32), MxSize16, "e", "printARIPD16Mem">;
+def MxARIPD32     : MxMemOp<(ops AR32), MxSize32, "e", "printARIPD32Mem">;
 
-def MxARIPD8_TC   : MxMemOp<(ops AR32_TC), Mx8,  "e", "printARIPD8Mem">;
-def MxARIPD16_TC  : MxMemOp<(ops AR32_TC), Mx16, "e", "printARIPD16Mem">;
-def MxARIPD32_TC  : MxMemOp<(ops AR32_TC), Mx32, "e", "printARIPD32Mem">;
+def MxARIPD8_TC   : MxMemOp<(ops AR32_TC), MxSize8,  "e", "printARIPD8Mem">;
+def MxARIPD16_TC  : MxMemOp<(ops AR32_TC), MxSize16, "e", "printARIPD16Mem">;
+def MxARIPD32_TC  : MxMemOp<(ops AR32_TC), MxSize32, "e", "printARIPD32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH DISPLACEMENT. This addressing mode requires one
 // word of extension. The address of the operand is the sum of the address in
 // the address register and the sign-extended 16-bit displacement integer in the
 // extension word. The reference is classified as a data reference with the
 // exception of the jump and jump-to-subroutine instructions.
-def MxARID8       : MxMemOp<(ops i16imm, AR32), Mx8,  "p", "printARID8Mem">;
-def MxARID16      : MxMemOp<(ops i16imm, AR32), Mx16, "p", "printARID16Mem">;
-def MxARID32      : MxMemOp<(ops i16imm, AR32), Mx32, "p", "printARID32Mem">;
+def MxARID8       : MxMemOp<(ops i16imm, AR32), MxSize8,  "p", "printARID8Mem">;
+def MxARID16      : MxMemOp<(ops i16imm, AR32), MxSize16, "p", "printARID16Mem">;
+def MxARID32      : MxMemOp<(ops i16imm, AR32), MxSize32, "p", "printARID32Mem">;
 
-def MxARID8_TC    : MxMemOp<(ops i16imm, AR32_TC), Mx8,  "p", "printARID8Mem">;
-def MxARID16_TC   : MxMemOp<(ops i16imm, AR32_TC), Mx16, "p", "printARID16Mem">;
-def MxARID32_TC   : MxMemOp<(ops i16imm, AR32_TC), Mx32, "p", "printARID32Mem">;
+def MxARID8_TC    : MxMemOp<(ops i16imm, AR32_TC), MxSize8,  "p", "printARID8Mem">;
+def MxARID16_TC   : MxMemOp<(ops i16imm, AR32_TC), MxSize16, "p", "printARID16Mem">;
+def MxARID32_TC   : MxMemOp<(ops i16imm, AR32_TC), MxSize32, "p", "printARID32Mem">;
 
 // ADDRESS REGISTER INDIRECT WITH INDEX. This addressing mode requires one word
 // of extension. The address of the operand is the sum of the address in the
@@ -205,21 +206,21 @@ def MxARID32_TC   : MxMemOp<(ops i16imm, AR32_TC), Mx32, "p", "printARID32Mem">;
 // bits of the extension word, and the contents of the index register.
 // The reference is classified as a data reference with the exception of the
 // jump and jump-to-subroutine instructions
-def MxARII8      : MxMemOp<(ops i8imm, AR32, XR32), Mx8,  "f", "printARII8Mem">;
-def MxARII16     : MxMemOp<(ops i8imm, AR32, XR32), Mx16, "f", "printARII16Mem">;
-def MxARII32     : MxMemOp<(ops i8imm, AR32, XR32), Mx32, "f", "printARII32Mem">;
+def MxARII8      : MxMemOp<(ops i8imm, AR32, XR32), MxSize8,  "f", "printARII8Mem">;
+def MxARII16     : MxMemOp<(ops i8imm, AR32, XR32), MxSize16, "f", "printARII16Mem">;
+def MxARII32     : MxMemOp<(ops i8imm, AR32, XR32), MxSize32, "f", "printARII32Mem">;
 
-def MxARII8_TC   : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx8,  "f", "printARII8Mem">;
-def MxARII16_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx16, "f", "printARII16Mem">;
-def MxARII32_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), Mx32, "f", "printARII32Mem">;
+def MxARII8_TC   : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), MxSize8,  "f", "printARII8Mem">;
+def MxARII16_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), MxSize16, "f", "printARII16Mem">;
+def MxARII32_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), MxSize32, "f", "printARII32Mem">;
 
 // ABSOLUTE SHORT ADDRESS. This addressing mode requires one word of extension.
 // The address of the operand is the extension word. The 16-bit address is sign
 // extended before it is used.  The reference is classified as a data reference
 // with the exception of the jump and jump-tosubroutine instructions.
-def MxAS8      : MxMemOp<(ops i16imm), Mx8,  "b", "printAS8Mem">;
-def MxAS16     : MxMemOp<(ops i16imm), Mx16, "b", "printAS16Mem">;
-def MxAS32     : MxMemOp<(ops i16imm), Mx32, "b", "printAS32Mem">;
+def MxAS8      : MxMemOp<(ops i16imm), MxSize8,  "b", "printAS8Mem">;
+def MxAS16     : MxMemOp<(ops i16imm), MxSize16, "b", "printAS16Mem">;
+def MxAS32     : MxMemOp<(ops i16imm), MxSize32, "b", "printAS32Mem">;
 
 // ABSOLUTE LONG ADDRESS. This addressing mode requires two words of extension.
 // The address of the operand is developed by the concatenation of the extension
@@ -227,9 +228,9 @@ def MxAS32     : MxMemOp<(ops i16imm), Mx32, "b", "printAS32Mem">;
 // order part of the address is the second extension word. The reference is
 // classified as a data reference with the exception of the jump and jump
 // to-subroutine instructions.
-def MxAL8      : MxMemOp<(ops i32imm), Mx8,  "b", "printAL8Mem">;
-def MxAL16     : MxMemOp<(ops i32imm), Mx16, "b", "printAL16Mem">;
-def MxAL32     : MxMemOp<(ops i32imm), Mx32, "b", "printAL32Mem">;
+def MxAL8      : MxMemOp<(ops i32imm), MxSize8,  "b", "printAL8Mem">;
+def MxAL16     : MxMemOp<(ops i32imm), MxSize16, "b", "printAL16Mem">;
+def MxAL32     : MxMemOp<(ops i32imm), MxSize32, "b", "printAL32Mem">;
 
 let OperandType = "OPERAND_PCREL" in {
 // PROGRAM COUNTER WITH DISPLACEMENT. This addressing mode requires one word of
@@ -237,9 +238,9 @@ let OperandType = "OPERAND_PCREL" in {
 // counter and the Sign-extended 16-bit displacement integer in the extension
 // word. The value in the program counter is the address of the extension word.
 // The reference is classified as a program reference.
-def MxPCD8     : MxMemOp<(ops i16imm), Mx8,  "q", "printPCD8Mem">;
-def MxPCD16    : MxMemOp<(ops i16imm), Mx16, "q", "printPCD16Mem">;
-def MxPCD32    : MxMemOp<(ops i16imm), Mx32, "q", "printPCD32Mem">;
+def MxPCD8     : MxMemOp<(ops i16imm), MxSize8,  "q", "printPCD8Mem">;
+def MxPCD16    : MxMemOp<(ops i16imm), MxSize16, "q", "printPCD16Mem">;
+def MxPCD32    : MxMemOp<(ops i16imm), MxSize32, "q", "printPCD32Mem">;
 
 // PROGRAM COUNTER WITH INDEX. This addressing mode requires one word of
 // extension. The address is the sum of the address in the program counter, the
@@ -247,9 +248,9 @@ def MxPCD32    : MxMemOp<(ops i16imm), Mx32, "q", "printPCD32Mem">;
 // word, and the contents of the index register.  The value in the program
 // counter is the address of the extension word. This reference is classified as
 // a program reference.
-def MxPCI8   : MxMemOp<(ops i8imm, XR32), Mx8,  "k", "printPCI8Mem">;
-def MxPCI16  : MxMemOp<(ops i8imm, XR32), Mx16, "k", "printPCI16Mem">;
-def MxPCI32  : MxMemOp<(ops i8imm, XR32), Mx32, "k", "printPCI32Mem">;
+def MxPCI8   : MxMemOp<(ops i8imm, XR32), MxSize8,  "k", "printPCI8Mem">;
+def MxPCI16  : MxMemOp<(ops i8imm, XR32), MxSize16, "k", "printPCI16Mem">;
+def MxPCI32  : MxMemOp<(ops i8imm, XR32), MxSize32, "k", "printPCI32Mem">;
 } // OPERAND_PCREL
 
 class MxOp<ValueType vt, MxSize size, string letter>
@@ -265,9 +266,9 @@ let OperandType = "OPERAND_IMMEDIATE" in {
 //                           high order 16 bits are in the first
 //                           extension word, low order 16 bits are
 //                           in the second extension word.
-def Mxi8imm  : MxOp<i8,  Mx8,  "i">;
-def Mxi16imm : MxOp<i16, Mx16, "i">;
-def Mxi32imm : MxOp<i32, Mx32, "i">;
+def Mxi8imm  : MxOp<i8,  MxSize8,  "i">;
+def Mxi16imm : MxOp<i16, MxSize16, "i">;
+def Mxi32imm : MxOp<i32, MxSize32, "i">;
 } // OPERAND_IMMEDIATE
 
 let OperandType = "OPERAND_PCREL",
@@ -282,8 +283,25 @@ def MxBrTarget8 : Operand<OtherVT>;
 } // OPERAND_PCREL
 
 //===----------------------------------------------------------------------===//
+// Predicates
+//===----------------------------------------------------------------------===//
+
+def SmallCode    : Predicate<"TM.getCodeModel() == CodeModel::Small">;
+def KernelCode   : Predicate<"TM.getCodeModel() == CodeModel::Kernel">;
+def FarData      : Predicate<"TM.getCodeModel() != CodeModel::Small &&"
+                             "TM.getCodeModel() != CodeModel::Kernel">;
+def NearData     : Predicate<"TM.getCodeModel() == CodeModel::Small ||"
+                             "TM.getCodeModel() == CodeModel::Kernel">;
+def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
+
+//===----------------------------------------------------------------------===//
 // Complex Patterns
 //===----------------------------------------------------------------------===//
+
+// NOTE Though this CP is not stricly necessarily it will simplify instruciton
+// definitions
+def MxCP_ARI   : ComplexPattern<iPTR, 1, "selectARI",
+                                [], [SDNPWantParent]>;
 
 def MxCP_ARIPI : ComplexPattern<iPTR, 1, "selectARIPI",
                                 [], [SDNPWantParent]>;
@@ -302,18 +320,6 @@ def MxCP_PCD   : ComplexPattern<iPTR, 1, "selectPCD",
 
 def MxCP_PCI   : ComplexPattern<iPTR, 2, "selectPCI",
                                 [], [SDNPWantParent]>;
-
-//===----------------------------------------------------------------------===//
-// Predicates
-//===----------------------------------------------------------------------===//
-
-def SmallCode    : Predicate<"TM.getCodeModel() == CodeModel::Small">;
-def KernelCode   : Predicate<"TM.getCodeModel() == CodeModel::Kernel">;
-def FarData      : Predicate<"TM.getCodeModel() != CodeModel::Small &&"
-                             "TM.getCodeModel() != CodeModel::Kernel">;
-def NearData     : Predicate<"TM.getCodeModel() == CodeModel::Small ||"
-                             "TM.getCodeModel() == CodeModel::Kernel">;
-def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
 
 //===----------------------------------------------------------------------===//
 // Pattern Fragments
@@ -374,9 +380,109 @@ def Mxextloadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))>;
 def Mxextloadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
 def Mxextloadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 
+//===----------------------------------------------------------------------===//
+// Type Fixtures
+//===----------------------------------------------------------------------===//
+//
+// Type Fixtures are ValueType related information sets that usually go together
+//
+//===----------------------------------------------------------------------===//
+
+class MxType<ValueType vt,  /// Type of data this fixture refers to
+            string prefix,  /// Prefix used to identify type
+           string postfix,  /// Prefix used to qualify type
+            MxOperand rOp,  /// Supported any register operand
+            MxOperand jOp,  /// Supported ARI operand
+      ComplexPattern jPat,  /// What ARI pattern to use
+            MxOperand oOp,  /// Supported ARIPI operand
+      ComplexPattern oPat,  /// What ARIPI pattern is used
+            MxOperand eOp,  /// Supported ARIPD operand
+      ComplexPattern ePat,  /// What ARIPD pattern is used
+            MxOperand pOp,  /// Supported ARID operand
+      ComplexPattern pPat,  /// What ARID pattern is used
+            MxOperand fOp,  /// Supported ARII operand
+      ComplexPattern fPat,  /// What ARII pattern is used
+            MxOperand iOp,  /// Supported immediate operand
+             PatFrag iPat,  /// What immediate pattern is used
+             PatFrag load   /// What load operation is used with MEM
+             > {
+  int Size = vt.Size;
+  ValueType VT = vt;
+  string Prefix = prefix;
+  string Postfix = postfix;
+  MxOperand ROp = rOp;
+  MxOperand JOp = jOp;
+  ComplexPattern JPat = jPat;
+  MxOperand OOp = oOp;
+  ComplexPattern OPat = oPat;
+  MxOperand EOp = eOp;
+  ComplexPattern EPat = ePat;
+  MxOperand POp = pOp;
+  ComplexPattern PPat = pPat;
+  MxOperand FOp = fOp;
+  ComplexPattern FPat = fPat;
+  MxOperand IOp = iOp;
+  PatFrag IPat = iPat;
+  PatFrag Load = load;
+}
+
+class MxType8Class<MxOperand reg>
+    : MxType<i8, "b", "", reg,
+             MxARI8,   MxCP_ARI,
+             MxARIPI8, MxCP_ARIPI,
+             MxARIPD8, MxCP_ARIPD,
+             MxARID8,  MxCP_ARID,
+             MxARII8,  MxCP_ARII,
+             Mxi8imm,  MximmSExt8,
+             Mxloadi8>;
+
+def MxType8 : MxType8Class<?>;
+
+class MxType16Class<MxOperand reg>
+    : MxType<i16, "w", "", reg,
+             MxARI16,   MxCP_ARI,
+             MxARIPI16, MxCP_ARIPI,
+             MxARIPD16, MxCP_ARIPD,
+             MxARID16,  MxCP_ARID,
+             MxARII16,  MxCP_ARII,
+             Mxi16imm,  MximmSExt16,
+             Mxloadi16>;
+
+def MxType16 : MxType8Class<?>;
+
+class MxType32Class<MxOperand reg>
+    : MxType<i32, "l", "", reg,
+             MxARI32,   MxCP_ARI,
+             MxARIPI32, MxCP_ARIPI,
+             MxARIPD32, MxCP_ARIPD,
+             MxARID32,  MxCP_ARID,
+             MxARII32,  MxCP_ARII,
+             Mxi32imm,  MximmSExt32,
+             Mxloadi32>;
+
+def MxType32 : MxType8Class<?>;
+
+
+def MxType8d : MxType8Class<MxDRD8>;
+
+def MxType16d : MxType16Class<MxDRD16>;
+def MxType16a : MxType16Class<MxARD16>;
+def MxType16r : MxType16Class<MxXRD16>;
+def MxType32d : MxType32Class<MxDRD32>;
+def MxType32a : MxType32Class<MxARD32>;
+def MxType32r : MxType32Class<MxXRD32>;
+
+let Postfix = "_TC" in {
+def MxType16d_TC : MxType16Class<MxDRD16_TC>;
+def MxType16a_TC : MxType16Class<MxARD16_TC>;
+def MxType16r_TC : MxType16Class<MxXRD16_TC>;
+def MxType32d_TC : MxType32Class<MxDRD32_TC>;
+def MxType32a_TC : MxType32Class<MxARD32_TC>;
+def MxType32r_TC : MxType32Class<MxXRD32_TC>;
+}
 
 //===----------------------------------------------------------------------===//
-// Subsystems.
+// Subsystems
 //===----------------------------------------------------------------------===//
 
 include "M680x0InstrShiftRotate.td"

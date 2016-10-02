@@ -186,7 +186,9 @@ private:
   bool matchAddressBase(SDValue N, M680x0ISelAddressMode &AM);
   bool matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM,
                                unsigned Depth);
+  bool selectARI(SDNode *Parent, SDValue N, SDValue &Base);
   bool selectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
+  bool selectARIPD(SDNode *Parent, SDValue N, SDValue &Base);
   bool selectARID(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base);
   bool selectARII(SDNode *Parent, SDValue N,
                   SDValue &Imm, SDValue &Base, SDValue &Index);
@@ -303,7 +305,7 @@ matchLoadInAddress(LoadSDNode *N, M680x0ISelAddressMode &AM){
 
 bool M680x0DAGToDAGISel::
 matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
-  SDLoc dl(N);
+  SDLoc DL(N);
 
   DEBUG({
     dbgs() << "MatchAddress: ";
@@ -406,7 +408,17 @@ runOnMachineFunction(MachineFunction &MF) {
 }
 
 bool M680x0DAGToDAGISel::
+selectARI(SDNode *Parent, SDValue N, SDValue &Base) {
+  return false;
+}
+
+bool M680x0DAGToDAGISel::
 selectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
+  return false;
+}
+
+bool M680x0DAGToDAGISel::
+selectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
   return false;
 }
 
@@ -440,55 +452,24 @@ selectARII(SDNode *Parent, SDValue N,
   return false;
 }
 
-std::pair<bool, SDNode*> M680x0DAGToDAGISel::selectNode(SDNode *Node) {
-  return std::make_pair(false, nullptr);
-}
-
-/// Select instructions not customized! Used for
-/// expanded, promoted and normal instructions
 void M680x0DAGToDAGISel::Select(SDNode *Node) {
+  MVT NVT = Node->getSimpleValueType(0);
+  MVT::SimpleValueType SVT = NVT.SimpleTy;
+  unsigned Opc;
   unsigned Opcode = Node->getOpcode();
+  SDLoc DL(Node);
 
-  DEBUG(
-    dbgs() << "M680x0 Select: ";
-    Node->dump(CurDAG);
-    dbgs() << "\n");
+  DEBUG(dbgs() << "Selecting: "; Node->dump(CurDAG); dbgs() << '\n');
 
-  // If we have a custom node, we already have selected!
   if (Node->isMachineOpcode()) {
-    DEBUG(dbgs() << "== "; Node->dump(CurDAG); dbgs() << "\n");
+    DEBUG(dbgs() << "== ";  Node->dump(CurDAG); dbgs() << '\n');
     Node->setNodeId(-1);
-    return;
-  }
-
-  // See if subclasses can handle this node.
-  std::pair<bool, SDNode*> Ret = selectNode(Node);
-
-  if (Ret.first)
-  {
-    ReplaceNode(Node, Ret.second);
-    return;
+    return;   // Already selected.
   }
 
   switch(Opcode) {
   default: break;
-
-#if 0
-//#ifndef NDEBUG
-  case ISD::LOAD:
-  case ISD::STORE:
-    assert((Subtarget->systemSupportsUnalignedAccess() ||
-            cast<MemSDNode>(Node)->getMemoryVT().getSizeInBits() / 8 <=
-            cast<MemSDNode>(Node)->getAlignment()) &&
-           "Unexpected unaligned loads/stores.");
-    break;
-#endif
   }
-
-  DEBUG(
-    dbgs() << "M680x0 SelectCode: ";
-    Node->dump();
-    dbgs() << "\n");
 
   SelectCode(Node);
 }

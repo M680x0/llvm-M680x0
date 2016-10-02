@@ -42,6 +42,14 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
                                            const M680x0Subtarget &STI)
     : TargetLowering(TM), Subtarget(STI), ABI(TM.getABI()) {
 
+  for (auto OP : { ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM }) {
+    setOperationAction(OP, MVT::i8,  Promote);
+    setOperationAction(OP, MVT::i16, Legal);
+    // TODO this becames legal with newer CPUs
+    setOperationAction(OP, MVT::i32, LibCall);
+  }
+
+
   // Set up the register classes.
   addRegisterClass(MVT::i8,  &M680x0::DR8RegClass);
   addRegisterClass(MVT::i16, &M680x0::XR16RegClass);

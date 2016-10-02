@@ -46,8 +46,9 @@ void M680x0InstrInfo::
 copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
             const DebugLoc &DL, unsigned DestReg,
             unsigned SrcReg, bool KillSrc) const {
-  // First deal with the normal symmetric copies.
   unsigned Opc = 0;
+
+  // First deal with the normal symmetric copies.
   if (M680x0::XR32RegClass.contains(DestReg, SrcReg))
     Opc = M680x0::MOV32rr;
   else if (M680x0::XR16RegClass.contains(DestReg, SrcReg))
@@ -56,14 +57,22 @@ copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
     Opc = M680x0::MOV8dd;
   }
 
-  // if (!Opc)
-  //   Opc = CopyToFromAsymmetricReg(DestReg, SrcReg, Subtarget);
-
   if (Opc) {
     BuildMI(MBB, MI, DL, get(Opc), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
     return;
   }
+
+  // TODO do i need this
+  // if (M680x0::XR32RegClass.contains(DestReg)) {     //   to XR32
+  //   if (M680x0::XR16RegClass.contains(SrcReg)) {    // from XR16
+  //     BuildMI(MBB, MI, DL, get(M680x0::MOV16rr), DestReg)
+  //       .addReg(SrcReg, getKillRegState(KillSrc));
+  //     BuildMI(MBB, MI, DL, get(M680x0::EXT32), DestReg)
+  //       .addReg(DestReg);
+  //     return;
+  //   }
+  // }
 
   bool FromCCR = SrcReg == M680x0::CCR;
   bool FromSR = SrcReg == M680x0::SR;

@@ -26,138 +26,148 @@
 //
 //===----------------------------------------------------------------------===//
 
+class MxMove<int size, dag outs, dag ins, list<dag> pattern = [(null_frag)]>
+    : MxInst<0x0, outs, ins, "move."#size#"\t$src, $dst", pattern>;
 
-// TODO make move set imlicit CCR like M680x0 does
 
-multiclass MxMOV8Inst<MxOperand OPD, dag PAT> {
+class MxMove_RR<MxType DST, MxType SRC>
+    : MxMove<DST.Size, (outs DST.ROp:$dst), (ins SRC.ROp:$src)>;
 
-// X - not affected
-// N,Z - set by operation
-// V,C - cleared
-let Defs = [CCR] in {
-let mayLoad = 1 in  {
+class MxMove_MR<MxOperand MEMOpd, ComplexPattern MEMPat, MxType REG>
+    : MxMove<REG.Size, (outs), (ins MEMOpd:$dst, REG.ROp:$src),
+             [(store REG.VT:$src, MEMPat:$dst)]>;
 
-// Dn <- OPD
-def "MOV8d"#OPD.Letter
-  : MxInst<0x0, (outs MxDRD8:$dst), (ins OPD:$src), "move.b\t$src, $dst",
-           [(set i8:$dst, PAT)]>;
+class MxMove_RI<MxType DST>
+    : MxMove<DST.Size, (outs DST.ROp:$dst), (ins DST.IOp:$src),
+              [(set DST.VT:$dst, DST.IPat:$src)]>;
 
-} // mayLoad = 1
-} // Defs = [CCR]
 
-// (An) <- OPD
-def "MOV8j"#OPD.Letter
-  : MxInst<0x0, (outs), (ins MxARI8:$dst, OPD:$src), "move.b\t$src, $dst",
-           [(store PAT, iPTR:$dst)]>;
+class MxMove_RM<MxType REG, MxOperand MEMOpd, ComplexPattern MEMPat>
+    : MxMove<REG.Size, (outs REG.ROp:$dst), (ins MEMOpd:$src),
+             [(set REG.VT:$dst, (REG.Load MEMPat:$src))]>;
 
-// (i,An) <- OPD
-def "MOV8p"#OPD.Letter
-  : MxInst<0x0, (outs), (ins MxARID8:$dst, OPD:$src), "move.b\t$src, $dst",
-           [(store PAT, MxCP_ARID:$dst)]>;
+multiclass MMxMove_RM<MxType REG> {
+
+// REG <- (An)
+def NAME#REG.JOp.Letter#REG.Postfix : MxMove_RM<REG, REG.JOp, REG.JPat>;
+
+// REG <- (An)+
+def NAME#REG.OOp.Letter#REG.Postfix : MxMove_RM<REG, REG.OOp, REG.OPat>;
+
+// REG <- -(An)
+def NAME#REG.EOp.Letter#REG.Postfix : MxMove_RM<REG, REG.EOp, REG.EPat>;
+
+// REG <- (i,An)
+def NAME#REG.POp.Letter#REG.Postfix : MxMove_RM<REG, REG.POp, REG.PPat>;
+
+// REG <- (i,An,Xn)
+def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat>;
+
 }
 
-multiclass MxMOVInst<MxOperand OPD, dag PAT> {
 
-// X - not affected
-// N,Z - set by operation
-// V,C - cleared
-let Defs = [CCR] in {
-let mayLoad = 1 in  {
+class MxMove_MM<int SIZE, PatFrag LOAD,
+                MxOperand DSTOpd, ComplexPattern DSTPat,
+                MxOperand SRCOpd, ComplexPattern SRCPat>
+    : MxMove<SIZE, (outs), (ins DSTOpd:$dst, SRCOpd:$src),
+             [(store (LOAD SRCPat:$src), DSTPat:$dst)]>;
 
-// Set CS registers
-def "MOV"#OPD.Size.Num#"d"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+multiclass MMxMove_MM<MxType TYPE, MxOperand DSTOpd, ComplexPattern DSTPat> {
 
-def "MOV"#OPD.Size.Num#"a"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+// MEM <- (An)
+def NAME#TYPE.JOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.JOp, TYPE.JPat>;
 
-def "MOV"#OPD.Size.Num#"r"#OPD.Letter
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+// MEM <- (An)+
+def NAME#TYPE.OOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat>;
 
+// MEM <- -(An)
+def NAME#TYPE.EOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat>;
 
-// Set TC registers
+// MEM <- (i,An)
+def NAME#TYPE.POp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.POp, TYPE.PPat>;
 
-def "MOV"#OPD.Size.Num#"d"#OPD.Letter#"_TC"
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxDRD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
+// MEM <- (i,An,Xn)
+def NAME#TYPE.FOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.FOp, TYPE.FPat>;
 
-def "MOV"#OPD.Size.Num#"a"#OPD.Letter#"_TC"
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxARD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-def "MOV"#OPD.Size.Num#"r"#OPD.Letter#"_TC"
-  : MxInst<0x0, (outs !cast<DAGOperand>("MxXRD"#OPD.Size.Num#"_TC"):$dst), (ins OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(set !cast<DAGOperand>("i"#OPD.Size.Num):$dst, PAT)]>;
-
-} // mayLoad = 1
-} // Defs = [CCR]
-
-
-// Store to MEM
-
-// (An) <- OPD
-def "MOV"#OPD.Size.Num#"j"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARI"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, iPTR:$dst)]>;
-
-// (i,An) <- OPD
-def "MOV"#OPD.Size.Num#"p"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARID"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, MxCP_ARID:$dst)]>;
-
-// (i,An,Xn) <- OPD
-def "MOV"#OPD.Size.Num#"f"#OPD.Letter
-  : MxInst<0x0, (outs), (ins !cast<DAGOperand>("MxARII"#OPD.Size.Num):$dst, OPD:$src),
-           "move."#OPD.Size.Id#"\t$src, $dst",
-           [(store PAT, MxCP_ARII:$dst)]>;
 }
 
-// TODO split multiclass into 3 separate for reg imm and mem to relax this bullshit
+def  MOV8dd : MxMove_RR<MxType8d, MxType8d>;
 
-defm MOV8_i  : MxMOV8Inst<Mxi8imm, (i8  MximmSExt8:$src)>;
-defm MOV16_i : MxMOVInst<Mxi16imm, (i16 MximmSExt16:$src)>;
-defm MOV32_i : MxMOVInst<Mxi32imm, (i32 MximmSExt32:$src)>;
+def  MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d>;
+def  MOV8fd : MxMove_MR<MxType8.FOp, MxType8.FPat, MxType8d>;
+def  MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d>;
 
-defm MOV8_d  : MxMOV8Inst<MxDRD8, (i8   i8:$src)>;
-defm MOV16_d : MxMOVInst<MxDRD16, (i16 i16:$src)>;
-defm MOV32_d : MxMOVInst<MxDRD32, (i32 i32:$src)>;
+foreach S = [16, 32] in {
+  foreach D = [ "d", "a", "r" ] in {
+    foreach O = [ "d", "a", "r" ] in {
+      def MOV#S#D#O : MxMove_RR<
+        !cast<MxType>("MxType"#S#D),
+        !cast<MxType>("MxType"#S#O)>;
+    }
 
-defm MOV16_a : MxMOVInst<MxARD16, (i16 i16:$src)>;
-defm MOV32_a : MxMOVInst<MxARD32, (i32 i32:$src)>;
+    def MOV#S#"j"#D : MxMove_MR<
+      !cast<MxType>("MxType"#S).JOp,
+      !cast<MxType>("MxType"#S).JPat,
+      !cast<MxType>("MxType"#S#D)>;
 
-defm MOV16_r : MxMOVInst<MxXRD16, (i16 i16:$src)>;
-defm MOV32_r : MxMOVInst<MxXRD32, (i32 i32:$src)>;
+    def MOV#S#"f"#D : MxMove_MR<
+      !cast<MxType>("MxType"#S).FOp,
+      !cast<MxType>("MxType"#S).FPat,
+      !cast<MxType>("MxType"#S#D)>;
 
-defm MOV8_j  : MxMOV8Inst<MxARI8, (Mxloadi8  iPTR:$src)>;
-defm MOV16_j : MxMOVInst<MxARI16, (Mxloadi16 iPTR:$src)>;
-defm MOV32_j : MxMOVInst<MxARI32, (Mxloadi32 iPTR:$src)>;
+    def MOV#S#"p"#D : MxMove_MR<
+      !cast<MxType>("MxType"#S).POp,
+      !cast<MxType>("MxType"#S).PPat,
+      !cast<MxType>("MxType"#S#D)>;
 
-defm MOV8_p  : MxMOV8Inst<MxARID8, (Mxloadi8  MxCP_ARID:$src)>;
-defm MOV16_p : MxMOVInst<MxARID16, (Mxloadi16 MxCP_ARID:$src)>;
-defm MOV32_p : MxMOVInst<MxARID32, (Mxloadi32 MxCP_ARID:$src)>;
+    def MOV#S#D#"i" : MxMove_RI<
+      !cast<MxType>("MxType"#S#D)>;
+  }
+}
 
-defm MOV8_f  : MxMOV8Inst<MxARII8, (Mxloadi8  MxCP_ARII:$src)>;
-defm MOV16_f : MxMOVInst<MxARII16, (Mxloadi16 MxCP_ARII:$src)>;
-defm MOV32_f : MxMOVInst<MxARII32, (Mxloadi32 MxCP_ARII:$src)>;
+// FIXME Tablegen needs to parse complex defm names inside the loop
+
+// R <- M
+defm MOV8d  : MMxMove_RM<MxType8d>;
+
+defm MOV16d : MMxMove_RM<MxType16d>;
+defm MOV16a : MMxMove_RM<MxType16a>;
+defm MOV16r : MMxMove_RM<MxType16r>;
+
+defm MOV32d : MMxMove_RM<MxType32d>;
+defm MOV32a : MMxMove_RM<MxType32a>;
+defm MOV32r : MMxMove_RM<MxType32r>;
+
+defm MOV16d : MMxMove_RM<MxType16d_TC>;
+defm MOV16a : MMxMove_RM<MxType16a_TC>;
+defm MOV16r : MMxMove_RM<MxType16r_TC>;
+
+defm MOV32d : MMxMove_RM<MxType32d_TC>;
+defm MOV32a : MMxMove_RM<MxType32a_TC>;
+defm MOV32r : MMxMove_RM<MxType32r_TC>;
+
+// M <- M
+defm MOV8j  : MMxMove_MM<MxType8,  MxType8.JOp,  MxType8.JPat>;
+defm MOV16j : MMxMove_MM<MxType16, MxType16.JOp, MxType16.JPat>;
+defm MOV32j : MMxMove_MM<MxType32, MxType32.JOp, MxType32.JPat>;
+
+defm MOV8f  : MMxMove_MM<MxType8,  MxType8.FOp,  MxType8.FPat>;
+defm MOV16f : MMxMove_MM<MxType16, MxType16.FOp, MxType16.FPat>;
+defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat>;
 
 
-// FIXME Could these be specialized from normal MOVrPIm and MOVrpDm?
-let Defs = [SP], hasSideEffects = 0 in {
+//===----------------------------------------------------------------------===//
+// PUSH
+//===----------------------------------------------------------------------===//
 
-// FIXME
-// FIXME Solve bulshit with SP
-// FIXME
+// FIXME Make it nicier, mb as Pseudos?
+let Defs = [SP], hasSideEffects = 1 in {
+
 // SP <- SP - <size>; (SP) <- Dn
 let mayStore = 1 in {
 def PUSH8r  : MxInst<0x0, (outs), (ins DR8:$reg),
@@ -178,15 +188,16 @@ def POP32r : MxInst<0x0, (outs AR32:$reg), (ins),
                         "move.l\t(SP)+, $reg", []>;
 } // let mayLoad = 1
 
-} // let Defs = [SP], hasSideEffects = 0
-
-// LEA - Load Effective Address
-def LEA32r_ARID : MxInst<0x0, (outs AR32:$dst), (ins MxARID32:$src),
-                        "lea\t$src, $dst",
-                        [(set i32:$dst, MxCP_ARID:$src)]>;
-
-def LEA32r_ARII : MxInst<0x0, (outs AR32:$dst), (ins MxARII32:$src),
-                        "lea\t$src, $dst",
-                        [(set i32:$dst, MxCP_ARII:$src)]>;
+} // let Defs = [SP], hasSideEffects = 1
 
 
+//===----------------------------------------------------------------------===//
+// LEA
+//===----------------------------------------------------------------------===//
+
+class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat>
+    : MxInst<0x0, (outs MxARD32:$dst), (ins SRCOpd:$src),
+             "lea\t$src, $dst", [(set i32:$dst, SRCPat:$src)]>;
+
+def LEA32p : LEA32<MxARID32, MxCP_ARID>;
+def LEA32f : LEA32<MxARII32, MxCP_ARII>;
