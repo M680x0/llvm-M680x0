@@ -61,11 +61,14 @@ public:
   const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
 
 private:
-  bool ExpandMOVX_RR(MachineInstrBuilder &MIB, bool isSigned,
+  bool ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                       MVT MVTDst, MVT MVTSrc) const;
 
-  bool ExpandMOVX_RM(MachineInstrBuilder &MIB, bool isSigned,
+  bool ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
                      const MCInstrDesc &Desc,
+                     MVT MVTDst, MVT MVTSrc) const;
+
+  bool ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
                      MVT MVTDst, MVT MVTSrc) const;
 };
 

@@ -57,7 +57,8 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
   for (MVT VT : MVT::integer_valuetypes())
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
 
-  for (auto OP : { ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM }) {
+  for (auto OP : { ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM,
+                   ISD::MUL, ISD::MULHS, ISD::MULHU }) {
     setOperationAction(OP, MVT::i8,  Promote);
     setOperationAction(OP, MVT::i16, Legal);
     // TODO this becames legal with newer CPUs

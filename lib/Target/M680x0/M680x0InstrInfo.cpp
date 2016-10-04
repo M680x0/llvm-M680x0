@@ -39,7 +39,7 @@ M680x0InstrInfo::M680x0InstrInfo(const M680x0Subtarget &STI)
 /// Expand SExt MOVE pseudos into a MOV and a EXT if the operands are two
 /// different registers or just EXT if it is the same register
 bool M680x0InstrInfo::
-ExpandMOVX_RR(MachineInstrBuilder &MIB, bool isSigned,
+ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                MVT MVTDst, MVT MVTSrc) const {
   DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to ");
 
@@ -98,9 +98,11 @@ ExpandMOVX_RR(MachineInstrBuilder &MIB, bool isSigned,
 }
 
 bool M680x0InstrInfo::
-ExpandMOVX_RM(MachineInstrBuilder &MIB, bool isSigned,
+ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
               const MCInstrDesc &Desc,
               MVT MVTDst, MVT MVTSrc) const {
+  DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV and ");
+
   // Make this a plain move
   MIB->setDesc(Desc);
 
@@ -111,11 +113,55 @@ ExpandMOVX_RM(MachineInstrBuilder &MIB, bool isSigned,
   unsigned Dst = MIB->getOperand(0).getReg();
 
   if (isSigned) {
+    DEBUG(dbgs() << "Extension" << '\n');
     unsigned Ext = MVTDst == MVT::i16 ? M680x0::EXT16 : M680x0::EXT32;
     BuildMI(MBB, I, DL, get(Ext), Dst).addReg(Dst);
   } else {
+    DEBUG(dbgs() << "Bitfield Clear" << '\n');
     // requires BFCLR
     llvm_unreachable("MOVX_RR is not implemented");
+  }
+
+  return true;
+}
+
+bool M680x0InstrInfo::
+ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
+              MVT MVTDst, MVT MVTSrc) const {
+  unsigned SubIdx;
+
+  if (MVTDst == MVT::i16) {
+    SubIdx = M680x0::MxSubRegIndex8Lo;
+  } else { // i32
+    SubIdx = M680x0::MxSubRegIndex16Lo;
+  }
+
+  unsigned Dst = MIB->getOperand(0).getReg();
+  unsigned Src = MIB->getOperand(1).getReg();
+
+  assert (Dst != Src && "You cannot use the same Regs with MOVX_RR");
+
+  auto TRI = getRegisterInfo();
+
+  auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
+  auto RCSrc = TRI.getMinimalPhysRegClass(Dst, MVTSrc);
+
+  assert (RCDst && RCSrc && "Wrong use of MOVX_RR");
+  assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVX_RR");
+
+  // We need to find the super source register that matches the size of Dst
+  unsigned SSrc = TRI.getMatchingSuperReg( Src, SubIdx, RCSrc);
+
+  DebugLoc DL = MIB->getDebugLoc();
+
+  // If it happens to that super source register is the destination register
+  // we do nothing
+  if (Dst == SSrc) {
+    DEBUG(dbgs() << "Remove " << *MIB.getInstr() << '\n');
+    MIB->eraseFromParent();
+  } else { // otherwise we need to MOV
+    DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV\n");
+    MIB->setDesc(Desc);
   }
 
   return true;
@@ -127,61 +173,68 @@ expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
     // TODO would be nice to infer all these parameters
     case M680x0::MOVSXd16d8:
-      return ExpandMOVX_RR(MIB, true, MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RR(MIB, true, MVT::i16, MVT::i8);
     case M680x0::MOVSXd32d8:
-      return ExpandMOVX_RR(MIB, true, MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RR(MIB, true, MVT::i32, MVT::i8);
     case M680x0::MOVSXd32d16:
-      return ExpandMOVX_RR(MIB, true, MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RR(MIB, true, MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16d8:
-      return ExpandMOVX_RR(MIB, false, MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RR(MIB, false, MVT::i16, MVT::i8);
     case M680x0::MOVZXd32d8:
-      return ExpandMOVX_RR(MIB, false, MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RR(MIB, false, MVT::i32, MVT::i8);
     case M680x0::MOVZXd32d16:
-      return ExpandMOVX_RR(MIB, false, MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RR(MIB, false, MVT::i32, MVT::i16);
 
     case M680x0::MOVSXd16j8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i16, MVT::i8);
     case M680x0::MOVSXd32j8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i32, MVT::i8);
     case M680x0::MOVSXd32j16:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV16dj), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dj), MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16j8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i16, MVT::i8);
     case M680x0::MOVZXd32j8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i32, MVT::i8);
     case M680x0::MOVZXd32j16:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV16dj), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dj), MVT::i32, MVT::i16);
 
     case M680x0::MOVSXd16p8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i16, MVT::i8);
     case M680x0::MOVSXd32p8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i32, MVT::i8);
     case M680x0::MOVSXd32p16:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV16dp), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dp), MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16p8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i16, MVT::i8);
     case M680x0::MOVZXd32p8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i32, MVT::i8);
     case M680x0::MOVZXd32p16:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV16dp), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dp), MVT::i32, MVT::i16);
 
 
     case M680x0::MOVSXd16f8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8df), MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i16, MVT::i8);
     case M680x0::MOVSXd32f8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8df), MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i32, MVT::i8);
     case M680x0::MOVSXd32f16:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV16df), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16df), MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16f8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8df), MVT::i16, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i16, MVT::i8);
     case M680x0::MOVZXd32f8:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV8df), MVT::i32, MVT::i8);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i32, MVT::i8);
     case M680x0::MOVZXd32f16:
-      return ExpandMOVX_RM(MIB, true, get(M680x0::MOV16df), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16df), MVT::i32, MVT::i16);
+
+    case M680x0::MOVXd16d8:
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i16, MVT::i8);
+    case M680x0::MOVXd32d8:
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i32, MVT::i8);
+    case M680x0::MOVXd32d16:
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV16df), MVT::i32, MVT::i16);
   }
   return false;
 }

@@ -130,19 +130,17 @@ class MxDiMuOp_DI<string mnemonic, MxOperand DST, MxOperand OPD>
 multiclass MxDiMuOp<string mnemonic> {
 
 let Defs = [CCR] in {
-let Constraints = "$src = $dst" in {
+  def "S"#NAME#"d32d16" : MxDiMuOp_DD<mnemonic#"s", MxDRD32, MxDRD16>;
+  def "U"#NAME#"d32d16" : MxDiMuOp_DD<mnemonic#"u", MxDRD32, MxDRD16>;
 
-def "S"#NAME#"d32d16" : MxDiMuOp_DD<mnemonic#"s", MxDRD32, MxDRD16>;
-def "U"#NAME#"d32d16" : MxDiMuOp_DD<mnemonic#"u", MxDRD32, MxDRD16>;
-
-def "S"#NAME#"d32i16" : MxDiMuOp_DI<mnemonic#"s", MxDRD32, Mxi16imm>;
-def "U"#NAME#"d32i16" : MxDiMuOp_DI<mnemonic#"u", MxDRD32, Mxi16imm>;
-
-} // $src = $dst
+  def "S"#NAME#"d32i16" : MxDiMuOp_DI<mnemonic#"s", MxDRD32, Mxi16imm>;
+  def "U"#NAME#"d32i16" : MxDiMuOp_DI<mnemonic#"u", MxDRD32, Mxi16imm>;
 } // Defs = [CCR]
 
 }
 
+// TODO immediates
+let Constraints = "$src = $dst" in
 defm DIV : MxDiMuOp<"div">;
 
 def : Pat<(sdiv i16:$dst, i16:$opd),
@@ -166,8 +164,23 @@ def : Pat<(urem i16:$dst, i16:$opd),
             MxSubRegIndex16Lo)>;
 
 
+let isCommutable = 1 in
 defm MUL : MxDiMuOp<"mul">;
 
+def : Pat<(mul i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (SMULd32d16 (MOVXd32d16 $dst), $opd),
+            MxSubRegIndex16Lo)>;
+
+def : Pat<(mulhs i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (ASR32di (ASR32di (SMULd32d16 (MOVXd32d16 $dst), $opd), 8), 8),
+            MxSubRegIndex16Lo)>;
+
+def : Pat<(mulhu i16:$dst, i16:$opd),
+          (EXTRACT_SUBREG
+            (LSR32di (LSR32di (UMULd32d16 (MOVXd32d16 $dst), $opd), 8), 8),
+            MxSubRegIndex16Lo)>;
 
 //===----------------------------------------------------------------------===//
 // no-CCR Patterns
