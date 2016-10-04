@@ -60,7 +60,13 @@ public:
   /// always be able to get register info as well (through this method).
   const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
 
-protected:
+private:
+  bool ExpandMOVX_RR(MachineInstrBuilder &MIB, bool isSigned,
+                      MVT MVTDst, MVT MVTSrc) const;
+
+  bool ExpandMOVX_RM(MachineInstrBuilder &MIB, bool isSigned,
+                     const MCInstrDesc &Desc,
+                     MVT MVTDst, MVT MVTSrc) const;
 };
 
 } // namespace llvm

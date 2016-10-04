@@ -45,13 +45,6 @@
 // Some peepholes
 //===----------------------------------------------------------------------===//
 
-// trunc patterns
-def : Pat<(i16 (trunc i32:$src)),
-          (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex16Lo)>;
-def : Pat<(i8  (trunc i32:$src)),
-          (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex8Lo)>;
-def : Pat<(i8  (trunc i16:$src)),
-          (EXTRACT_SUBREG MxXRD16:$src, MxSubRegIndex8Lo)>;
 
 //===----------------------------------------------------------------------===//
 // Tail Call

@@ -105,14 +105,13 @@ defm OR  : MxBiArOp_DF<"or",  MxOr,  or>;
 //===----------------------------------------------------------------------===//
 
 let Constraints = "$src = $dst" in {
-
-def EXT16 : MxInst<0x0, (outs MxDRD16:$dst), (ins MxDRD8 :$src), "ext.w\t$src">;
-def EXT32 : MxInst<0x0, (outs MxDRD32:$dst), (ins MxDRD16:$src), "ext.l\t$src">;
-
+  def EXT16 : MxInst<0x0, (outs MxDRD16:$dst), (ins MxDRD16:$src), "ext.w\t$src">;
+  def EXT32 : MxInst<0x0, (outs MxDRD32:$dst), (ins MxDRD32:$src), "ext.l\t$src">;
 } // $src = $dst
 
-def : Pat<(i16 (sext i8 :$src)), (EXT16 $src)>;
-def : Pat<(i32 (sext i16:$src)), (EXT32 $src)>;
+def : Pat<(sext_inreg i16:$src, i8),  (EXT16 $src)>;
+def : Pat<(sext_inreg i32:$src, i16), (EXT32 $src)>;
+/* def : Pat<(sext_inreg i32:$src, i8),  (EXT32 (EXT16 $src))>; */
 
 //===----------------------------------------------------------------------===//
 // Div/Mul
@@ -148,22 +147,22 @@ defm DIV : MxDiMuOp<"div">;
 
 def : Pat<(sdiv i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
-            (SDIVd32d16 (EXT32 $dst), $opd),
+            (SDIVd32d16 (MOVSXd32d16 $dst), $opd),
             MxSubRegIndex16Lo)>;
 
 def : Pat<(udiv i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
-            (UDIVd32d16 (EXT32 $dst), $opd),
+            (UDIVd32d16 (MOVZXd32d16 $dst), $opd),
             MxSubRegIndex16Lo)>;
 
 def : Pat<(srem i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
-            (ASR32di (ASR32di (SDIVd32d16 (EXT32 $dst), $opd), 8), 8),
+            (ASR32di (ASR32di (SDIVd32d16 (MOVSXd32d16 $dst), $opd), 8), 8),
             MxSubRegIndex16Lo)>;
 
 def : Pat<(urem i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
-            (LSR32di (LSR32di (UDIVd32d16 (EXT32 $dst), $opd), 8), 8),
+            (LSR32di (LSR32di (UDIVd32d16 (MOVZXd32d16 $dst), $opd), 8), 8),
             MxSubRegIndex16Lo)>;
 
 

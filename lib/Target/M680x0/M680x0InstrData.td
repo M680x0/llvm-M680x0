@@ -26,24 +26,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-class MxMove<int size, dag outs, dag ins, list<dag> pattern = [(null_frag)]>
+class MxMove<string size, dag outs, dag ins, list<dag> pattern = [(null_frag)]>
     : MxInst<0x0, outs, ins, "move."#size#"\t$src, $dst", pattern>;
 
 
 class MxMove_RR<MxType DST, MxType SRC>
-    : MxMove<DST.Size, (outs DST.ROp:$dst), (ins SRC.ROp:$src)>;
+    : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins SRC.ROp:$src)>;
 
 class MxMove_MR<MxOperand MEMOpd, ComplexPattern MEMPat, MxType REG>
-    : MxMove<REG.Size, (outs), (ins MEMOpd:$dst, REG.ROp:$src),
+    : MxMove<REG.Prefix, (outs), (ins MEMOpd:$dst, REG.ROp:$src),
              [(store REG.VT:$src, MEMPat:$dst)]>;
 
 class MxMove_RI<MxType DST>
-    : MxMove<DST.Size, (outs DST.ROp:$dst), (ins DST.IOp:$src),
+    : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins DST.IOp:$src),
               [(set DST.VT:$dst, DST.IPat:$src)]>;
 
 
 class MxMove_RM<MxType REG, MxOperand MEMOpd, ComplexPattern MEMPat>
-    : MxMove<REG.Size, (outs REG.ROp:$dst), (ins MEMOpd:$src),
+    : MxMove<REG.Prefix, (outs REG.ROp:$dst), (ins MEMOpd:$src),
              [(set REG.VT:$dst, (REG.Load MEMPat:$src))]>;
 
 multiclass MMxMove_RM<MxType REG> {
@@ -66,7 +66,7 @@ def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat>;
 }
 
 
-class MxMove_MM<int SIZE, PatFrag LOAD,
+class MxMove_MM<string SIZE, PatFrag LOAD,
                 MxOperand DSTOpd, ComplexPattern DSTPat,
                 MxOperand SRCOpd, ComplexPattern SRCPat>
     : MxMove<SIZE, (outs), (ins DSTOpd:$dst, SRCOpd:$src),
@@ -76,23 +76,23 @@ multiclass MMxMove_MM<MxType TYPE, MxOperand DSTOpd, ComplexPattern DSTPat> {
 
 // MEM <- (An)
 def NAME#TYPE.JOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.JOp, TYPE.JPat>;
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.JOp, TYPE.JPat>;
 
 // MEM <- (An)+
 def NAME#TYPE.OOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat>;
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat>;
 
 // MEM <- -(An)
 def NAME#TYPE.EOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat>;
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat>;
 
 // MEM <- (i,An)
 def NAME#TYPE.POp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.POp, TYPE.PPat>;
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.POp, TYPE.PPat>;
 
 // MEM <- (i,An,Xn)
 def NAME#TYPE.FOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Size, TYPE.Load, DSTOpd, DSTPat, TYPE.FOp, TYPE.FPat>;
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.FOp, TYPE.FPat>;
 
 }
 
@@ -130,7 +130,7 @@ foreach S = [16, 32] in {
   }
 }
 
-// FIXME Tablegen needs to parse complex defm names inside the loop
+// FIXME Tablegen needs to parse complex defm names inside the loop FFS
 
 // R <- M
 defm MOV8d  : MMxMove_RM<MxType8d>;
@@ -206,3 +206,73 @@ def LEA32f : LEA32<MxARII32, MxCP_ARII>;
 //===----------------------------------------------------------------------===//
 // Pseudos
 //===----------------------------------------------------------------------===//
+
+class MxPseudoMove_RR<MxType DST, MxType SRC, list<dag> PAT = []>
+    : MxPseudo<(outs DST.ROp:$dst), (ins SRC.ROp:$src), "", PAT>;
+
+class MxPseudoMove_RM<MxType DST, MxOperand SRCOpd, list<dag> PAT = []>
+    : MxPseudo<(outs DST.ROp:$dst), (ins SRCOpd:$src), "", PAT>;
+
+/// This group of Pseudos is analogues to the real x86 extending moves, but
+/// since M680x0 does not have those we need to emulate. These instructions
+/// will be expanded right after RA completed because we need to know precisely
+/// what registers are allocated for the operands and if they overlap we just
+/// extend the value if the registers are completely different we need to move
+/// first.
+/// TODO What is the CCR behaviour here?
+foreach EXT = ["S", "Z"] in {
+  let hasSideEffects = 0 in {
+
+    def MOV#EXT#Xd16d8  : MxPseudoMove_RR<MxType16d,  MxType8d>;
+    def MOV#EXT#Xd32d8  : MxPseudoMove_RR<MxType32d,  MxType8d>;
+    def MOV#EXT#Xd32d16 : MxPseudoMove_RR<MxType32r, MxType16r>;
+
+    let mayLoad = 1 in {
+
+      def MOV#EXT#Xd16j8   : MxPseudoMove_RM<MxType16r,  MxType8.JOp>;
+      def MOV#EXT#Xd32j8   : MxPseudoMove_RM<MxType32r,  MxType8.JOp>;
+      def MOV#EXT#Xd32j16  : MxPseudoMove_RM<MxType32r, MxType16.JOp>;
+
+      def MOV#EXT#Xd16p8   : MxPseudoMove_RM<MxType16r,  MxType8.POp>;
+      def MOV#EXT#Xd32p8   : MxPseudoMove_RM<MxType32r,  MxType8.POp>;
+      def MOV#EXT#Xd32p16  : MxPseudoMove_RM<MxType32r, MxType16.POp>;
+
+      def MOV#EXT#Xd16f8   : MxPseudoMove_RM<MxType16r,  MxType8.FOp>;
+      def MOV#EXT#Xd32f8   : MxPseudoMove_RM<MxType32r,  MxType8.FOp>;
+      def MOV#EXT#Xd32f16  : MxPseudoMove_RM<MxType32r, MxType16.FOp>;
+
+    }
+  }
+}
+
+
+//===----------------------------------------------------------------------===//
+// Extensions
+//===----------------------------------------------------------------------===//
+
+// i16 <- i8
+def: Pat<(i16 (sext i8:$src)),
+          (EXTRACT_SUBREG (MOVSXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
+
+def: Pat<(i16 (zext i8:$src)),
+          (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
+
+def: Pat<(MxSExtLoadi16i8 MxCP_ARI:$src),
+          (EXTRACT_SUBREG (MOVSXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
+
+def: Pat<(MxZExtLoadi16i8 MxCP_ARI:$src),
+          (EXTRACT_SUBREG (MOVZXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
+
+// i32 <- i16
+def: Pat<(i32 (sext i16:$src)), (MOVSXd32d16 MxDRD16:$src)>;
+def: Pat<(i32 (zext i16:$src)), (MOVZXd32d16 MxDRD16:$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARI:$src), (MOVSXd32j16 MxARI16:$src)>;
+def: Pat<(MxZExtLoadi32i16 MxCP_ARI:$src), (MOVZXd32j16 MxARI16:$src)>;
+
+// trunc patterns
+def : Pat<(i16 (trunc i32:$src)),
+          (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex16Lo)>;
+def : Pat<(i8  (trunc i32:$src)),
+          (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex8Lo)>;
+def : Pat<(i8  (trunc i16:$src)),
+          (EXTRACT_SUBREG MxXRD16:$src, MxSubRegIndex8Lo)>;
