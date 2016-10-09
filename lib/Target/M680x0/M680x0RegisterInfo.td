@@ -44,7 +44,7 @@ foreach Index = 0-7 in {
 } // foreach
 
 // Address Registers
-class MxAddressReg<string n, bits<16> enc, list<Register> subregs = []> 
+class MxAddressReg<string n, bits<16> enc, list<Register> subregs = []>
     : MxReg<n, enc, subregs>;
 
 // Generate Address registers and theirs smaller variants
@@ -109,10 +109,10 @@ def XR32 : MxRegClass<[i32], 32, (add DR32, AR32)>;
 
 // Control Registers
 /* let CopyCost = -1, isAllocatable = 0 in { */
-  def CR8  : MxRegClass<[i8],  16, (add CCR)>;
-  def CR16 : MxRegClass<[i16], 16, (add SR)>;
-  def CPC  : MxRegClass<[i32], 32, (add PC)>;
-  def CSP  : MxRegClass<[i32], 32, (add SP)>;
+  def CCRC : MxRegClass<[i8],  16, (add CCR)>;
+  def SRC  : MxRegClass<[i16], 16, (add SR)>;
+  def PCC  : MxRegClass<[i32], 32, (add PC)>;
+  def SPC  : MxRegClass<[i32], 32, (add SP)>;
 /* } */
 
 // Register used with tail call
