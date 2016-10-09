@@ -61,13 +61,20 @@ public:
   const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
 
 private:
+  // Add appropriate SExt nodes
+  void AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
+               unsigned Reg, MVT From, MVT To) const;
+
+  // Move from register and extend
   bool ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                       MVT MVTDst, MVT MVTSrc) const;
 
+  // Move from memory and extend
   bool ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
                      const MCInstrDesc &Desc,
                      MVT MVTDst, MVT MVTSrc) const;
 
+  // Move across register classes without extension
   bool ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
                      MVT MVTDst, MVT MVTSrc) const;
 };

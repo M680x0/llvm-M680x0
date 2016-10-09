@@ -36,6 +36,18 @@ void M680x0InstrInfo::anchor() {}
 M680x0InstrInfo::M680x0InstrInfo(const M680x0Subtarget &STI)
     : Subtarget(STI), RI(STI) {}
 
+void M680x0InstrInfo::
+AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
+        unsigned Reg, MVT From, MVT To) const {
+  if (From == MVT::i8) {
+    BuildMI(MBB, I, DL, get(M680x0::EXT16), Reg).addReg(Reg);
+  }
+
+  if (To == MVT::i32) {
+    BuildMI(MBB, I, DL, get(M680x0::EXT32), Reg).addReg(Reg);
+  }
+}
+
 /// Expand SExt MOVE pseudos into a MOV and a EXT if the operands are two
 /// different registers or just EXT if it is the same register
 bool M680x0InstrInfo::
@@ -43,18 +55,20 @@ ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                MVT MVTDst, MVT MVTSrc) const {
   DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to ");
 
-  unsigned SubIdx;
-  unsigned Ext;
-  unsigned Move;
+  unsigned Move, Mask, And;
+
+  if (MVTSrc == MVT::i8) {
+    Mask = 0xFF;
+  } else {
+    Mask = 0xFFFF;
+  }
 
   if (MVTDst == MVT::i16) {
-    SubIdx = M680x0::MxSubRegIndex8Lo;
-    Ext = M680x0::EXT16;
     Move = M680x0::MOV16rr;
+    And = M680x0::AND16di;
   } else { // i32
-    SubIdx = M680x0::MxSubRegIndex16Lo;
-    Ext = M680x0::EXT32;
     Move = M680x0::MOV32rr;
+    And = M680x0::AND32di;
   }
 
   unsigned Dst = MIB->getOperand(0).getReg();
@@ -65,31 +79,29 @@ ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
   auto TRI = getRegisterInfo();
 
   auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
-  auto RCSrc = TRI.getMinimalPhysRegClass(Dst, MVTSrc);
+  auto RCSrc = TRI.getMinimalPhysRegClass(Src, MVTSrc);
 
   assert (RCDst && RCSrc && "Wrong use of MOVSX_RR");
   assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVSX_RR");
 
   // We need to find the super source register that matches the size of Dst
-  unsigned SSrc = TRI.getMatchingSuperReg( Src, SubIdx, RCSrc);
+  unsigned SSrc = RI.getMatchingMegaReg( Src, RCDst);
+  assert (SSrc && "No viable MEGA register available");
 
   MachineBasicBlock &MBB = *MIB->getParent();
   DebugLoc DL = MIB->getDebugLoc();
 
-  if (isSigned) { 
-    // If it happens to that super source register is the destination register
-    // we just issue an extension on it
-    if (Dst == SSrc) {
-      DEBUG(dbgs() << "Extension" << '\n');
-      BuildMI(MBB, MIB.getInstr(), DL, get(Ext), Dst) .addReg(SSrc);
-    } else { // otherwise we need to copy first
-      DEBUG(dbgs() << "Copy and Extension" << '\n');
-      BuildMI(MBB, MIB.getInstr(), DL, get(Move), Dst) .addReg(SSrc);
-      BuildMI(MBB, MIB.getInstr(), DL, get(Ext),  Dst) .addReg(SSrc);
-    }
+  if (Dst != SSrc) {
+    DEBUG(dbgs() << "Move and " << '\n');
+    BuildMI(MBB, MIB.getInstr(), DL, get(Move), Dst).addReg(SSrc);
+  }
+
+  if (isSigned) {
+    DEBUG(dbgs() << "Sign Extend" << '\n');
+    AddSExt(MBB, MIB.getInstr(), DL, Dst, MVTSrc, MVTDst);
   } else {
-    // requires BFCLR
-    llvm_unreachable("MOVX_RR is not implemented");
+    DEBUG(dbgs() << "Zero Extend" << '\n');
+    BuildMI(MBB, MIB.getInstr(), DL, get(And), Dst).addReg(Dst).addImm(Mask);
   }
 
   MIB->eraseFromParent();
@@ -103,6 +115,20 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
               MVT MVTDst, MVT MVTSrc) const {
   DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV and ");
 
+  unsigned Mask, And;
+
+  if (MVTSrc == MVT::i8) {
+    Mask = 0xFF;
+  } else {
+    Mask = 0xFFFF;
+  }
+
+  if (MVTDst == MVT::i16) {
+    And = M680x0::AND16di;
+  } else { // i32
+    And = M680x0::AND16di;
+  }
+
   // Make this a plain move
   MIB->setDesc(Desc);
 
@@ -113,13 +139,11 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
   unsigned Dst = MIB->getOperand(0).getReg();
 
   if (isSigned) {
-    DEBUG(dbgs() << "Extension" << '\n');
-    unsigned Ext = MVTDst == MVT::i16 ? M680x0::EXT16 : M680x0::EXT32;
-    BuildMI(MBB, I, DL, get(Ext), Dst).addReg(Dst);
+    DEBUG(dbgs() << "Sign Extend" << '\n');
+    AddSExt(MBB, I, DL, Dst, MVTSrc, MVTDst);
   } else {
-    DEBUG(dbgs() << "Bitfield Clear" << '\n');
-    // requires BFCLR
-    llvm_unreachable("MOVX_RR is not implemented");
+    DEBUG(dbgs() << "Zero Extend" << '\n');
+    BuildMI(MBB, I, DL, get(And), Dst).addImm(Mask);
   }
 
   return true;
@@ -130,9 +154,9 @@ ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
               MVT MVTDst, MVT MVTSrc) const {
   unsigned SubIdx;
 
-  if (MVTDst == MVT::i16) {
+  if (MVTSrc == MVT::i8) {
     SubIdx = M680x0::MxSubRegIndex8Lo;
-  } else { // i32
+  } else { // i16
     SubIdx = M680x0::MxSubRegIndex16Lo;
   }
 
@@ -144,7 +168,7 @@ ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
   auto TRI = getRegisterInfo();
 
   auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
-  auto RCSrc = TRI.getMinimalPhysRegClass(Dst, MVTSrc);
+  auto RCSrc = TRI.getMinimalPhysRegClass(Src, MVTSrc);
 
   assert (RCDst && RCSrc && "Wrong use of MOVX_RR");
   assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVX_RR");
