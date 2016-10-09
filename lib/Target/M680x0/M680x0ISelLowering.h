@@ -51,6 +51,15 @@ namespace llvm {
     };
   }
 
+  /// Define some predicates that are used for node matching.
+  namespace M680x0 {
+    /// Determines whether the callee is required to pop its
+    /// own arguments. Callee pop is necessary to support tail calls.
+    bool isCalleePop(CallingConv::ID CallingConv,
+                     bool IsVarArg, bool GuaranteeTCO);
+
+  } // end namespace M680x0
+
   //===--------------------------------------------------------------------===//
   // TargetLowering Implementation
   //===--------------------------------------------------------------------===//
@@ -58,6 +67,8 @@ namespace llvm {
   class M680x0Subtarget;
 
   class M680x0TargetLowering : public TargetLowering  {
+    const M680x0Subtarget &Subtarget;
+    const M680x0ABIInfo &ABI;
   public:
     explicit M680x0TargetLowering(const M680x0TargetMachine &TM,
                                   const M680x0Subtarget &STI);
@@ -67,34 +78,22 @@ namespace llvm {
 
     const char *getTargetNodeName(unsigned Opcode) const override;
 
-  protected:
-
-    /// ByValArgInfo - Byval argument information.
-    struct ByValArgInfo {
-      unsigned FirstIdx; // Index of the first register used.
-      unsigned NumRegs;  // Number of registers used for this argument.
-      unsigned Address;  // Offset of the stack area used to pass this argument.
-
-      ByValArgInfo() : FirstIdx(0), NumRegs(0), Address(0) {}
-    };
-
-  protected:
-    const M680x0Subtarget &Subtarget;
-    const M680x0ABIInfo &ABI;
-
-  private:
-
-#if 0
-    // Create a TargetConstantPool node.
-    SDValue getTargetNode(ConstantPoolSDNode *N, EVT Ty, SelectionDAG &DAG,
-                          unsigned Flag) const;
-#endif
+    /// Return the value type to use for ISD::SETCC.
+    EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
+                           EVT VT) const override;
 
     /// Provide custom lowering hooks for some operations.
-    ///
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
-    SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+  private:
+    unsigned GetAlignedArgumentStackSize(unsigned StackSize,
+                                         SelectionDAG &DAG) const;
+
+    SDValue LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
+                             const SmallVectorImpl<ISD::InputArg> &ArgInfo,
+                             const SDLoc &dl, SelectionDAG &DAG,
+                             const CCValAssign &VA, MachineFrameInfo &MFI,
+                             unsigned i) const;
 
     /// LowerFormalArguments - transform physical registers into virtual
     /// registers and generate load operations for arguments places on the
