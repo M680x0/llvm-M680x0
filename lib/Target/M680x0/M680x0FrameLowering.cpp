@@ -32,7 +32,7 @@ using namespace llvm;
 
 M680x0FrameLowering::
 M680x0FrameLowering(const M680x0Subtarget &STI, unsigned Alignment)
-  : TargetFrameLowering(StackGrowsDown, Alignment, 0, Alignment),
+  : TargetFrameLowering(StackGrowsDown, Alignment, -4, Alignment),
       STI(STI), TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()) {
   SlotSize = STI.getSlotSize();
   StackPtr = TRI->getStackRegister();
