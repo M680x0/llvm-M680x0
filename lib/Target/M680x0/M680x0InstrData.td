@@ -17,6 +17,10 @@
 //     LEA   [~]     PEA   [ ]     MOVE   [!]     MOVE16 [ ]     MOVEA  [ ]
 //     MOVEM [ ]     MOVEP [ ]     MOVEQ  [ ]     LINK   [ ]     UNLK   [ ]
 //
+//  Pseudo:
+//
+//     MOVSX [~]     MOVZX [~]     MOVX   [x]
+//
 //  Map:
 //
 //   [ ] - was not touched at all
@@ -269,6 +273,12 @@ def: Pat<(MxSExtLoadi16i8 MxCP_ARI:$src),
 
 def: Pat<(MxZExtLoadi16i8 MxCP_ARI:$src),
           (EXTRACT_SUBREG (MOVZXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
+
+// i32 <- i8
+def: Pat<(i32 (sext i8:$src)), (MOVSXd32d8 MxDRD8:$src)>;
+def: Pat<(i32 (zext i8:$src)), (MOVZXd32d8 MxDRD8:$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARI:$src), (MOVSXd32j8 MxARI8:$src)>;
+def: Pat<(MxZExtLoadi32i8 MxCP_ARI:$src), (MOVZXd32j8 MxARI8:$src)>;
 
 // i32 <- i16
 def: Pat<(i32 (sext i16:$src)), (MOVSXd32d16 MxDRD16:$src)>;

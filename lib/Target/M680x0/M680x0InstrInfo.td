@@ -58,6 +58,7 @@ def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
 
 /* def MxWrapper : SDNode<"M680x0ISD::Wrapper", MxSDT_Wrapper>; */
 
+// FIXME remove this
 def MxAdd  : SDNode<"M680x0ISD::ADD",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
 def MxSub  : SDNode<"M680x0ISD::SUB",  MxSDT_BiArithCCROut>;
 def MxOr   : SDNode<"M680x0ISD::OR",   MxSDT_BiArithCCROut, [SDNPCommutative]>;

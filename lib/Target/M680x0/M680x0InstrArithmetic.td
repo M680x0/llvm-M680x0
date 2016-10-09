@@ -101,6 +101,35 @@ defm XOR : MxBiArOp_DF<"eor", MxXor, xor>;
 defm OR  : MxBiArOp_DF<"or",  MxOr,  or>;
 
 //===----------------------------------------------------------------------===//
+// Cmp
+//===----------------------------------------------------------------------===//
+
+class MxCmp<dag ins, string symbol = "cmp">
+    : MxInst<0x0, (outs CCRC:$ccr), ins, symbol#"\t$lhs, $rhs">;
+
+def CMP8dd  : MxCmp<(ins MxDRD8 :$lhs, MxDRD8 :$rhs)>;
+def CMP16dd : MxCmp<(ins MxDRD16:$lhs, MxDRD16:$rhs)>;
+def CMP32dd : MxCmp<(ins MxDRD32:$lhs, MxDRD32:$rhs)>;
+
+let mayLoad = 1 in {
+def CMP8dj  : MxCmp<(ins MxARI8 :$lhs, MxDRD8 :$rhs)>;
+def CMP16dj : MxCmp<(ins MxARI16:$lhs, MxDRD16:$rhs)>;
+def CMP32dj : MxCmp<(ins MxARI32:$lhs, MxDRD32:$rhs)>;
+
+def CMP8dp  : MxCmp<(ins MxARID8 :$lhs, MxDRD8 :$rhs)>;
+def CMP16dp : MxCmp<(ins MxARID16:$lhs, MxDRD16:$rhs)>;
+def CMP32dp : MxCmp<(ins MxARID32:$lhs, MxDRD32:$rhs)>;
+
+def CMP8df  : MxCmp<(ins MxARII8 :$lhs, MxDRD8 :$rhs)>;
+def CMP16df : MxCmp<(ins MxARII16:$lhs, MxDRD16:$rhs)>;
+def CMP32df : MxCmp<(ins MxARII32:$lhs, MxDRD32:$rhs)>;
+}
+
+def CMP8di  : MxCmp<(ins MxDRD8 :$lhs, Mxi8imm :$rhs), "cmpi">;
+def CMP16di : MxCmp<(ins MxDRD16:$lhs, Mxi16imm:$rhs), "cmpi">;
+def CMP32di : MxCmp<(ins MxDRD32:$lhs, Mxi32imm:$rhs), "cmpi">;
+
+//===----------------------------------------------------------------------===//
 // Ext
 //===----------------------------------------------------------------------===//
 
