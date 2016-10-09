@@ -70,6 +70,14 @@ getRegsForTailCall(const MachineFunction &MF) const {
   return &M680x0::XR32_TCRegClass;
 }
 
+unsigned M680x0RegisterInfo::
+getMatchingMegaReg(unsigned Reg, const TargetRegisterClass *RC) const {
+for (MCSuperRegIterator Super(Reg, this); Super.isValid(); ++Super)
+    if (RC->contains(*Super))
+      return *Super;
+  return 0;
+}
+
 BitVector M680x0RegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
   static const uint16_t ReservedCPURegs[] = {

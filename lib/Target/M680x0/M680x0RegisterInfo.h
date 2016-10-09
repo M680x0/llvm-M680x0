@@ -55,6 +55,13 @@ public:
   const TargetRegisterClass * getRegsForTailCall(
                                               const MachineFunction &MF) const;
 
+  /// Return a mega-register of the specified register Reg so its sub-register
+  /// of index SubIdx is Reg, its super(or mega) Reg. In other words it will
+  /// return a register that is not direct super register but still shares
+  /// physical register with Reg.
+  /// NOTE not sure about the term though.
+  unsigned getMatchingMegaReg(unsigned Reg, const TargetRegisterClass *RC) const;
+
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;
