@@ -50,16 +50,17 @@ class MxMove_RM<MxType REG, MxOperand MEMOpd, ComplexPattern MEMPat>
     : MxMove<REG.Prefix, (outs REG.ROp:$dst), (ins MEMOpd:$src),
              [(set REG.VT:$dst, (REG.Load MEMPat:$src))]>;
 
+let mayLoad = 1 in
 multiclass MMxMove_RM<MxType REG> {
 
 // REG <- (An)
 def NAME#REG.JOp.Letter#REG.Postfix : MxMove_RM<REG, REG.JOp, REG.JPat>;
 
-// REG <- (An)+
-def NAME#REG.OOp.Letter#REG.Postfix : MxMove_RM<REG, REG.OOp, REG.OPat>;
-
-// REG <- -(An)
-def NAME#REG.EOp.Letter#REG.Postfix : MxMove_RM<REG, REG.EOp, REG.EPat>;
+/* // REG <- (An)+ */
+/* def NAME#REG.OOp.Letter#REG.Postfix : MxMove_RM<REG, REG.OOp, REG.OPat>; */
+/*  */
+/* // REG <- -(An) */
+/* def NAME#REG.EOp.Letter#REG.Postfix : MxMove_RM<REG, REG.EOp, REG.EPat>; */
 
 // REG <- (i,An)
 def NAME#REG.POp.Letter#REG.Postfix : MxMove_RM<REG, REG.POp, REG.PPat>;
@@ -69,7 +70,8 @@ def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat>;
 
 }
 
-
+let mayLoad = 1 in
+let mayStore = 1 in
 class MxMove_MM<string SIZE, PatFrag LOAD,
                 MxOperand DSTOpd, ComplexPattern DSTPat,
                 MxOperand SRCOpd, ComplexPattern SRCPat>
@@ -82,13 +84,13 @@ multiclass MMxMove_MM<MxType TYPE, MxOperand DSTOpd, ComplexPattern DSTPat> {
 def NAME#TYPE.JOp.Letter#TYPE.Postfix
   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.JOp, TYPE.JPat>;
 
-// MEM <- (An)+
-def NAME#TYPE.OOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat>;
-
-// MEM <- -(An)
-def NAME#TYPE.EOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat>;
+/* // MEM <- (An)+ */
+/* def NAME#TYPE.OOp.Letter#TYPE.Postfix */
+/*   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat>; */
+/*  */
+/* // MEM <- -(An) */
+/* def NAME#TYPE.EOp.Letter#TYPE.Postfix */
+/*   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat>; */
 
 // MEM <- (i,An)
 def NAME#TYPE.POp.Letter#TYPE.Postfix
@@ -147,6 +149,7 @@ defm MOV32d : MMxMove_RM<MxType32d>;
 defm MOV32a : MMxMove_RM<MxType32a>;
 defm MOV32r : MMxMove_RM<MxType32r>;
 
+let Pattern = [(null_frag)] in {
 defm MOV16d : MMxMove_RM<MxType16d_TC>;
 defm MOV16a : MMxMove_RM<MxType16a_TC>;
 defm MOV16r : MMxMove_RM<MxType16r_TC>;
@@ -154,6 +157,7 @@ defm MOV16r : MMxMove_RM<MxType16r_TC>;
 defm MOV32d : MMxMove_RM<MxType32d_TC>;
 defm MOV32a : MMxMove_RM<MxType32a_TC>;
 defm MOV32r : MMxMove_RM<MxType32r_TC>;
+} // Pattern
 
 // M <- M
 defm MOV8j  : MMxMove_MM<MxType8,  MxType8.JOp,  MxType8.JPat>;
