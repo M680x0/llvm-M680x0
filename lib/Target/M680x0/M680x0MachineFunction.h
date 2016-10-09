@@ -14,18 +14,9 @@
 #ifndef LLVM_LIB_TARGET_M680X0_M680X0MACHINEFUNCTION_H
 #define LLVM_LIB_TARGET_M680X0_M680X0MACHINEFUNCTION_H
 
-#include "llvm/ADT/StringMap.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineMemOperand.h"
-#include "llvm/CodeGen/PseudoSourceValue.h"
-#include "llvm/IR/GlobalValue.h"
-#include "llvm/IR/ValueMap.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetMachine.h"
-#include <map>
-#include <string>
-#include <utility>
+#include "llvm/CodeGen/MachineValueType.h"
 
 namespace llvm {
 
@@ -63,6 +54,14 @@ class M680x0MachineFunctionInfo : public MachineFunctionInfo {
   /// holds the virtual register into which the sret argument is passed.
   unsigned SRetReturnReg = 0;
 
+  /// ForwardedMustTailRegParms - A list of virtual and physical registers
+  /// that must be forwarded to every musttail call.
+  SmallVector<ForwardedRegister, 1> ForwardedMustTailRegParms;
+
+  /// ArgumentStackSize - The number of bytes on stack consumed by the arguments
+  /// being passed on the stack.
+  unsigned ArgumentStackSize = 0;
+
 public:
   M680x0MachineFunctionInfo() = default;
   explicit M680x0MachineFunctionInfo(MachineFunction& MF) : MF(MF) {}
@@ -88,6 +87,13 @@ public:
 
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
+
+  unsigned getArgumentStackSize() const { return ArgumentStackSize; }
+  void setArgumentStackSize(unsigned size) { ArgumentStackSize = size; }
+
+  SmallVectorImpl<ForwardedRegister> &getForwardedMustTailRegParms() {
+    return ForwardedMustTailRegParms;
+  }
 
 private:
   virtual void anchor();
