@@ -301,25 +301,25 @@ def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
 
 // NOTE Though this CP is not stricly necessarily it will simplify instruciton
 // definitions
-def MxCP_ARI   : ComplexPattern<iPTR, 1, "selectARI",
+def MxCP_ARI   : ComplexPattern<iPTR, 1, "SelectARI",
                                 [], [SDNPWantParent]>;
 
-def MxCP_ARIPI : ComplexPattern<iPTR, 1, "selectARIPI",
+def MxCP_ARIPI : ComplexPattern<iPTR, 1, "SelectARIPI",
                                 [], [SDNPWantParent]>;
 
-def MxCP_ARIPD : ComplexPattern<iPTR, 1, "selectARIPD",
+def MxCP_ARIPD : ComplexPattern<iPTR, 1, "SelectARIPD",
                                 [], [SDNPWantParent]>;
 
-def MxCP_ARID  : ComplexPattern<iPTR, 2, "selectARID",
+def MxCP_ARID  : ComplexPattern<iPTR, 2, "SelectARID",
                                 [frameindex], [SDNPWantParent]>;
 
-def MxCP_ARII  : ComplexPattern<iPTR, 3, "selectARII",
+def MxCP_ARII  : ComplexPattern<iPTR, 3, "SelectARII",
                                 [frameindex], [SDNPWantParent]>;
 
-def MxCP_PCD   : ComplexPattern<iPTR, 1, "selectPCD",
+def MxCP_PCD   : ComplexPattern<iPTR, 1, "SelectPCD",
                                 [], [SDNPWantParent]>;
 
-def MxCP_PCI   : ComplexPattern<iPTR, 2, "selectPCI",
+def MxCP_PCI   : ComplexPattern<iPTR, 2, "SelectPCI",
                                 [], [SDNPWantParent]>;
 
 //===----------------------------------------------------------------------===//

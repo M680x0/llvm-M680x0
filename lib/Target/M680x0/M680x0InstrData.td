@@ -109,8 +109,8 @@ def  MOV8fd : MxMove_MR<MxType8.FOp, MxType8.FPat, MxType8d>;
 def  MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d>;
 
 foreach S = [16, 32] in {
-  foreach D = [ "d", "a", "r" ] in {
-    foreach O = [ "d", "a", "r" ] in {
+  foreach D = [ "r", "a" ] in {
+    foreach O = [ "r", "a" ] in {
       def MOV#S#D#O : MxMove_RR<
         !cast<MxType>("MxType"#S#D),
         !cast<MxType>("MxType"#S#O)>;
@@ -141,22 +141,18 @@ foreach S = [16, 32] in {
 // R <- M
 defm MOV8d  : MMxMove_RM<MxType8d>;
 
-defm MOV16d : MMxMove_RM<MxType16d>;
-defm MOV16a : MMxMove_RM<MxType16a>;
 defm MOV16r : MMxMove_RM<MxType16r>;
+defm MOV16a : MMxMove_RM<MxType16a>;
 
-defm MOV32d : MMxMove_RM<MxType32d>;
-defm MOV32a : MMxMove_RM<MxType32a>;
 defm MOV32r : MMxMove_RM<MxType32r>;
+defm MOV32a : MMxMove_RM<MxType32a>;
 
 let Pattern = [(null_frag)] in {
-defm MOV16d : MMxMove_RM<MxType16d_TC>;
-defm MOV16a : MMxMove_RM<MxType16a_TC>;
 defm MOV16r : MMxMove_RM<MxType16r_TC>;
+defm MOV16a : MMxMove_RM<MxType16a_TC>;
 
-defm MOV32d : MMxMove_RM<MxType32d_TC>;
-defm MOV32a : MMxMove_RM<MxType32a_TC>;
 defm MOV32r : MMxMove_RM<MxType32r_TC>;
+defm MOV32a : MMxMove_RM<MxType32a_TC>;
 } // Pattern
 
 // M <- M

@@ -215,28 +215,28 @@ expandPostRAPseudo(MachineInstr &MI) const {
     case M680x0::MOVSXd32j8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i32, MVT::i8);
     case M680x0::MOVSXd32j16:
-      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dj), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rj), MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16j8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i16, MVT::i8);
     case M680x0::MOVZXd32j8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dj), MVT::i32, MVT::i8);
     case M680x0::MOVZXd32j16:
-      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dj), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rj), MVT::i32, MVT::i16);
 
     case M680x0::MOVSXd16p8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i16, MVT::i8);
     case M680x0::MOVSXd32p8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i32, MVT::i8);
     case M680x0::MOVSXd32p16:
-      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dp), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rp), MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16p8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i16, MVT::i8);
     case M680x0::MOVZXd32p8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8dp), MVT::i32, MVT::i8);
     case M680x0::MOVZXd32p16:
-      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16dp), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rp), MVT::i32, MVT::i16);
 
 
     case M680x0::MOVSXd16f8:
@@ -244,21 +244,21 @@ expandPostRAPseudo(MachineInstr &MI) const {
     case M680x0::MOVSXd32f8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i32, MVT::i8);
     case M680x0::MOVSXd32f16:
-      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16df), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rf), MVT::i32, MVT::i16);
 
     case M680x0::MOVZXd16f8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i16, MVT::i8);
     case M680x0::MOVZXd32f8:
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV8df), MVT::i32, MVT::i8);
     case M680x0::MOVZXd32f16:
-      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16df), MVT::i32, MVT::i16);
+      return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rf), MVT::i32, MVT::i16);
 
     case M680x0::MOVXd16d8:
       return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i16, MVT::i8);
     case M680x0::MOVXd32d8:
       return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i32, MVT::i8);
     case M680x0::MOVXd32d16:
-      return ExpandMOVX_RR(MIB, get(M680x0::MOV16df), MVT::i32, MVT::i16);
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV16rf), MVT::i32, MVT::i16);
   }
   return false;
 }
@@ -312,10 +312,10 @@ static unsigned getLoadStoreRegOpcode(unsigned Reg,
     return load ? M680x0::MOV8dp : M680x0::MOV8pd;
   case 2:
     assert(M680x0::XR16RegClass.hasSubClassEq(RC) && "Unknown 2-byte regclass");
-    return load ? M680x0::MOV16dp : M680x0::MOV16pd;
+    return load ? M680x0::MOV16rp : M680x0::MOV16pr;
   case 4:
     assert(M680x0::XR16RegClass.hasSubClassEq(RC) && "Unknown 4-byte regclass");
-    return load ? M680x0::MOV32dp : M680x0::MOV32pd;
+    return load ? M680x0::MOV32rp : M680x0::MOV32pr;
   }
 }
 
