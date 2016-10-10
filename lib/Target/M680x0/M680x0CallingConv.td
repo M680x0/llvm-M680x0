@@ -28,11 +28,9 @@ def RetCC_M680x0Common : CallingConv<[
   CCIfType<[i1],   CCPromoteToType<i8>>,
   CCIfType<[i8],   CCAssignToReg<[D0, D1]>>,
   CCIfType<[i16],  CCAssignToReg<[D0, D1]>>,
+  // FIXME Is using %An legit?
   // Allows up to 16 bytes returned in registers
-  CCIfType<[i32],  CCAssignToReg<[D0, D1, A0, A1]>>,
-  /* CCIfType<[iPTR], CCAssignToReg<[A0, A1]>>, */
-  // It seems GCC does this so i will follow
-  CCIfType<[iPTR], CCAssignToReg<[D0, D1]>>
+  CCIfType<[i32],  CCAssignToReg<[D0, D1, A0, A1]>>
 ]>;
 
 // M680x0 C return-value convention.
@@ -41,10 +39,18 @@ def RetCC_M680x0_C : CallingConv<[
   CCDelegateTo<RetCC_M680x0Common>
 ]>;
 
+// M680x0 FastCC return-value convention.
+def RetCC_M680x0_Fast : CallingConv<[
+  // Essentially it is the same
+  CCDelegateTo<RetCC_M680x0Common>
+]>;
+
 // This is the root return-value convention for the M680x0 backend.
 def RetCC_M680x0 : CallingConv<[
   // TODO delegate to Classic Mac's CC
   // Otherwise, drop to normal M680x0 CC
+
+  CCIfCC<"CallingConv::Fast", CCDelegateTo<RetCC_M680x0_Fast>>,
   CCDelegateTo<RetCC_M680x0_C>
 ]>;
 
@@ -64,17 +70,31 @@ def CC_M680x0_Common : CallingConv<[
   CCIfType<[iPTR], CCAssignToStack<4, 4>>
 ]>;
 
+def CC_M680x0_Fast : CallingConv<[
+  // Promote i1/i8/i16 arguments to i32.
+  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+
+  // The 'nest' parameter, if any, is passed in A1.
+  CCIfNest<CCAssignToReg<[A2]>>, // FIXME is this correct?
+
+  // Since M680x0 uses %An for pointers and we want them be passed in regs
+  // too we have to use custom function.
+  CCIfType<[i32], CCCustom<"CC_M680x0_Any_AssignToReg">>,
+
+  // Otherwise, same as everything else.
+  CCDelegateTo<CC_M680x0_Common>
+]>;
+
 def CC_M680x0_C : CallingConv<[
   // Promote i1/i8/i16 arguments to i32.
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
   // The 'nest' parameter, if any, is passed in A1.
-  CCIfNest<CCAssignToReg<[A1]>>, // FIXME is this correct?
+  CCIfNest<CCAssignToReg<[A2]>>, // FIXME is this correct?
 
-  // The first 2 integer/ptr arguments, if marked 'inreg' and if the call is not
-  // a vararg call, are passed in integer registers.
-  CCIfNotVarArg<CCIfInReg<CCIfType<[i32],  CCAssignToReg<[D0, D1]>>>>,
-  CCIfNotVarArg<CCIfInReg<CCIfType<[iPTR], CCAssignToReg<[A0, A1]>>>>,
+  // Use registers only if 'inreg' used and the call is not vararg
+  CCIfNotVarArg<CCIfInReg<CCIfType<[i32], CCAssignToReg<[D0, D1]>>>>,
+  // CCIfNotVarArg<CCIfInReg<CCIfType<[i32], CCCustom<"CC_M680x0_Any_AssignToReg">>>>,
 
   // Otherwise, same as everything else.
   CCDelegateTo<CC_M680x0_Common>
@@ -84,6 +104,7 @@ def CC_M680x0_C : CallingConv<[
 def CC_M680x0 : CallingConv<[
   // TODO delegate to Classic Mac's CC
   // Otherwise, drop to normal M680x0 CC
+  CCIfCC<"CallingConv::Fast", CCDelegateTo<CC_M680x0_Fast>>,
   CCDelegateTo<CC_M680x0_C>
 ]>;
 
