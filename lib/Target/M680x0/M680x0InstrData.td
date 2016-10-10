@@ -104,6 +104,7 @@ def NAME#TYPE.FOp.Letter#TYPE.Postfix
 
 def  MOV8dd : MxMove_RR<MxType8d, MxType8d>;
 
+// M <- R
 def  MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d>;
 def  MOV8fd : MxMove_MR<MxType8.FOp, MxType8.FPat, MxType8d>;
 def  MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d>;
@@ -159,6 +160,10 @@ defm MOV32a : MMxMove_RM<MxType32a_TC>;
 defm MOV8j  : MMxMove_MM<MxType8,  MxType8.JOp,  MxType8.JPat>;
 defm MOV16j : MMxMove_MM<MxType16, MxType16.JOp, MxType16.JPat>;
 defm MOV32j : MMxMove_MM<MxType32, MxType32.JOp, MxType32.JPat>;
+
+defm MOV8p  : MMxMove_MM<MxType8,  MxType8.POp,  MxType8.PPat>;
+defm MOV16p : MMxMove_MM<MxType16, MxType16.POp, MxType16.PPat>;
+defm MOV32p : MMxMove_MM<MxType32, MxType32.POp, MxType32.PPat>;
 
 defm MOV8f  : MMxMove_MM<MxType8,  MxType8.FOp,  MxType8.FPat>;
 defm MOV16f : MMxMove_MM<MxType16, MxType16.FOp, MxType16.FPat>;

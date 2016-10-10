@@ -450,7 +450,7 @@ class MxType16Class<MxOperand reg>
              Mxi16imm,  MximmSExt16,
              Mxloadi16>;
 
-def MxType16 : MxType8Class<?>;
+def MxType16 : MxType16Class<?>;
 
 class MxType32Class<MxOperand reg>
     : MxType<i32, "l", "", reg,
@@ -462,7 +462,7 @@ class MxType32Class<MxOperand reg>
              Mxi32imm,  MximmSExt32,
              Mxloadi32>;
 
-def MxType32 : MxType8Class<?>;
+def MxType32 : MxType32Class<?>;
 
 
 def MxType8d : MxType8Class<MxDRD8>;
