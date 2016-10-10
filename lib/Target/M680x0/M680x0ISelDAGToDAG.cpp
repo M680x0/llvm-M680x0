@@ -125,20 +125,22 @@ struct M680x0ISelAddressMode {
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   void dump() {
-    dbgs() << "M680x0ISelAddressMode " << this << '\n';
-    dbgs() << "Disp " << Disp << '\n';
-    dbgs() << "BaseReg ";
+    dbgs() << "M680x0ISelAddressMode " << this;
+    dbgs() << "\nDisp: " << Disp;
+    dbgs() << ", BaseReg: ";
     if (BaseReg.getNode())
       BaseReg.getNode()->dump();
     else
-      dbgs() << "nul";
-    dbgs() << "BaseFrameIndex " << BaseFrameIndex << '\n'
-           << "IndexReg ";
-    if (IndexReg.getNode())
+      dbgs() << "null";
+    dbgs() << ", BaseFI: " << BaseFrameIndex;
+    dbgs() << ", IndexReg: ";
+    if (IndexReg.getNode()) {
       IndexReg.getNode()->dump();
-    else
-      dbgs() << "nul"
-        << " Scale" << Scale << '\n';
+    } else {
+      dbgs() << "null";
+      dbgs() << ", Scale: " << Scale;
+    }
+    dbgs() << '\n';
   }
 #endif
 };
@@ -186,11 +188,11 @@ private:
   bool matchAddressBase(SDValue N, M680x0ISelAddressMode &AM);
   bool matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM,
                                unsigned Depth);
-  bool selectARI(SDNode *Parent, SDValue N, SDValue &Base);
-  bool selectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
-  bool selectARIPD(SDNode *Parent, SDValue N, SDValue &Base);
-  bool selectARID(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base);
-  bool selectARII(SDNode *Parent, SDValue N,
+  bool SelectARI(SDNode *Parent, SDValue N, SDValue &Base);
+  bool SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
+  bool SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base);
+  bool SelectARID(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base);
+  bool SelectARII(SDNode *Parent, SDValue N,
                   SDValue &Imm, SDValue &Base, SDValue &Index);
 
   // If Address Mode represents Frame Index store FI in Disp and
@@ -300,17 +302,17 @@ matchLoadInAddress(LoadSDNode *N, M680x0ISelAddressMode &AM){
   //     // address TLS areas.
   //     }
 
-  return true;
+  return false;
 }
 
 bool M680x0DAGToDAGISel::
 matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
   SDLoc DL(N);
 
-  DEBUG({
-    dbgs() << "MatchAddress: ";
-    AM.dump();
-  });
+  // DEBUG({
+  //   dbgs() << "MatchAddress: ";
+  //   AM.dump();
+  // });
 
   // Limit recursion.
   if (Depth > 5)
@@ -408,22 +410,44 @@ runOnMachineFunction(MachineFunction &MF) {
 }
 
 bool M680x0DAGToDAGISel::
-selectARI(SDNode *Parent, SDValue N, SDValue &Base) {
+SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
+  DEBUG(dbgs() << "Selecting ARI: ");
+  M680x0ISelAddressMode AM;
+
+  if (!matchAddress(N, AM)) {
+    DEBUG(dbgs() << "REJECT: Match failed\n");
+    return false;
+  }
+
+  // ARI does not use these
+  if (AM.IndexReg.getNode() || AM.Disp != 0) {
+    DEBUG(dbgs() << "REJECT: Index Reg or Disp cannot be matched by ARI\n");
+    return false;
+  }
+
+  Base = AM.BaseReg;
+
+  DEBUG(dbgs() << "SUCCESS\n");
+  return true;;
+}
+
+bool M680x0DAGToDAGISel::
+SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
+  DEBUG(dbgs() << "Selecting ARIPI: ");
+  DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
 bool M680x0DAGToDAGISel::
-selectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
+SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
+  DEBUG(dbgs() << "Selecting ARIPD: ");
+  DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
 bool M680x0DAGToDAGISel::
-selectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
-  return false;
-}
-
-bool M680x0DAGToDAGISel::
-selectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
+SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
+  DEBUG(dbgs() << "Selecting ARPD: ");
   M680x0ISelAddressMode AM;
 
   if (!matchAddress(N, AM))
@@ -431,31 +455,41 @@ selectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
 
   // MVT VT = N.getSimpleValueType();
   if (AM.BaseType == M680x0ISelAddressMode::RegBase) {
-    if (!AM.BaseReg.getNode())
+    if (!AM.BaseReg.getNode()) {
+      DEBUG(dbgs() << "REJECT: Could match Base Reg\n");
       return false;
-      // AM.BaseReg = CurDAG->getRegister(0, VT);
+    }
+    // TODO Base and Index suppression is available since x20 i think
+    // AM.BaseReg = CurDAG->getRegister(0, VT);
   }
 
   if (getFrameIndexAddress(AM, SDLoc(N), Disp, Base)) {
+    DEBUG(dbgs() << "SUCCESS FI\n");
     return true;
+  }
+
+  // Give a chance to ARI
+  if (!AM.IndexReg.getNode() && AM.Disp == 0) {
+    DEBUG(dbgs() << "REJECT: Should be matched by ARI\n");
+    return false;
   }
 
   Disp = getI32Imm(AM.Disp, SDLoc(N));
   Base = AM.BaseReg;
 
-  return true;;
+  DEBUG(dbgs() << "SUCCESS\n");
+  return true;
 }
 
 bool M680x0DAGToDAGISel::
-selectARII(SDNode *Parent, SDValue N,
+SelectARII(SDNode *Parent, SDValue N,
                   SDValue &Imm, SDValue &Base, SDValue &Index) {
+  DEBUG(dbgs() << "Selecting ARII: ");
+  DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
 void M680x0DAGToDAGISel::Select(SDNode *Node) {
-  MVT NVT = Node->getSimpleValueType(0);
-  MVT::SimpleValueType SVT = NVT.SimpleTy;
-  unsigned Opc;
   unsigned Opcode = Node->getOpcode();
   SDLoc DL(Node);
 
