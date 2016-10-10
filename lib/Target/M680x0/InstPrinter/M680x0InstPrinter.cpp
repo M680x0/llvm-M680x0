@@ -32,7 +32,7 @@ using namespace llvm;
 
 void M680x0InstPrinter::
 printRegName(raw_ostream &OS, unsigned RegNo) const {
-  OS << StringRef(getRegisterName(RegNo)).upper();
+  OS << "%" << StringRef(getRegisterName(RegNo));
 }
 
 void M680x0InstPrinter::
@@ -72,7 +72,10 @@ printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printARIMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (An)
+  // FIXME use offsets from M680x0Base
+  O << '(';
+  printOperand(MI, opNum + 0, O);
+  O << ')';
 }
 
 void M680x0InstPrinter::
