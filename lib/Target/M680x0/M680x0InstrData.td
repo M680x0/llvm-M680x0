@@ -175,7 +175,7 @@ defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat>;
 //===----------------------------------------------------------------------===//
 
 // FIXME Make it nicier, mb as Pseudos?
-let Defs = [SP], hasSideEffects = 0 in {
+let Uses = [SP], Defs = [SP], hasSideEffects = 0 in {
 
 // SP <- SP - <size>; (SP) <- Dn
 let mayStore = 1 in {
@@ -197,7 +197,7 @@ def POP32r : MxInst<0x0, (outs AR32:$reg), (ins),
                         "move.l\t(SP)+, $reg", []>;
 } // let mayLoad = 1
 
-} // let Defs = [SP], hasSideEffects = 0
+} // let Uses/Defs = [SP], hasSideEffects = 0
 
 
 //===----------------------------------------------------------------------===//
