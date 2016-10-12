@@ -54,6 +54,7 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
   addRegisterClass(MVT::i8,  &M680x0::DR8RegClass);
   addRegisterClass(MVT::i16, &M680x0::XR16RegClass);
   addRegisterClass(MVT::i32, &M680x0::XR32RegClass);
+  addRegisterClass(MVT::i32, &M680x0::SPCRegClass);
 
   for (auto VT : MVT::integer_valuetypes())
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);

@@ -19,9 +19,14 @@ include "M680x0InstrFormats.td"
 // Profiles
 //===----------------------------------------------------------------------===//
 
-def MxSDT_Ret   : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def MxSDT_CallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>]>;
+def MxSDT_CallSeqEnd   : SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 
-def MxSDT_TCRet : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
+def MxSDT_Call         : SDTypeProfile<0, -1, [SDTCisVT<0, iPTR>]>;
+
+def MxSDT_Ret          : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+
+def MxSDT_TCRet        : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
 /* def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>; */
 
@@ -49,6 +54,16 @@ def MxSDT_2BiArithCCROut : SDTypeProfile<3, 2,
 //===----------------------------------------------------------------------===//
 // Nodes
 //===----------------------------------------------------------------------===//
+
+def MxCallSeqStart : SDNode<"ISD::CALLSEQ_START", MxSDT_CallSeqStart,
+                            [SDNPHasChain, SDNPOutGlue]>;
+
+def MxCallSeqEnd   : SDNode<"ISD::CALLSEQ_END", MxSDT_CallSeqEnd,
+                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
+
+def MxCall         : SDNode<"M680x0ISD::CALL", MxSDT_Call,
+                            [SDNPHasChain, SDNPOutGlue,
+                             SDNPOptInGlue, SDNPVariadic]>;
 
 def MxRet   : SDNode<"M680x0ISD::RET", MxSDT_Ret,
                      [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;

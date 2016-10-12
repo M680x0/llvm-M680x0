@@ -41,7 +41,7 @@ namespace PICStyles {
 enum Style {
   StubPIC,          // Used on i386-darwin in pic mode.
   GOT,              // Used on 32 bit elf on when in pic mode.
-  RIPRel,           // Used on X86-64 when in pic mode.
+  RIPRel,           // Used on M680x0-64 when in pic mode.
   None              // Set when not in pic mode.
 };
 }
@@ -96,6 +96,10 @@ public:
   bool isPICStyleGOT()     const { return PICStyle == PICStyles::GOT;     }
   bool isPICStyleRIPRel()  const { return PICStyle == PICStyles::RIPRel;  }
   bool isPICStyleStubPIC() const { return PICStyle == PICStyles::StubPIC; }
+
+
+  /// Return true if the subtarget allows calls to immediate address.
+  bool isLegalToCallImmediateAddr() const;
 
   bool isPositionIndependent() const;
 

@@ -129,24 +129,26 @@ def JMP32j : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst",
 }
 
 //===----------------------------------------------------------------------===//
-// Return
+// Call
 //===----------------------------------------------------------------------===//
 
-// TODO don't forget about LINK/UNLK
+let isCall = 1 in
+// All calls clobber the non-callee saved registers. %SP is marked as
+// a use to prevent stack-pointer assignments that appear immediately
+// before calls from potentially appearing dead. Uses for argument
+// registers are added manually.
+let Uses = [SP] in {
 
-let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
+def CALLq : MxInst<0x0, (outs), (ins MxPCD32:$dst), "jsr\t$dst">;
 
-def RTS : MxInst<0x0, (outs), (ins), "rts", []>;
+def CALLa : MxInst<0x0, (outs), (ins MxARI32:$dst), "jsr\t$dst",
+                  [(MxCall MxCP_ARI:$dst)]>;
 
-let isCodeGenOnly = 1 in {
-def RET : MxPseudo<(outs), (ins i32imm:$adj, variable_ops), "",
-                   [(MxRet timm:$adj)]>;
-} // let isCodeGenOnly = 1
+} // let Uses = [SP]
 
-}
 
 //===----------------------------------------------------------------------===//
-// Tail Call stuff
+// Tail Call
 //===----------------------------------------------------------------------===//
 
 let isCodeGenOnly = 1 in {
@@ -163,3 +165,20 @@ def TAILJMPj  : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
 }
 } // let Uses = [SP]
 } // let isCodeGenOnly = 1
+
+//===----------------------------------------------------------------------===//
+// Return
+//===----------------------------------------------------------------------===//
+
+// TODO don't forget about LINK/UNLK
+
+let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
+
+def RTS : MxInst<0x0, (outs), (ins), "rts", []>;
+
+let isCodeGenOnly = 1 in {
+def RET : MxPseudo<(outs), (ins i32imm:$adj, variable_ops), "",
+                   [(MxRet timm:$adj)]>;
+} // let isCodeGenOnly = 1
+
+}

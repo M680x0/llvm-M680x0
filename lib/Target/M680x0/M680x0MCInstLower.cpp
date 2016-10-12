@@ -27,40 +27,118 @@
 
 using namespace llvm;
 
-M680x0MCInstLower::M680x0MCInstLower(M680x0AsmPrinter &asmprinter)
-  : AsmPrinter(asmprinter) {}
+M680x0MCInstLower::
+M680x0MCInstLower(MachineFunction &MF, M680x0AsmPrinter &AP)
+    : Ctx(MF.getContext()), MF(MF), TM(MF.getTarget()),
+      MAI(*TM.getMCAsmInfo()), AsmPrinter(AP) {}
 
-void M680x0MCInstLower::Initialize(MCContext* C) {
-  Ctx = C;
+MCSymbol *M680x0MCInstLower::
+GetSymbolFromOperand(const MachineOperand &MO) const {
+  assert((MO.isGlobal() || MO.isSymbol() || MO.isMBB())
+      && "Isn't a symbol reference");
+
+  const DataLayout &DL = MF.getDataLayout();
+
+  MCSymbol *Sym = nullptr;
+  SmallString<128> Name;
+  StringRef Suffix;
+
+  if (!Suffix.empty())
+    Name += DL.getPrivateGlobalPrefix();
+
+  if (MO.isGlobal()) {
+    const GlobalValue *GV = MO.getGlobal();
+    AsmPrinter.getNameWithPrefix(Name, GV);
+  } else if (MO.isSymbol()) {
+    Mangler::getNameWithPrefix(Name, MO.getSymbolName(), DL);
+  } else if (MO.isMBB()) {
+    assert(Suffix.empty());
+    Sym = MO.getMBB()->getSymbol();
+  }
+
+  Name += Suffix;
+  if (!Sym)
+    Sym = Ctx.getOrCreateSymbol(Name);
+
+  return Sym;
 }
 
-static void CreateMCInst(MCInst& Inst, unsigned Opc, const MCOperand& Opnd0,
-                         const MCOperand& Opnd1,
-                         const MCOperand& Opnd2 = MCOperand()) {
-  Inst.setOpcode(Opc);
-  Inst.addOperand(Opnd0);
-  Inst.addOperand(Opnd1);
-  if (Opnd2.isValid())
-    Inst.addOperand(Opnd2);
+MCOperand M680x0MCInstLower::
+LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const {
+  // FIXME: We would like an efficient form for this, so we don't have to do a
+  // lot of extra uniquing.
+  const MCExpr *Expr = nullptr;
+  MCSymbolRefExpr::VariantKind RefKind = MCSymbolRefExpr::VK_None;
+
+  switch (MO.getTargetFlags()) {
+  default: llvm_unreachable("Unknown target flag on GV operand");
+  case M680x0II::MO_NO_FLAG:   break;
+  case M680x0II::MO_GOTPCREL:  RefKind = MCSymbolRefExpr::VK_GOTPCREL; break;
+  case M680x0II::MO_GOT:       RefKind = MCSymbolRefExpr::VK_GOT; break;
+  case M680x0II::MO_GOTOFF:    RefKind = MCSymbolRefExpr::VK_GOTOFF; break;
+  case M680x0II::MO_PLT:       RefKind = MCSymbolRefExpr::VK_PLT; break;
+  case M680x0II::MO_PIC_BASE_OFFSET: {
+    Expr = MCSymbolRefExpr::create(Sym, Ctx);
+    // Subtract the pic base.
+    Expr = MCBinaryExpr::createSub(Expr,
+           MCSymbolRefExpr::create(MF.getPICBaseSymbol(), Ctx), Ctx);
+    if (MO.isJTI()) {
+      assert(MAI.doesSetDirectiveSuppressReloc());
+      // If .set directive is supported, use it to reduce the number of
+      // relocations the assembler will generate for differences between
+      // local labels. This is only safe when the symbols are in the same
+      // section so we are restricting it to jumptable references.
+      MCSymbol *Label = Ctx.createTempSymbol();
+      AsmPrinter.OutStreamer->EmitAssignment(Label, Expr);
+      Expr = MCSymbolRefExpr::create(Label, Ctx);
+    }
+    break;
+  }
+  }
+
+  if (!Expr) {
+    Expr = MCSymbolRefExpr::create(Sym, RefKind, Ctx);
+  }
+
+  if (!MO.isJTI() && !MO.isMBB() && MO.getOffset()) {
+    Expr = MCBinaryExpr::createAdd(Expr,
+           MCConstantExpr::create(MO.getOffset(), Ctx), Ctx);
+  }
+
+  return MCOperand::createExpr(Expr);
 }
 
-MCOperand M680x0MCInstLower::LowerOperand(const MachineOperand& MO,
-                                        unsigned offset) const {
-  MachineOperandType MOTy = MO.getType();
-
-  switch (MOTy) {
-  default: llvm_unreachable("unknown operand type");
+Optional<MCOperand> M680x0MCInstLower::
+LowerOperand(const MachineInstr *MI,
+             const MachineOperand &MO) const {
+  switch (MO.getType()) {
+  default:
+    MI->dump();
+    llvm_unreachable("unknown operand type");
   case MachineOperand::MO_Register:
     // Ignore all implicit register operands.
-    if (MO.isImplicit()) break;
+    if (MO.isImplicit())
+      return None;
     return MCOperand::createReg(MO.getReg());
   case MachineOperand::MO_Immediate:
-    return MCOperand::createImm(MO.getImm() + offset);
+    return MCOperand::createImm(MO.getImm());
+  case MachineOperand::MO_MachineBasicBlock:
+  case MachineOperand::MO_GlobalAddress:
+  case MachineOperand::MO_ExternalSymbol:
+    return LowerSymbolOperand(MO, GetSymbolFromOperand(MO));
+  case MachineOperand::MO_MCSymbol:
+    return LowerSymbolOperand(MO, MO.getMCSymbol());
+  case MachineOperand::MO_JumpTableIndex:
+    return LowerSymbolOperand(MO, AsmPrinter.GetJTISymbol(MO.getIndex()));
+  case MachineOperand::MO_ConstantPoolIndex:
+    return LowerSymbolOperand(MO, AsmPrinter.GetCPISymbol(MO.getIndex()));
+  case MachineOperand::MO_BlockAddress:
+    return LowerSymbolOperand(
+        MO, AsmPrinter.GetBlockAddressSymbol(MO.getBlockAddress()));
   case MachineOperand::MO_RegisterMask:
-    break;
- }
-
-  return MCOperand();
+    // Ignore call clobbers.
+    return None;
+  }
 }
 
 void M680x0MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
@@ -68,9 +146,9 @@ void M680x0MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
-    MCOperand MCOp = LowerOperand(MO);
+    Optional<MCOperand> MCOp = LowerOperand(MI, MO);
 
-    if (MCOp.isValid())
-      OutMI.addOperand(MCOp);
+    if (MCOp.hasValue() && MCOp.getValue().isValid())
+      OutMI.addOperand(MCOp.getValue());
   }
 }

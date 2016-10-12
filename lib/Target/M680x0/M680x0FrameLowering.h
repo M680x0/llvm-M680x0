@@ -23,7 +23,6 @@ class M680x0Subtarget;
 class M680x0RegisterInfo;
 
 class M680x0FrameLowering : public TargetFrameLowering {
-private:
   // Cached subtarget predicates.
   const M680x0Subtarget    &STI;
   const TargetInstrInfo    &TII;
@@ -65,6 +64,10 @@ public:
   explicit M680x0FrameLowering(const M680x0Subtarget &sti, unsigned Alignment);
 
   static const M680x0FrameLowering *create(const M680x0Subtarget &ST);
+
+  MachineBasicBlock::iterator
+  eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator MI) const override;
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.

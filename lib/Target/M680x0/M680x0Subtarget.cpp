@@ -45,10 +45,10 @@ static StringRef selectM680x0CPU(Triple TT, StringRef CPU) {
 
 void M680x0Subtarget::anchor() { }
 
-M680x0Subtarget::M680x0Subtarget(const Triple &TT, const std::string &CPU,
-                             const std::string &FS, 
-                             const M680x0TargetMachine &_TM) :
-  // M680x0GenSubtargetInfo will display features by llc -march=cpu0 -mcpu=help
+M680x0Subtarget::
+M680x0Subtarget(const Triple &TT, const std::string &CPU,
+                const std::string &FS, 
+                const M680x0TargetMachine &_TM) :
   M680x0GenSubtargetInfo(TT, CPU, FS),
   TM(_TM), TargetTriple(TT), TSInfo(),
   InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
@@ -57,6 +57,12 @@ M680x0Subtarget::M680x0Subtarget(const Triple &TT, const std::string &CPU,
 
 bool M680x0Subtarget::
 isPositionIndependent() const { return TM.isPositionIndependent(); }
+
+bool M680x0Subtarget::
+isLegalToCallImmediateAddr() const {
+  return true;
+  // return isTargetELF() || TM.getRelocationModel() == Reloc::Static;
+}
 
 
 /// Classify a blockaddress reference for the current subtarget according to how

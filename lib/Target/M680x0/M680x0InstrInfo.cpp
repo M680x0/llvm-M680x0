@@ -33,8 +33,11 @@ using namespace llvm;
 // Pin the vtable to this file.
 void M680x0InstrInfo::anchor() {}
 
-M680x0InstrInfo::M680x0InstrInfo(const M680x0Subtarget &STI)
-    : Subtarget(STI), RI(STI) {}
+M680x0InstrInfo::
+M680x0InstrInfo(const M680x0Subtarget &STI)
+    : M680x0GenInstrInfo(M680x0::ADJCALLSTACKDOWN, M680x0::ADJCALLSTACKUP,
+                         0, M680x0::RET),
+    Subtarget(STI), RI(STI) {}
 
 void M680x0InstrInfo::
 AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
@@ -314,7 +317,7 @@ static unsigned getLoadStoreRegOpcode(unsigned Reg,
     assert(M680x0::XR16RegClass.hasSubClassEq(RC) && "Unknown 2-byte regclass");
     return load ? M680x0::MOV16rp : M680x0::MOV16pr;
   case 4:
-    assert(M680x0::XR16RegClass.hasSubClassEq(RC) && "Unknown 4-byte regclass");
+    assert(M680x0::XR32RegClass.hasSubClassEq(RC) && "Unknown 4-byte regclass");
     return load ? M680x0::MOV32rp : M680x0::MOV32pr;
   }
 }

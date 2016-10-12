@@ -22,6 +22,7 @@
 #include "M680x0InstrInfo.h"
 #include "M680x0MachineFunction.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
@@ -46,34 +47,41 @@ using namespace llvm;
 
 #define DEBUG_TYPE "m680x0-asm-printer"
 
-bool M680x0AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
+bool M680x0AsmPrinter::
+runOnMachineFunction(MachineFunction &MF) {
   MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
+  MCInstLowering = make_unique<M680x0MCInstLower>(MF, *this);
   AsmPrinter::runOnMachineFunction(MF);
   return true;
 }
 
-void M680x0AsmPrinter::EmitInstruction(const MachineInstr *MI) {
+void M680x0AsmPrinter::
+EmitInstruction(const MachineInstr *MI) {
   if (MI->isPseudo())
     llvm_unreachable("Pseudo opcode found in EmitInstruction()");
 
   MCInst TmpInst0;
-  MCInstLowering.Lower(MI, TmpInst0);
+  MCInstLowering->Lower(MI, TmpInst0);
   OutStreamer->EmitInstruction(TmpInst0, getSubtargetInfo());
 }
 
-void M680x0AsmPrinter::EmitFunctionBodyStart() {
+void M680x0AsmPrinter::
+EmitFunctionBodyStart() {
     // TODO
 }
 
-void M680x0AsmPrinter::EmitFunctionBodyEnd() {
+void M680x0AsmPrinter::
+EmitFunctionBodyEnd() {
     // TODO
 }
 
-void M680x0AsmPrinter::EmitStartOfAsmFile(Module &M) {
+void M680x0AsmPrinter::
+EmitStartOfAsmFile(Module &M) {
   OutStreamer->EmitSyntaxDirective();
 }
 
-void M680x0AsmPrinter::EmitEndOfAsmFile(Module &M) {
+void M680x0AsmPrinter::
+EmitEndOfAsmFile(Module &M) {
 }
 
 extern "C" void LLVMInitializeM680x0AsmPrinter() {

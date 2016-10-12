@@ -63,6 +63,11 @@ public:
 
   static const M680x0InstrInfo *create(M680x0Subtarget &STI);
 
+  /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
+  /// such, whenever a client has an instance of instruction info, it should
+  /// always be able to get register info as well (through this method).
+  const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
+
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
@@ -80,11 +85,6 @@ public:
                             const TargetRegisterInfo *TRI) const override;
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;
-
-  /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
-  /// such, whenever a client has an instance of instruction info, it should
-  /// always be able to get register info as well (through this method).
-  const M680x0RegisterInfo &getRegisterInfo() const { return RI; };
 
 private:
   // Add appropriate SExt nodes

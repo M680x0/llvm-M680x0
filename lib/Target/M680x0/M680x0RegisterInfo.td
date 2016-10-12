@@ -99,7 +99,6 @@ def DR16 : MxRegClass<[i16], 16, (sequence "WD%u", 0, 7)>;
 def DR32 : MxRegClass<[i32], 32, (sequence "D%u", 0, 7)>;
 
 // Address Registers
-// A7 is not part of address class due to its strict use as Stack Pointer
 def AR16 : MxRegClass<[i16], 16, (sequence "WA%u", 0, 7)>;
 def AR32 : MxRegClass<[i32], 32, (sequence "A%u", 0, 7)>;
 
@@ -112,7 +111,7 @@ def XR32 : MxRegClass<[i32], 32, (add DR32, AR32)>;
   def CCRC : MxRegClass<[i8],  16, (add CCR)>;
   def SRC  : MxRegClass<[i16], 16, (add SR)>;
   def PCC  : MxRegClass<[i32], 32, (add PC)>;
-  def SPC  : MxRegClass<[i32], 32, (add SP)>;
+  def SPC  : MxRegClass<[i32], 32, (add A7)>;
 /* } */
 
 // Register used with tail call

@@ -48,6 +48,7 @@ hasFP(const MachineFunction &MF) const {
       TRI->needsStackRealignment(MF);
 }
 
+// FIXME not only pushes....
 bool M680x0FrameLowering::
 hasReservedCallFrame(const MachineFunction &MF) const {
   return !MF.getFrameInfo().hasVarSizedObjects() &&
@@ -231,6 +232,112 @@ BuildStackAlignAND(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
   // The CCR implicit def is dead.
   // FIXME CCR is not yet present
   MI->getOperand(3).setIsDead();
+}
+
+MachineBasicBlock::iterator M680x0FrameLowering::
+eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I) const {
+  bool reserveCallFrame = hasReservedCallFrame(MF);
+  unsigned Opcode = I->getOpcode();
+  bool isDestroy = Opcode == TII.getCallFrameDestroyOpcode();
+  DebugLoc DL = I->getDebugLoc();
+  uint64_t Amount = !reserveCallFrame ? I->getOperand(0).getImm() : 0;
+  uint64_t InternalAmt = (isDestroy || Amount) ? I->getOperand(1).getImm() : 0;
+  I = MBB.erase(I);
+
+  if (!reserveCallFrame) {
+    // If the stack pointer can be changed after prologue, turn the
+    // adjcallstackup instruction into a 'sub %SP, <amt>' and the
+    // adjcallstackdown instruction into 'add %SP, <amt>'
+
+    // We need to keep the stack aligned properly.  To do this, we round the
+    // amount of space needed for the outgoing arguments up to the next
+    // alignment boundary.
+    unsigned StackAlign = getStackAlignment();
+    Amount = alignTo(Amount, StackAlign);
+
+    MachineModuleInfo &MMI = MF.getMMI();
+    const Function *Fn = MF.getFunction();
+    bool DwarfCFI = MMI.hasDebugInfo() || Fn->needsUnwindTableEntry();
+
+    // If we have any exception handlers in this function, and we adjust
+    // the SP before calls, we may need to indicate this to the unwinder
+    // using GNU_ARGS_SIZE. Note that this may be necessary even when
+    // Amount == 0, because the preceding function may have set a non-0
+    // GNU_ARGS_SIZE.
+    // TODO: We don't need to reset this between subsequent functions,
+    // if it didn't change.
+    bool HasDwarfEHHandlers = !MF.getMMI().getLandingPads().empty();
+
+    if (HasDwarfEHHandlers && !isDestroy &&
+        MF.getInfo<M680x0MachineFunctionInfo>()->getHasPushSequences()) {
+      BuildCFI(MBB, I, DL, MCCFIInstruction::createGnuArgsSize(nullptr, Amount));
+    }
+
+    if (Amount == 0)
+      return I;
+
+    // Factor out the amount that gets handled inside the sequence
+    // (Pushes of argument for frame setup, callee pops for frame destroy)
+    Amount -= InternalAmt;
+
+    // TODO: This is needed only if we require precise CFA.
+    // If this is a callee-pop calling convention, emit a CFA adjust for
+    // the amount the callee popped.
+    if (isDestroy && InternalAmt && DwarfCFI && !hasFP(MF))
+      BuildCFI(MBB, I, DL, 
+               MCCFIInstruction::createAdjustCfaOffset(nullptr, -InternalAmt));
+
+    // Add Amount to SP to destroy a frame, or subtract to setup.
+    int64_t StackAdjustment = isDestroy ? Amount : -Amount;
+    int64_t CfaAdjustment = -StackAdjustment;
+
+    if (StackAdjustment) {
+      // Merge with any previous or following adjustment instruction. Note: the
+      // instructions merged with here do not have CFI, so their stack
+      // adjustments do not feed into CfaAdjustment.
+      StackAdjustment += mergeSPUpdates(MBB, I, true);
+      StackAdjustment += mergeSPUpdates(MBB, I, false);
+
+      if (StackAdjustment) {
+          BuildStackAdjustment(MBB, I, DL, StackAdjustment, false);
+      }
+    }
+
+    if (DwarfCFI && !hasFP(MF)) {
+      // If we don't have FP, but need to generate unwind information,
+      // we need to set the correct CFA offset after the stack adjustment.
+      // How much we adjust the CFA offset depends on whether we're emitting
+      // CFI only for EH purposes or for debugging. EH only requires the CFA
+      // offset to be correct at each call site, while for debugging we want
+      // it to be more precise.
+
+      // TODO: When not using precise CFA, we also need to adjust for the
+      // InternalAmt here.
+      if (CfaAdjustment) {
+        BuildCFI(MBB, I, DL,
+            MCCFIInstruction::createAdjustCfaOffset(nullptr, CfaAdjustment));
+      }
+    }
+
+    return I;
+  }
+
+  if (isDestroy && InternalAmt) {
+    // If we are performing frame pointer elimination and if the callee pops
+    // something off the stack pointer, add it back.  We do this until we have
+    // more advanced stack pointer tracking ability.
+    // We are not tracking the stack pointer adjustment by the callee, so make
+    // sure we restore the stack pointer immediately after the call, there may
+    // be spill code inserted between the CALL and ADJCALLSTACKUP instructions.
+    MachineBasicBlock::iterator CI = I;
+    MachineBasicBlock::iterator B = MBB.begin();
+    while (CI != B && !std::prev(CI)->isCall())
+      --CI;
+    BuildStackAdjustment(MBB, CI, DL, -InternalAmt, /*InEpilogue=*/false);
+  }
+
+  return I;
 }
 
 /// emitSPUpdate - Emit a series of instructions to increment / decrement the

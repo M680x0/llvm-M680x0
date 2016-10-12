@@ -41,6 +41,32 @@
 /* def : Pat<(store (i32 (MxWrapper tblockaddress:$src)), MxARI32:$dst), */
 /*           (MOV32ji MxARI32:$dst, tblockaddress:$src)>; */
 
+
+//===----------------------------------------------------------------------===//
+// Calls
+//===----------------------------------------------------------------------===//
+
+// ADJCALLSTACKDOWN/UP implicitly use/def %SP because they may be expanded into
+// a stack adjustment and the codegen must know that they may modify the stack
+// pointer before prolog-epilog rewriting occurs.
+// Pessimistically assume ADJCALLSTACKDOWN / ADJCALLSTACKUP will become
+// sub / add which can clobber CCR.
+let Defs = [SP, CCR], Uses = [SP] in {
+
+def ADJCALLSTACKDOWN
+  : MxPseudo<(outs), (ins i32imm:$amt1), "#ADJCALLSTACKDOWN",
+            [(MxCallSeqStart timm:$amt1)]>;
+
+def ADJCALLSTACKUP
+  : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2), "#ADJCALLSTACKUP",
+            [(MxCallSeqEnd timm:$amt1, timm:$amt2)]>;
+
+} // Defs
+
+def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>;
+def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>;
+def : Pat<(MxCall (i32 imm:$dst)),          (CALLq imm:$dst)>;
+
 //===----------------------------------------------------------------------===//
 // Tail Call
 //===----------------------------------------------------------------------===//

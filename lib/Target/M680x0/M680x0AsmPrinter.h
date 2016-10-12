@@ -41,11 +41,11 @@ public:
 
   const M680x0Subtarget *Subtarget;
   const M680x0MachineFunctionInfo *MMFI;
-  M680x0MCInstLower MCInstLowering;
+  std::unique_ptr<M680x0MCInstLower> MCInstLowering;
 
   explicit M680x0AsmPrinter(TargetMachine &TM,
                             std::unique_ptr<MCStreamer> Streamer)
-    : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {
+    : AsmPrinter(TM, std::move(Streamer)) {
     Subtarget = static_cast<M680x0TargetMachine &>(TM).getSubtargetImpl();
   }
 
