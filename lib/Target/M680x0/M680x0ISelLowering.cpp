@@ -1503,8 +1503,9 @@ const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
 bool M680x0::
 isOffsetSuitableForCodeModel(int64_t Offset, CodeModel::Model M,
                              bool hasSymbolicDisplacement) {
-  // Offset should fit into 32 bit immediate field.
-  if (!isInt<32>(Offset))
+  // Offset should fit into 16 bit immediate field.
+  // TODO Once x20 ISA is available change this
+  if (!isInt<16>(Offset))
     return false;
 
   // If we don't have a symbolic displacement - we don't have any extra
@@ -1520,14 +1521,14 @@ isOffsetSuitableForCodeModel(int64_t Offset, CodeModel::Model M,
   // bits boundary. We may also accept pretty large negative constants knowing
   // that all objects are in the positive half of address space.
   // ??? 16MB? is that right?
-  if (M == CodeModel::Small && Offset < 16*1024*1024)
-    return true;
+  // if (M == CodeModel::Small && Offset < 16*1024*1024)
+  //   return true;
 
   // For kernel code model we know that all object resist in the negative half
   // of 32bits address space. We may not accept negative offsets, since they may
   // be just off and we may accept pretty large positive ones.
-  if (M == CodeModel::Kernel && Offset >= 0)
-    return true;
+  // if (M == CodeModel::Kernel && Offset >= 0)
+  //   return true;
 
   return false;
 }
