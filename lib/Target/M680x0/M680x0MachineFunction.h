@@ -38,6 +38,9 @@ class M680x0MachineFunctionInfo : public MachineFunctionInfo {
   /// Used on windows platform for stdcall & fastcall name decoration
   unsigned BytesToPopOnReturn = 0;
 
+  /// ReturnAddrIndex - FrameIndex for return slot.
+  int ReturnAddrIndex = 0;
+
   /// TailCallReturnAddrDelta - The number of bytes by which return address
   /// stack slot is moved as the result of tail call optimization.
   int TailCallReturnAddrDelta = 0;
@@ -75,6 +78,9 @@ public:
 
   unsigned getBytesToPopOnReturn() const { return BytesToPopOnReturn; }
   void setBytesToPopOnReturn (unsigned bytes) { BytesToPopOnReturn = bytes;}
+
+  int getRAIndex() const { return ReturnAddrIndex; }
+  void setRAIndex(int Index) { ReturnAddrIndex = Index; }
 
   int getTCReturnAddrDelta() const { return TailCallReturnAddrDelta; }
   void setTCReturnAddrDelta(int delta) {TailCallReturnAddrDelta = delta;}

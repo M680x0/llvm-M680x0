@@ -21,6 +21,7 @@
 
 namespace llvm {
 
+/// NOTE this function is used to select registers for formal arguments
 inline bool CC_M680x0_Any_AssignToReg(unsigned &ValNo, MVT &ValVT,
                                        MVT &LocVT,
                                        CCValAssign::LocInfo &LocInfo,

@@ -38,6 +38,45 @@ namespace M680x0II {
     // M680x0 Specific MachineOperand flags.
 
     MO_NO_FLAG,
+
+    /// MO_GOT_ABSOLUTE_ADDRESS - On a symbol operand, this represents a
+    /// relocation of:
+    ///    SYMBOL_LABEL + [. - PICBASELABEL]
+    MO_GOT_ABSOLUTE_ADDRESS,
+
+    /// MO_PIC_BASE_OFFSET - On a symbol operand this indicates that the
+    /// immediate should get the value of the symbol minus the PIC base label:
+    ///    SYMBOL_LABEL - PICBASELABEL
+    MO_PIC_BASE_OFFSET,
+
+    /// MO_GOT - On a symbol operand this indicates that the immediate is the
+    /// offset to the GOT entry for the symbol name from the base of the GOT.
+    ///
+    /// TODO Read through M680x0 ELF ABI
+    ///    SYMBOL_LABEL @GOT
+    MO_GOT,
+
+    /// MO_GOTOFF - On a symbol operand this indicates that the immediate is
+    /// the offset to the location of the symbol name from the base of the GOT.
+    ///
+    /// TODO Read through M680x0 ELF ABI
+    ///    SYMBOL_LABEL @GOTOFF
+    MO_GOTOFF,
+
+    /// MO_GOTPCREL - On a symbol operand this indicates that the immediate is
+    /// offset to the GOT entry for the symbol name from the current code
+    /// location.
+    ///
+    /// TODO Read through M680x0 ELF ABI
+    ///    SYMBOL_LABEL @GOTPCREL
+    MO_GOTPCREL,
+
+    /// MO_PLT - On a symbol operand this indicates that the immediate is
+    /// offset to the PLT entry of symbol name from the current code location.
+    ///
+    /// TODO Read through M680x0 ELF ABI
+    ///    SYMBOL_LABEL @PLT
+    MO_PLT,
   }; // enum TOF {
 
   enum {

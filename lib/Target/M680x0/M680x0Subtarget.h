@@ -35,6 +35,17 @@ class StringRef;
 
 class M680x0TargetMachine;
 
+// TODO these must be revised
+/// The M680x0 backend supports a number of different styles of PIC.
+namespace PICStyles {
+enum Style {
+  StubPIC,          // Used on i386-darwin in pic mode.
+  GOT,              // Used on 32 bit elf on when in pic mode.
+  RIPRel,           // Used on X86-64 when in pic mode.
+  None              // Set when not in pic mode.
+};
+}
+
 class M680x0Subtarget : public M680x0GenSubtargetInfo {
   virtual void anchor();
 
@@ -58,6 +69,9 @@ protected:
   M680x0FrameLowering    FrameLowering;
   M680x0TargetLowering   TLInfo;
 
+  /// Which PIC style to use
+  PICStyles::Style PICStyle;
+
 public:
   const M680x0ABIInfo &getABI() const;
 
@@ -78,6 +92,32 @@ public:
   bool useSmallSection() const { return UseSmallSection; }
 
   bool abiUsesSoftFloat() const;
+
+  bool isPICStyleGOT()     const { return PICStyle == PICStyles::GOT;     }
+  bool isPICStyleRIPRel()  const { return PICStyle == PICStyles::RIPRel;  }
+  bool isPICStyleStubPIC() const { return PICStyle == PICStyles::StubPIC; }
+
+  bool isPositionIndependent() const;
+
+  /// Classify a global variable reference for the current subtarget according
+  /// to how we should reference it in a non-pcrel context.
+  unsigned char classifyLocalReference(const GlobalValue *GV) const;
+
+
+  /// Classify a global variable reference for the current subtarget according
+  /// to how we should reference it in a non-pcrel context.
+  unsigned char classifyGlobalReference(const GlobalValue *GV,
+                                        const Module &M) const;
+  unsigned char classifyGlobalReference(const GlobalValue *GV) const;
+
+  /// Classify a global function reference for the current subtarget.
+  unsigned char classifyGlobalFunctionReference(const GlobalValue *GV,
+                                                const Module &M) const;
+  unsigned char classifyGlobalFunctionReference(const GlobalValue *GV) const;
+
+  /// Classify a blockaddress reference for the current subtarget according to
+  /// how we should reference it in a non-pcrel context.
+  unsigned char classifyBlockAddressReference() const;
 
   /// TODO this must be controlled by options like -malign-int and -mshort
   unsigned getStackAlignment() const { return 4; }

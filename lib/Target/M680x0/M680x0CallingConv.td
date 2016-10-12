@@ -90,7 +90,7 @@ def CC_M680x0_C : CallingConv<[
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
   // The 'nest' parameter, if any, is passed in A1.
-  CCIfNest<CCAssignToReg<[A2]>>, // FIXME is this correct?
+  CCIfNest<CCAssignToReg<[A1]>>, // FIXME is this correct?
 
   // Use registers only if 'inreg' used and the call is not vararg
   CCIfNotVarArg<CCIfInReg<CCIfType<[i32], CCAssignToReg<[D0, D1]>>>>,
@@ -114,7 +114,7 @@ def CC_M680x0 : CallingConv<[
 
 def CSR_NoRegs : CalleeSavedRegs<(add)>;
 
-// A5 - DP
+// A5 - BP
 // A6 - FP
 // A7 - SP
 // TODO callee save/restore should collapse into a single MOVEM instruction

@@ -55,6 +55,57 @@ M680x0Subtarget::M680x0Subtarget(const Triple &TT, const std::string &CPU,
   FrameLowering(*this, this->getStackAlignment()),
   TLInfo(TM, *this) { }
 
+bool M680x0Subtarget::
+isPositionIndependent() const { return TM.isPositionIndependent(); }
+
+
+/// Classify a blockaddress reference for the current subtarget according to how
+/// we should reference it in a non-pcrel context.
+unsigned char M680x0Subtarget::classifyBlockAddressReference() const {
+  return classifyLocalReference(nullptr);
+}
+
+unsigned char M680x0Subtarget::
+classifyLocalReference(const GlobalValue *GV) const {
+  // If this is for a position dependent executable, the static linker can
+  // figure it out.
+  if (!isPositionIndependent())
+    return M680x0II::MO_NO_FLAG;
+
+  return M680x0II::MO_GOTOFF;
+}
+
+unsigned char M680x0Subtarget::
+classifyGlobalReference(const GlobalValue *GV) const {
+  return classifyGlobalReference(GV, *GV->getParent());
+}
+
+unsigned char M680x0Subtarget::
+classifyGlobalReference(const GlobalValue *GV, const Module &M) const {
+  // Large model never uses stubs.
+  if (TM.getCodeModel() == CodeModel::Large)
+    return M680x0II::MO_NO_FLAG;
+
+  if (TM.shouldAssumeDSOLocal(M, GV))
+    return classifyLocalReference(GV);
+
+  return M680x0II::MO_GOT;
+}
+
+unsigned char M680x0Subtarget::
+classifyGlobalFunctionReference(const GlobalValue *GV) const {
+  return classifyGlobalFunctionReference(GV, *GV->getParent());
+}
+
+unsigned char M680x0Subtarget::
+classifyGlobalFunctionReference(const GlobalValue *GV, const Module &M) const {
+  if (TM.shouldAssumeDSOLocal(M, GV))
+    return M680x0II::MO_NO_FLAG;
+
+  // Assuming ELF
+  return M680x0II::MO_PLT;
+}
+
 M680x0Subtarget &
 M680x0Subtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS,
                                                const M680x0TargetMachine &TM) {
