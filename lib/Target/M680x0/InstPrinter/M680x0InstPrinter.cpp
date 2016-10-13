@@ -112,7 +112,10 @@ printAbsMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printPCDMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (i,PC)
+  // FIXME use offsets from M680x0Base
+  O << '(';
+  printOperand(MI, opNum + 0, O);
+  O << ",%pc)"; // FIXME use name from the register itself
 }
 
 void M680x0InstPrinter::

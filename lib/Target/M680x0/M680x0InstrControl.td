@@ -140,12 +140,16 @@ let isCall = 1 in
 let Uses = [SP] in {
 
 def CALLq : MxInst<0x0, (outs), (ins MxPCD32:$dst), "jsr\t$dst">;
-
-def CALLa : MxInst<0x0, (outs), (ins MxARI32:$dst), "jsr\t$dst",
-                  [(MxCall MxCP_ARI:$dst)]>;
+def CALLa : MxInst<0x0, (outs), (ins MxARI32:$dst), "jsr\t$dst">;
 
 } // let Uses = [SP]
 
+def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>;
+def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>;
+def : Pat<(MxCall (i32 imm:$dst)),          (CALLq imm:$dst)>;
+// NOTE I use iPTR instead of MxCP_ARI so it won't match it for patterns above
+// since MxCP_ARI is a single operand pattern. Maybe there is a better solution
+def : Pat<(MxCall iPTR:$dst),           (CALLa MxARI32:$dst)>;
 
 //===----------------------------------------------------------------------===//
 // Tail Call

@@ -63,10 +63,6 @@ def ADJCALLSTACKUP
 
 } // Defs
 
-def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>;
-def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>;
-def : Pat<(MxCall (i32 imm:$dst)),          (CALLq imm:$dst)>;
-
 //===----------------------------------------------------------------------===//
 // Tail Call
 //===----------------------------------------------------------------------===//
