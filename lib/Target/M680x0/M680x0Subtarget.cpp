@@ -50,10 +50,16 @@ M680x0Subtarget(const Triple &TT, const std::string &CPU,
                 const std::string &FS, 
                 const M680x0TargetMachine &_TM) :
   M680x0GenSubtargetInfo(TT, CPU, FS),
-  TM(_TM), TargetTriple(TT), TSInfo(),
+  PICStyle(PICStyles::None), TM(_TM), TSInfo(),
   InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
   FrameLowering(*this, this->getStackAlignment()),
-  TLInfo(TM, *this) { }
+  TLInfo(TM, *this), TargetTriple(TT)  { 
+  // Determine the PICStyle based on the target selected.
+  if (isPositionIndependent())
+    setPICStyle(PICStyles::PCRel);
+  else
+    setPICStyle(PICStyles::None);
+}
 
 bool M680x0Subtarget::
 isPositionIndependent() const { return TM.isPositionIndependent(); }
@@ -73,12 +79,8 @@ unsigned char M680x0Subtarget::classifyBlockAddressReference() const {
 
 unsigned char M680x0Subtarget::
 classifyLocalReference(const GlobalValue *GV) const {
-  // If this is for a position dependent executable, the static linker can
-  // figure it out.
-  if (!isPositionIndependent())
-    return M680x0II::MO_NO_FLAG;
-
-  return M680x0II::MO_GOTOFF;
+  // Use %pc addressing for anything local
+  return M680x0II::MO_NO_FLAG;
 }
 
 unsigned char M680x0Subtarget::
@@ -95,7 +97,7 @@ classifyGlobalReference(const GlobalValue *GV, const Module &M) const {
   if (TM.shouldAssumeDSOLocal(M, GV))
     return classifyLocalReference(GV);
 
-  return M680x0II::MO_GOT;
+  return M680x0II::MO_GOTPCREL;
 }
 
 unsigned char M680x0Subtarget::
@@ -108,8 +110,18 @@ classifyGlobalFunctionReference(const GlobalValue *GV, const Module &M) const {
   if (TM.shouldAssumeDSOLocal(M, GV))
     return M680x0II::MO_NO_FLAG;
 
-  // Assuming ELF
-  return M680x0II::MO_PLT;
+  if (isTargetELF())
+    return M680x0II::MO_PLT;
+
+  auto *F = dyn_cast_or_null<Function>(GV);
+  if (F && F->hasFnAttribute(Attribute::NonLazyBind)) {
+    // If the function is marked as non-lazy, generate an indirect call
+    // which loads from the GOT directly. This avoids runtime overhead
+    // at the cost of eager binding.
+    return M680x0II::MO_GOTPCREL;
+  }
+
+  return M680x0II::MO_NO_FLAG;
 }
 
 M680x0Subtarget &
