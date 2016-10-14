@@ -74,9 +74,9 @@ LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const {
   default: llvm_unreachable("Unknown target flag on GV operand");
   case M680x0II::MO_NO_FLAG:   break;
   case M680x0II::MO_GOTPCREL:  RefKind = MCSymbolRefExpr::VK_GOTPCREL; break;
-  case M680x0II::MO_GOT:       RefKind = MCSymbolRefExpr::VK_GOT; break;
-  case M680x0II::MO_GOTOFF:    RefKind = MCSymbolRefExpr::VK_GOTOFF; break;
-  case M680x0II::MO_PLT:       RefKind = MCSymbolRefExpr::VK_PLT; break;
+  case M680x0II::MO_GOT:       RefKind = MCSymbolRefExpr::VK_GOT;      break;
+  case M680x0II::MO_GOTOFF:    RefKind = MCSymbolRefExpr::VK_GOTOFF;   break;
+  case M680x0II::MO_PLT:       RefKind = MCSymbolRefExpr::VK_PLT;      break;
   case M680x0II::MO_PIC_BASE_OFFSET: {
     Expr = MCSymbolRefExpr::create(Sym, Ctx);
     // Subtract the pic base.

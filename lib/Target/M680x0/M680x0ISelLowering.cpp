@@ -54,7 +54,6 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
   addRegisterClass(MVT::i8,  &M680x0::DR8RegClass);
   addRegisterClass(MVT::i16, &M680x0::XR16RegClass);
   addRegisterClass(MVT::i32, &M680x0::XR32RegClass);
-  addRegisterClass(MVT::i32, &M680x0::SPCRegClass);
 
   for (auto VT : MVT::integer_valuetypes())
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
@@ -927,11 +926,9 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
   // If the function takes variable number of arguments, make a frame index for
   // the start of the first vararg value... for expansion of llvm.va_start. We
   // can skip this if there are no va_start calls.
-  // if (MFI.hasVAStart() &&
-  //     (Is64Bit || (CCID != CallingConv::M680x0_FastCall &&
-  //                  CCID != CallingConv::M680x0_ThisCall))) {
-    MMFI->setVarArgsFrameIndex(MFI.CreateFixedObject(1, StackSize, true));
-  // }
+   if (MFI.hasVAStart()) {
+     MMFI->setVarArgsFrameIndex(MFI.CreateFixedObject(1, StackSize, true));
+   }
 
   if (isVarArg && MFI.hasMustTailInVarArgFunc()) {
     // We forward some GPRs and some vector types.
@@ -1316,7 +1313,7 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const {
   unsigned WrapperKind = M680x0ISD::Wrapper;
   CodeModel::Model M = DAG.getTarget().getCodeModel();
 
-  if (Subtarget.isPICStyleRIPRel() &&
+  if (Subtarget.isPICStylePCRel() &&
       (M == CodeModel::Small || M == CodeModel::Kernel))
     WrapperKind = M680x0ISD::WrapperPC;
 
@@ -1345,7 +1342,7 @@ LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
   unsigned WrapperKind = M680x0ISD::Wrapper;
   CodeModel::Model M = DAG.getTarget().getCodeModel();
 
-  if (Subtarget.isPICStyleRIPRel() &&
+  if (Subtarget.isPICStylePCRel() &&
       (M == CodeModel::Small || M == CodeModel::Kernel))
     WrapperKind = M680x0ISD::WrapperPC;
 
@@ -1374,7 +1371,7 @@ LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const {
   unsigned WrapperKind = M680x0ISD::Wrapper;
   CodeModel::Model M = DAG.getTarget().getCodeModel();
 
-  if (Subtarget.isPICStyleRIPRel() &&
+  if (Subtarget.isPICStylePCRel() &&
       (M == CodeModel::Small || M == CodeModel::Kernel))
     WrapperKind = M680x0ISD::WrapperPC;
 
@@ -1412,7 +1409,7 @@ LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const {
   auto PtrVT = getPointerTy(DAG.getDataLayout());
   SDValue Result = DAG.getTargetBlockAddress(BA, PtrVT, Offset, OpFlags);
 
-  if (Subtarget.isPICStyleRIPRel() &&
+  if (Subtarget.isPICStylePCRel() &&
       (M == CodeModel::Small || M == CodeModel::Kernel))
     Result = DAG.getNode(M680x0ISD::WrapperPC, DL, PtrVT, Result);
   else
@@ -1445,7 +1442,7 @@ LowerGlobalAddress(const GlobalValue *GV, const SDLoc &DL, int64_t Offset,
     Result = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
   }
 
-  if (Subtarget.isPICStyleRIPRel() &&
+  if (Subtarget.isPICStylePCRel() &&
       (M == CodeModel::Small || M == CodeModel::Kernel))
     Result = DAG.getNode(M680x0ISD::WrapperPC, DL, PtrVT, Result);
   else
