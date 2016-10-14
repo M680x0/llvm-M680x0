@@ -447,7 +447,7 @@ SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
 
 bool M680x0DAGToDAGISel::
 SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
-  DEBUG(dbgs() << "Selecting ARPD: ");
+  DEBUG(dbgs() << "Selecting ARID: ");
   M680x0ISelAddressMode AM;
 
   if (!matchAddress(N, AM))

@@ -45,9 +45,10 @@ M680x0RegisterInfo::M680x0RegisterInfo(const M680x0Subtarget &ST)
     // FIXME not sure it this the correct value, it expects RA, but M680x0 passes
     // IP anyway, how this works?
   : M680x0GenRegisterInfo(M680x0::PC), Subtarget(ST) {
+    // FIXME would be nice to have tablegen level name aliasing
     StackPtr = M680x0::SP;
-    FramePtr = M680x0::FP;
-    BasePtr  = M680x0::BP;
+    FramePtr = M680x0::A6;
+    BasePtr  = M680x0::A5;
   }
 
 //===----------------------------------------------------------------------===//
@@ -200,7 +201,7 @@ canRealignStack(const MachineFunction &MF) const {
 unsigned M680x0RegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
-  return TFI->hasFP(MF) ? M680x0::FP : M680x0::SP;
+  return TFI->hasFP(MF) ? FramePtr : StackPtr;
 }
 
 const TargetRegisterClass * M680x0RegisterInfo::

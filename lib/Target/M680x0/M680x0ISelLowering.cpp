@@ -404,6 +404,7 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
   StructReturnType SR = callIsStructReturn(Outs);
   bool IsSibcall      = false;
   M680x0MachineFunctionInfo *MFI = MF.getInfo<M680x0MachineFunctionInfo>();
+  const M680x0RegisterInfo *TRI = Subtarget.getRegisterInfo();
 
   // TODO interrupts
   // if (CallConv == CallingConv::M680x0_INTR)
@@ -575,8 +576,9 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
     // GOT pointer.
     if (!isTailCall) {
       RegsToPass.push_back(std::make_pair(
-          unsigned(M680x0::BP), DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(),
-                                          getPointerTy(DAG.getDataLayout()))));
+          unsigned(TRI->getBaseRegister()),
+            DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(),
+            getPointerTy(DAG.getDataLayout()))));
     } else {
       // ??? WUT, debug this
       // If we are tail calling and generating PIC/GOT style code load the

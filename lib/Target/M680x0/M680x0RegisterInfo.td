@@ -62,13 +62,13 @@ class MxAliasReg<string n, MxReg reg>
   let Aliases = [reg];
 }
 
-def BP  : MxAliasReg<"bp",  A5>;
-def FP  : MxAliasReg<"fp",  A6>;
+// def BP  : MxAliasReg<"bp",  A5>;
+// def FP  : MxAliasReg<"fp",  A6>;
 def SP  : MxAliasReg<"sp",  A7>;
 
-def USP : MxAliasReg<"usp", A7>;
-def SSP : MxAliasReg<"ssp", A7>;
-def ISP : MxAliasReg<"isp", A7>;
+// def USP : MxAliasReg<"usp", A7>;
+// def SSP : MxAliasReg<"ssp", A7>;
+// def ISP : MxAliasReg<"isp", A7>;
 
 // TODO get rid of "pseudo" registers and use just MxReg variants and use
 // HWEncoding's other 13 bits to encode type(and potentially other info) of
@@ -96,11 +96,11 @@ class MxRegClass<list<ValueType> regTypes, int alignment, dag regList>
 // Data Registers
 def DR8  : MxRegClass<[i8],  16, (sequence "BD%u", 0, 7)>;
 def DR16 : MxRegClass<[i16], 16, (sequence "WD%u", 0, 7)>;
-def DR32 : MxRegClass<[i32], 32, (sequence "D%u", 0, 7)>;
+def DR32 : MxRegClass<[i32], 32, (sequence "D%u",  0, 7)>;
 
 // Address Registers
-def AR16 : MxRegClass<[i16], 16, (sequence "WA%u", 0, 7)>;
-def AR32 : MxRegClass<[i32], 32, (sequence "A%u", 0, 7)>;
+def AR16 : MxRegClass<[i16], 16, (sequence "WA%u", 0, 6)>;
+def AR32 : MxRegClass<[i32], 32, (add (sequence "A%u", 0, 6), SP)>;
 
 // Index Register Classes
 def XR16 : MxRegClass<[i16], 16, (add DR16, AR16)>;

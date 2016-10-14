@@ -56,6 +56,7 @@ M680x0Subtarget(const Triple &TT, const std::string &CPU,
   TLInfo(TM, *this), TargetTriple(TT)  { 
   // Determine the PICStyle based on the target selected.
   if (isPositionIndependent())
+    // NOTE this limits offsets to 16bit. CPUs older x20 can do 32bit
     setPICStyle(PICStyles::PCRel);
   else
     setPICStyle(PICStyles::None);
