@@ -21,24 +21,40 @@
 
 namespace llvm {
 
-/// NOTE this function is used to select registers for formal arguments
+// Custom state to propagate llvm type info to register CC assigner
+class M680x0CCState : public CCState {
+public:
+  const llvm::Function &F;
+
+  M680x0CCState(const llvm::Function &F, CallingConv::ID CC, bool isVarArg,
+                MachineFunction &MF, SmallVectorImpl<CCValAssign> &locs,
+                LLVMContext &C)
+    : CCState(CC, isVarArg, MF, locs, C), F(F) {}
+};
+
+/// NOTE this function is used to select registers for formal arguments and call
+/// TODO Need to assigne all the pointers first
 inline bool CC_M680x0_Any_AssignToReg(unsigned &ValNo, MVT &ValVT,
                                        MVT &LocVT,
                                        CCValAssign::LocInfo &LocInfo,
                                        ISD::ArgFlagsTy &ArgFlags,
                                        CCState &State) {
+  M680x0CCState CCInfo = static_cast<M680x0CCState &>(State);
+
   static const MCPhysReg DataRegList[] = {
     M680x0::D0, M680x0::D1,
     M680x0::A0, M680x0::A1
   };
 
+  // Address registers have %a register priority
   static const MCPhysReg AddrRegList[] = {
-    M680x0::A0, M680x0::A1
+    M680x0::A0, M680x0::A1,
+    M680x0::D0, M680x0::D1,
   };
 
   // SHIT rewrite this
   // NOTE This is probably wrong
-  auto I = State.getMachineFunction().getFunction()->arg_begin();
+  auto I = CCInfo.F.arg_begin();
   auto No = ValNo;
   while (No--) {
     I++;

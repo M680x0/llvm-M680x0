@@ -188,6 +188,7 @@ private:
   bool matchAddressBase(SDValue N, M680x0ISelAddressMode &AM);
   bool matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM,
                                unsigned Depth);
+  bool matchAdd(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth);
   bool SelectARI(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base);
@@ -349,6 +350,11 @@ matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
       return true;
     break;
 
+  case ISD::ADD:
+    if (matchAdd(N, AM, Depth))
+      return true;
+    break;
+
   case ISD::FrameIndex:
     if (AM.isDispAddrType() &&
         AM.BaseType == M680x0ISelAddressMode::RegBase &&
@@ -396,6 +402,40 @@ matchAddress(SDValue N, M680x0ISelAddressMode &AM) {
   //   AM.BaseReg = CurDAG->getRegister(M680x0::PC, MVT::i64);
 
   return true;
+}
+
+bool M680x0DAGToDAGISel::
+matchAdd(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
+  // Add an artificial use to this node so that we can keep track of
+  // it if it gets CSE'd with a different node.
+  HandleSDNode Handle(N);
+
+  M680x0ISelAddressMode Backup = AM;
+  if (matchAddressRecursively(N.getOperand(0), AM, Depth+1) &&
+      matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1))
+    return true;
+  AM = Backup;
+
+  // Try again after commuting the operands.
+  if (matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1) &&
+      matchAddressRecursively(Handle.getValue().getOperand(0), AM, Depth+1))
+    return true;
+  AM = Backup;
+
+  // If we couldn't fold both operands into the address at the same time,
+  // see if we can just put each operand into a register and fold at least
+  // the add.
+  if (AM.BaseType == M680x0ISelAddressMode::RegBase &&
+      !AM.BaseReg.getNode() && !AM.IndexReg.getNode()) {
+    N = Handle.getValue();
+    AM.BaseReg = N.getOperand(0);
+    AM.IndexReg = N.getOperand(1);
+    AM.Scale = 1;
+    return true;
+  }
+
+  N = Handle.getValue();
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -469,7 +509,7 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
   }
 
   // Give a chance to ARI
-  if (!AM.IndexReg.getNode() && AM.Disp == 0) {
+  if (AM.Disp == 0) {
     DEBUG(dbgs() << "REJECT: Should be matched by ARI\n");
     return false;
   }

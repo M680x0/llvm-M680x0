@@ -86,6 +86,7 @@ namespace llvm {
   class M680x0TargetLowering : public TargetLowering  {
     const M680x0Subtarget &Subtarget;
     const M680x0ABIInfo &ABI;
+
   public:
     explicit M680x0TargetLowering(const M680x0TargetMachine &TM,
                                   const M680x0Subtarget &STI);

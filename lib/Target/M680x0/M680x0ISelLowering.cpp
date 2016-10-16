@@ -455,7 +455,8 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CallConv, isVarArg, MF, ArgLocs, *DAG.getContext());
+  M680x0CCState CCInfo(*CLI.CS->getCalledFunction(), CallConv,
+                       isVarArg, MF, ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeCallOperands(Outs, CC_M680x0);
 
   // Get a count of how many bytes are to be pushed on the stack.
@@ -844,7 +845,8 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
 
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CCID, isVarArg, MF, ArgLocs, *DAG.getContext());
+  M680x0CCState CCInfo(*MF.getFunction(), CCID, isVarArg,
+                       MF, ArgLocs, *DAG.getContext());
 
   CCInfo.AnalyzeFormalArguments(Ins, CC_M680x0);
 

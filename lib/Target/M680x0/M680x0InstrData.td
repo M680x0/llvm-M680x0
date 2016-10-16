@@ -41,6 +41,10 @@ class MxMove_MR<MxOperand MEMOpd, ComplexPattern MEMPat, MxType REG>
     : MxMove<REG.Prefix, (outs), (ins MEMOpd:$dst, REG.ROp:$src),
              [(store REG.VT:$src, MEMPat:$dst)]>;
 
+class MxMove_MI<MxOperand MEMOpd, ComplexPattern MEMPat, MxType TYPE>
+    : MxMove<TYPE.Prefix, (outs), (ins MEMOpd:$dst, TYPE.IOp:$src),
+             [(store TYPE.IPat:$src, MEMPat:$dst)]>;
+
 class MxMove_RI<MxType DST>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins DST.IOp:$src),
               [(set DST.VT:$dst, DST.IPat:$src)]>;
@@ -109,6 +113,11 @@ def  MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d>;
 def  MOV8fd : MxMove_MR<MxType8.FOp, MxType8.FPat, MxType8d>;
 def  MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d>;
 
+// M <- I
+def  MOV8ji : MxMove_MI<MxType8.JOp, MxType8.JPat, MxType8>;
+def  MOV8fi : MxMove_MI<MxType8.FOp, MxType8.FPat, MxType8>;
+def  MOV8pi : MxMove_MI<MxType8.POp, MxType8.PPat, MxType8>;
+
 foreach S = [16, 32] in {
   foreach D = [ "r", "a" ] in {
     foreach O = [ "r", "a" ] in {
@@ -117,6 +126,7 @@ foreach S = [16, 32] in {
         !cast<MxType>("MxType"#S#O)>;
     }
 
+    // M <- R
     def MOV#S#"j"#D : MxMove_MR<
       !cast<MxType>("MxType"#S).JOp,
       !cast<MxType>("MxType"#S).JPat,
@@ -132,9 +142,27 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S).PPat,
       !cast<MxType>("MxType"#S#D)>;
 
+
+    // R <- I
     def MOV#S#D#"i" : MxMove_RI<
       !cast<MxType>("MxType"#S#D)>;
   }
+
+  // M <- I
+  def MOV#S#"j"#"i" : MxMove_MI<
+    !cast<MxType>("MxType"#S).JOp,
+    !cast<MxType>("MxType"#S).JPat,
+    !cast<MxType>("MxType"#S)>;
+
+  def MOV#S#"f"#"i" : MxMove_MI<
+    !cast<MxType>("MxType"#S).FOp,
+    !cast<MxType>("MxType"#S).FPat,
+    !cast<MxType>("MxType"#S)>;
+
+  def MOV#S#"p"#"i" : MxMove_MI<
+    !cast<MxType>("MxType"#S).POp,
+    !cast<MxType>("MxType"#S).PPat,
+    !cast<MxType>("MxType"#S)>;
 }
 
 // FIXME Tablegen needs to parse complex defm names inside the loop FFS
