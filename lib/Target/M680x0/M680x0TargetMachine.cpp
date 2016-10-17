@@ -75,7 +75,6 @@ M680x0TargetMachine::M680x0TargetMachine(const Target &T, const Triple &TT,
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options), TT, CPU, FS,
                         Options, getEffectiveRelocModel(TT, RM), CM, OL),
       TLOF(make_unique<M680x0ELFTargetObjectFile>()),
-      ABI(M680x0ABIInfo::computeTargetABI()),
       Subtarget(TT, CPU, FS, *this) {
   initAsmInfo();
 }

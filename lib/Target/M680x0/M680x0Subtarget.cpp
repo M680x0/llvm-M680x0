@@ -142,5 +142,3 @@ bool M680x0Subtarget::abiUsesSoftFloat() const {
 //  return TM->Options.UseSoftFloat;
   return true;
 }
-
-const M680x0ABIInfo &M680x0Subtarget::getABI() const { return TM.getABI(); }

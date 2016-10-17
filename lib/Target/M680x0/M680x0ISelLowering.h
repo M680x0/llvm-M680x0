@@ -15,7 +15,6 @@
 #ifndef LLVM_LIB_TARGET_M680X0_M680X0ISELLOWERING_H
 #define LLVM_LIB_TARGET_M680X0_M680X0ISELLOWERING_H
 
-#include "MCTargetDesc/M680x0ABIInfo.h"
 #include "M680x0.h"
 
 #include "llvm/CodeGen/CallingConvLower.h"
@@ -85,7 +84,6 @@ namespace llvm {
 
   class M680x0TargetLowering : public TargetLowering  {
     const M680x0Subtarget &Subtarget;
-    const M680x0ABIInfo &ABI;
 
   public:
     explicit M680x0TargetLowering(const M680x0TargetMachine &TM,

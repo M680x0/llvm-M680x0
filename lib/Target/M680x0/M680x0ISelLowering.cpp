@@ -42,7 +42,7 @@ STATISTIC(NumTailCalls, "Number of tail calls");
 
 M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
                                            const M680x0Subtarget &STI)
-    : TargetLowering(TM), Subtarget(STI), ABI(TM.getABI()) {
+    : TargetLowering(TM), Subtarget(STI) {
 
   setBooleanContents(ZeroOrOneBooleanContent);
 

@@ -69,8 +69,6 @@ protected:
   Triple TargetTriple;
 
 public:
-  const M680x0ABIInfo &getABI() const;
-
   /// This constructor initializes the data members to match that
   /// of the specified triple.
   M680x0Subtarget(const Triple &TT, const std::string &CPU, const std::string &FS,

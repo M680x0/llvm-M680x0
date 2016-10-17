@@ -14,7 +14,6 @@
 #ifndef LLVM_LIB_TARGET_M680X0_M680X0TARGETMACHINE_H
 #define LLVM_LIB_TARGET_M680X0_M680X0TARGETMACHINE_H
 
-#include "MCTargetDesc/M680x0ABIInfo.h"
 #include "MCTargetDesc/M680x0MCTargetDesc.h"
 #include "M680x0Subtarget.h"
 
@@ -29,7 +28,6 @@ class M680x0RegisterInfo;
 
 class M680x0TargetMachine : public LLVMTargetMachine {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
-  M680x0ABIInfo ABI; // Selected ABI
   M680x0Subtarget Subtarget;
 
   mutable StringMap<std::unique_ptr<M680x0Subtarget>> SubtargetMap;
@@ -53,8 +51,6 @@ public:
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
   }
-
-  const M680x0ABIInfo &getABI() const { return ABI; }
 };
 } // End llvm namespace
 
