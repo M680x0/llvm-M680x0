@@ -24,12 +24,27 @@ class MCInstrInfo;
 class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
-class StringRef;
+class MCRelocationInfo;
+class MCTargetOptions;
 class Target;
 class Triple;
+class StringRef;
 class raw_ostream;
+class raw_pwrite_stream;
 
 extern Target TheM680x0Target;
+
+MCAsmBackend *createM680x0AsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                     const Triple &TT, StringRef CPU,
+                                     const MCTargetOptions &Options);
+
+MCCodeEmitter *createM680x0MCCodeEmitter(const MCInstrInfo &MCII,
+                                         const MCRegisterInfo &MRI,
+                                         MCContext &Ctx);
+
+/// Construct an M680x0 ELF object writer.
+MCObjectWriter *createM680x0ELFObjectWriter(raw_pwrite_stream &OS,
+                                            uint8_t OSABI);
 
 } // End llvm namespace
 

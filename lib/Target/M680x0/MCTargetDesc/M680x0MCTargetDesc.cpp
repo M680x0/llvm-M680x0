@@ -117,9 +117,15 @@ extern "C" void LLVMInitializeM680x0TargetMC() {
     // Register the MC subtarget info.
     TargetRegistry::RegisterMCSubtargetInfo(*T, createM680x0MCSubtargetInfo);
 
+    // Register the code emitter.
+    TargetRegistry::RegisterMCCodeEmitter(*T, createM680x0MCCodeEmitter);
+
     // Register the MCInstPrinter.
     TargetRegistry::RegisterMCInstPrinter(*T, createM680x0MCInstPrinter);
 
     // Register the MC relocation info.
     TargetRegistry::RegisterMCRelocationInfo(*T, createM680x0MCRelocationInfo);
+
+    // Register the asm backend.
+    TargetRegistry::RegisterMCAsmBackend(TheM680x0Target, createM680x0AsmBackend);
 }

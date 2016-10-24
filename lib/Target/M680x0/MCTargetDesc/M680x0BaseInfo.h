@@ -24,9 +24,29 @@
 
 namespace llvm {
 
-// TODO fill the data
 namespace M680x0 {
-  // Enums for memory operand decoding.
+  // Enums for memory operand decoding. Supports these forms:
+  // (d,An)
+  // (d,An,Xn)
+  // ([bd,An],Xn,od)
+  // ([bd,An,Xn],od)
+  enum { 
+    MemDisp = 0,
+    MemBase = 1,
+    MemScale = 2,
+    MemOuter = 3
+  };
+
+  // Enums for pc-relative memory operand decoding. Supports these forms:
+  // (d,PC)
+  // (d,PC,Xn)
+  // ([bd,PC],Xn,od)
+  // ([bd,PC,Xn],od)
+  enum { 
+    PCRelDisp = 0,
+    PCRelScale = 1,
+    PCRelOuter = 2
+  };
 } // end namespace M680x0;
 
 /// M680x0II - This namespace holds all of the target specific flags that

@@ -72,9 +72,8 @@ printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printARIMem(const MCInst *MI, int opNum, raw_ostream &O) {
-  // FIXME use offsets from M680x0Base
   O << '(';
-  printOperand(MI, opNum + 0, O);
+  printOperand(MI, opNum, O);
   O << ')';
 }
 
@@ -90,11 +89,10 @@ printARIPDMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printARIDMem(const MCInst *MI, int opNum, raw_ostream &O) {
-  // FIXME use offsets from M680x0Base
   O << '(';
-  printOperand(MI, opNum + 0, O);
+  printOperand(MI, opNum + M680x0::MemDisp, O);
   O << ',';
-  printOperand(MI, opNum + 1, O);
+  printOperand(MI, opNum + M680x0::MemBase, O);
   O << ')';
 }
 
@@ -112,10 +110,9 @@ printAbsMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printPCDMem(const MCInst *MI, int opNum, raw_ostream &O) {
-  // FIXME use offsets from M680x0Base
   O << '(';
-  printOperand(MI, opNum + 0, O);
-  O << ",%pc)"; // FIXME use name from the register itself
+  printOperand(MI, opNum + M680x0::PCRelDisp, O);
+  O << ",%pc)";
 }
 
 void M680x0InstPrinter::

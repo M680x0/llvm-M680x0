@@ -291,10 +291,10 @@ let OperandType = "OPERAND_PCREL",
     /* ParserMatchClass = M680x0AbsMemAsmOperand, */
     PrintMethod = "printPCRelImm" in {
 
-// TODO do i need this?
 // Branch targets have OtherVT type and print as pc-relative values.
-def MxBrTarget  : Operand<OtherVT>;
-def MxBrTarget8 : Operand<OtherVT>;
+def MxBrTarget8  : Operand<OtherVT>;
+def MxBrTarget16 : Operand<OtherVT>;
+def MxBrTarget32 : Operand<OtherVT>;
 
 } // OPERAND_PCREL
 

@@ -47,11 +47,11 @@ let hasSideEffects = 0 in {
 // Conditions
 //===----------------------------------------------------------------------===//
 
-class MxSetCC<string CC>
-    : MxInst<0x0, (outs MxDRD8:$dst), (ins CCRC:$ccr), "s"#CC#"\t $dst">;
+class MxScc<string cc>
+    : MxInst<0x0, (outs MxDRD8:$dst), (ins CCRC:$ccr), "s"#cc#"\t$dst">;
 
 ///
-/// CC—Carry clear      GE—Greater than or equal
+/// cc—Carry clear      GE—Greater than or equal
 /// LS—Lower or same    PL—Plus
 /// CS—Carry set        GT—Greater than
 /// LT—Less than        T—Always true*
@@ -61,9 +61,9 @@ class MxSetCC<string CC>
 /// NE—Not equal        VS—Overflow set
 ///
 /// *Not applicable to the Bcc instructions.
-foreach CC = [ "cc", "ls", "lt", "eq", "mi", "f", "ne", "ge",
+foreach cc = [ "cc", "ls", "lt", "eq", "mi", "f", "ne", "ge",
                "pl", "gt", "t", "hi", "vc", "le", "vs"] in
-  def SET#CC : MxSetCC<CC>;
+  def SET#cc : MxScc<cc>;
 
 multiclass MMxSETCCPatterns<MxType TYPE, PatFrag FRAG, Instruction SET> {
   // R cc R
@@ -85,7 +85,7 @@ multiclass MMxSETCCPatterns<MxType TYPE, PatFrag FRAG, Instruction SET> {
 
 multiclass MMxSETPatterns<MxType TYPE> {
   // TODO onece float is available...
-  // NOTE reread the spec there are some caviats with it like not clearing CC
+  // NOTE reread the spec there are some caviats with it like not clearing cc
   /* defm : MMxSETCCPatterns<TYPE, setoeq, SEToeq>; */
   /* defm : MMxSETCCPatterns<TYPE, setogt, SETogt>; */
   /* defm : MMxSETCCPatterns<TYPE, setoge, SEToge>; */
@@ -127,6 +127,26 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
 def JMP32j : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst",
                     [(brind iPTR:$dst)]>;
 }
+
+let isBranch = 1, isTerminator = 1, Uses = [CCR] in
+class MxBcc<string cc, Operand brtarget>
+    : MxInst<0x0, (outs), (ins brtarget:$dst), "b"#cc#"\t$dst">;
+
+///
+/// cc—Carry clear      GE—Greater than or equal
+/// LS—Lower or same    PL—Plus
+/// CS—Carry set        GT—Greater than
+/// LT—Less than
+/// EQ—Equal            HI—Higher
+/// MI—Minus            VC—Overflow clear
+///                     LE—Less than or equal
+/// NE—Not equal        VS—Overflow set
+foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
+               "pl", "gt", "hi", "vc", "le", "vs"] in {
+  def B#cc#"8"  : MxBcc<cc, MxBrTarget8>;
+  def B#cc#"16" : MxBcc<cc, MxBrTarget16>;
+}
+
 
 //===----------------------------------------------------------------------===//
 // Call
