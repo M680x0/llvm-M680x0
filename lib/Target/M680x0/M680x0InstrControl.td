@@ -40,7 +40,7 @@
 
 // NOP
 let hasSideEffects = 0 in {
-  def NOP : MxInst<0x4E71, (outs), (ins), "nop", []>;
+  def NOP : MxInstruction<(outs), (ins), "nop", [], MxEncFixed<0x4E71>>;
 }
 
 //===----------------------------------------------------------------------===//

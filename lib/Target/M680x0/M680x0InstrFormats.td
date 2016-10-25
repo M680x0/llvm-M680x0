@@ -87,6 +87,112 @@ class MxInst<bits<16> opcode,
   bits<16> Opcode = opcode;
 }
 
+//===----------------------------------------------------------------------===//
+// Encoding primitives
+//===----------------------------------------------------------------------===//
+
+class MxBead<bits<4> type, bits<4> value> {
+  bits<8> Value = 0b00000000;
+  let Value{3-0} = type;
+  let Value{7-4} = value;
+}
+
+def   MxBeadTerm                  : MxBead<0b0000, 0b0000>;
+class MxBead1Bit  <bits<1> value> : MxBead<0b0001, 0> { let Value{4}   = value; }
+class MxBead2Bits <bits<2> value> : MxBead<0b0010, 0> { let Value{5-4} = value; }
+class MxBead3Bits <bits<3> value> : MxBead<0b0011, 0> { let Value{6-4} = value; }
+class MxBead4Bits <bits<4> value> : MxBead<0b0100, value>;
+class MxBeadDAReg <bits<4> opN>   : MxBead<0b0101, opN>;
+class MxBeadReg   <bits<4> opN>   : MxBead<0b0110, opN>;
+class MxBead8Imm  <bits<4> opN>   : MxBead<0b0111, opN>;
+class MxBead16Imm <bits<4> opN>   : MxBead<0b1000, opN>;
+class MxBead32Imm <bits<4> opN>   : MxBead<0b1001, opN>;
+def   MxBeadIgnore                : MxBead<0b1111, 0b1111>;
+
+class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm, 
+                 MxBead n2  = MxBeadTerm, MxBead n3  = MxBeadTerm,
+                 MxBead n4  = MxBeadTerm, MxBead n5  = MxBeadTerm,
+                 MxBead n6  = MxBeadTerm, MxBead n7  = MxBeadTerm,
+                 MxBead n8  = MxBeadTerm, MxBead n9  = MxBeadTerm,
+                 MxBead n10 = MxBeadTerm, MxBead n11 = MxBeadTerm,
+                 MxBead n12 = MxBeadTerm, MxBead n13 = MxBeadTerm,
+                 MxBead n14 = MxBeadTerm, MxBead n15 = MxBeadTerm,
+                 MxBead n16 = MxBeadTerm, MxBead n17 = MxBeadTerm,
+                 MxBead n18 = MxBeadTerm, MxBead n19 = MxBeadTerm> {
+  bits <160> Value;
+  let Value{7-0}     = n0.Value;
+  let Value{15-8}    = n1.Value;
+  let Value{23-16}   = n2.Value;
+  let Value{31-24}   = n3.Value;
+  let Value{39-32}   = n4.Value;
+  let Value{47-40}   = n5.Value;
+  let Value{55-48}   = n6.Value;
+  let Value{63-56}   = n7.Value;
+  let Value{71-64}   = n8.Value;
+  let Value{79-72}   = n9.Value;
+  let Value{87-80}   = n10.Value;
+  let Value{95-88}   = n11.Value;
+  let Value{103-96}  = n12.Value;
+  let Value{111-104} = n13.Value;
+  let Value{119-112} = n14.Value;
+  let Value{127-120} = n15.Value;
+  let Value{135-128} = n16.Value;
+  let Value{143-136} = n17.Value;
+  let Value{151-144} = n18.Value;
+  let Value{159-152} = n19.Value;
+}
+
+class MxEncFixed<bits<16> value> : MxEncoding {
+  let Value{7-0}   = MxBead4Bits<value{3-0}>.Value;
+  let Value{15-8}  = MxBead4Bits<value{7-4}>.Value;
+  let Value{23-16} = MxBead4Bits<value{11-8}>.Value;
+  let Value{31-24} = MxBead4Bits<value{15-12}>.Value;
+}
+
+def MxEncEmpty : MxEncoding;
+
+
+class MxEncEA<MxBead mode, MxBead reg> {
+  MxBead Mode = mode;
+  MxBead Reg = reg;
+}
+
+class MxEncEAr<bits<4> opN> : MxEncEA<MxBead2Bits<0b00>,  MxBeadDAReg<opN>>;
+class MxEncEAd<bits<4> opN> : MxEncEA<MxBead3Bits<0b000>, MxBeadReg<opN>>;
+class MxEncEAa<bits<4> opN> : MxEncEA<MxBead3Bits<0b001>, MxBeadReg<opN>>;
+class MxEncEAj<bits<4> opN> : MxEncEA<MxBead3Bits<0b010>, MxBeadReg<opN>>;
+class MxEncEAo<bits<4> opN> : MxEncEA<MxBead3Bits<0b011>, MxBeadReg<opN>>;
+class MxEncEAe<bits<4> opN> : MxEncEA<MxBead3Bits<0b100>, MxBeadReg<opN>>;
+class MxEncEAp<bits<4> opN> : MxEncEA<MxBead3Bits<0b101>, MxBeadReg<opN>>;
+class MxEncEAf<bits<4> opN> : MxEncEA<MxBead3Bits<0b110>, MxBeadReg<opN>>;
+class MxEncEAb<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b000>>;
+class MxEncEAB<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b001>>;
+class MxEncEAq<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b010>>;
+class MxEncEAg<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b011>>;
+class MxEncEAi<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b100>>;
+
+
+// FIXME rename to MxInst
+class MxInstruction<dag outs, dag ins,
+             string asmStr = "",
+             list<dag> pattern = [],
+             MxEncoding nimbles = MxEncEmpty,
+             InstrItinClass itin = NoItinerary>
+    : Instruction {
+  let Namespace      = "M680x0";
+  let OutOperandList = outs;
+  let InOperandList  = ins;
+  let AsmString      = asmStr;
+  let Pattern        = pattern;
+  let Itinerary      = itin;
+
+  // Byte stream
+  field bits<160> Inst = nimbles.Value;
+
+  // Number of bytes
+  let Size = 0;
+}
+
 // M680x0 PSEUDO INSTRUCTION
 class MxPseudo<dag outs, dag ins, string asmStr = "", list<dag> pattern = []>
     : MxInst<0x0, outs, ins, asmStr, pattern> {

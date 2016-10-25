@@ -30,9 +30,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-class MxMove<string size, dag outs, dag ins, list<dag> pattern = [(null_frag)]>
-    : MxInst<0x0, outs, ins, "move."#size#"\t$src, $dst", pattern>;
+class MxMoveEncoding<MxBead2Bits size, MxEncEA srcEA, MxEncEA dstEA,
+      MxBead srcImm   = MxBeadTerm,   MxBead dstImm   = MxBeadTerm,
+      MxBead src8     = MxBeadIgnore, MxBead dst8     = MxBeadIgnore,
+      MxBead srcScale = MxBeadIgnore, MxBead dstScale = MxBeadIgnore,
+      MxBead srcWL    = MxBeadIgnore, MxBead dstWL    = MxBeadIgnore,
+      MxBead srcDAReg = MxBeadIgnore, MxBead dstDAReg = MxBeadIgnore>
+    : MxEncoding<
+      srcEA.Reg, srcEA.Mode, dstEA.Mode, srcEA.Reg, size, // signle EA
+      srcImm, src8, srcScale, srcWL, srcDAReg,            // src brief ext
+      dstImm, dst8, dstScale, dstWL, dstDAReg>;           // dst brief ext
 
+class MxMove<string size, dag outs, dag ins, list<dag> pattern = [(null_frag)]>
+    : MxInstruction<outs, ins, "move."#size#"\t$src, $dst", pattern>;
 
 class MxMove_RR<MxType DST, MxType SRC>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins SRC.ROp:$src)>;
