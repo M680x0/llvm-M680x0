@@ -26,6 +26,7 @@ using namespace llvm;
 enum ActionType {
   PrintRecords,
   GenEmitter,
+  GenCodeBeads,
   GenRegisterInfo,
   GenInstrInfo,
   GenAsmWriter,
@@ -54,6 +55,8 @@ namespace {
                                "Print all records to stdout (default)"),
                     clEnumValN(GenEmitter, "gen-emitter",
                                "Generate machine code emitter"),
+                    clEnumValN(GenCodeBeads, "gen-code-beads",
+                               "Generate machine code beads"),
                     clEnumValN(GenRegisterInfo, "gen-register-info",
                                "Generate registers and register classes info"),
                     clEnumValN(GenInstrInfo, "gen-instr-info",
@@ -105,6 +108,9 @@ bool LLVMTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
     break;
   case GenEmitter:
     EmitCodeEmitter(Records, OS);
+    break;
+  case GenCodeBeads:
+    EmitCodeBeads(Records, OS);
     break;
   case GenRegisterInfo:
     EmitRegisterInfo(Records, OS);
