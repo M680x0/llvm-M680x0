@@ -28,6 +28,13 @@ namespace llvm {
 // Machine Operand Flags and Description
 //===----------------------------------------------------------------------===//
 
+class MIOperandInfo {
+  public:
+    int8_t MINo;
+    int8_t Type;
+    int8_t OpsNum;
+};
+
 namespace MCOI {
 // Operand constraints
 enum OperandConstraint {
@@ -66,6 +73,7 @@ public:
 
   /// \brief Information about the type of the operand.
   uint8_t OperandType;
+
   /// \brief The lower 16 bits are used to specify which constraints are set.
   /// The higher 16 bits are used to specify the value of constraints (4 bits
   /// each).
@@ -138,6 +146,7 @@ enum Flag {
 class MCInstrDesc {
 public:
   unsigned short Opcode;         // The opcode number
+  unsigned short NumMIOperands;  // Num of MI args (may be more if variable_ops)
   unsigned short NumOperands;    // Num of args (may be more if variable_ops)
   unsigned char NumDefs;         // Num of args that are definitions
   unsigned char Size;            // Number of bytes in encoding.
@@ -146,6 +155,7 @@ public:
   uint64_t TSFlags;              // Target Specific Flag values
   const MCPhysReg *ImplicitUses; // Registers implicitly read by this instr
   const MCPhysReg *ImplicitDefs; // Registers implicitly defined by this instr
+  const MIOperandInfo *MIOpInfo; // 'NumMIOperands' entries about operands
   const MCOperandInfo *OpInfo;   // 'NumOperands' entries about operands
   // Subtarget feature that this is deprecated on, if any
   // -1 implies this is not deprecated by any single feature. It may still be 
