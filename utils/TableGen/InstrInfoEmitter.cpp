@@ -403,12 +403,12 @@ void InstrInfoEmitter::run(raw_ostream &OS) {
   emitEnums(OS);
 
   // Get the MI types separately from data
-  OS << "#ifdef GET_INSTRINFO_MI_TYPES\n";
-  OS << "#undef GET_INSTRINFO_MI_TYPES\n";
+  OS << "#ifdef GET_INSTRINFO_MI_OPS_INFO\n";
+  OS << "#undef GET_INSTRINFO_MI_OPS_INFO\n";
   OS << "namespace llvm {\n\n";
   emitOperandTypesEnum(OS, CDP.getTargetInfo());
   OS << "} // end llvm namespace\n";
-  OS << "#endif // GET_INSTRINFO_MI_TYPES\n\n";
+  OS << "#endif // GET_INSTRINFO_MI_OPS_INFO\n\n";
 
 
   OS << "#ifdef GET_INSTRINFO_MC_DESC\n";

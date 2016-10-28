@@ -198,7 +198,7 @@ def TAILJMPj  : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
 
 let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
 
-def RTS : MxInst<0x0, (outs), (ins), "rts", []>;
+def RTS : MxInstruction<(outs), (ins), "rts", [], MxEncFixed<0x4E75>>;
 
 let isCodeGenOnly = 1 in {
 def RET : MxPseudo<(outs), (ins i32imm:$adj, variable_ops), "",

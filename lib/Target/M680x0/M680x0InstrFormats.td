@@ -59,55 +59,34 @@
 //
 //===----------------------------------------------------------------------===//
 
-// M680x0 INSTRUCTION. Most instructions specify the location of an operand by
-// using the effective address field in the operation word. The effective address
-// is composed of two 3-bit fields: the mode field and the register field. The
-// value in the mode field selects the different address modes. The register
-// field contains the number of a register.  The effective address field may
-// require additional information to fully specify the operand. This additional
-// information, called the effective address extension, is contained in the
-// following word or words and is considered part of the instruction. The
-// effective address modes are grouped into three categories: register direct,
-// memory addressing, and special.
-class MxInst<bits<16> opcode,
-             dag outs, dag ins,
-             string asmStr = "",
-             list<dag> pattern = [],
-             InstrItinClass itin = NoItinerary>
-    : Instruction {
-  let Namespace      = "M680x0";
-  let OutOperandList = outs;
-  let InOperandList  = ins;
-  let AsmString      = asmStr;
-  let Pattern        = pattern;
-  let Itinerary      = itin;
-
-  // NOTE Opcode is no really applicable for the most instructions since they are
-  // composed based on the actual register used and EA mode
-  bits<16> Opcode = opcode;
-}
-
 //===----------------------------------------------------------------------===//
 // Encoding primitives
 //===----------------------------------------------------------------------===//
 
-class MxBead<bits<4> type, bits<4> value> {
+class MxBead<bits<4> type, bit b4 = 0, bit b5 = 0, bit b6 = 0, bit b7 = 0> {
   bits<8> Value = 0b00000000;
   let Value{3-0} = type;
-  let Value{7-4} = value;
+  let Value{4} = b4;
+  let Value{5} = b5;
+  let Value{6} = b6;
+  let Value{7} = b7;
 }
 
-def   MxBeadTerm                  : MxBead<0b0000, 0b0000>;
-class MxBead1Bit  <bits<1> value> : MxBead<0b0001, 0> { let Value{4}   = value; }
-class MxBead2Bits <bits<2> value> : MxBead<0b0010, 0> { let Value{5-4} = value; }
-class MxBead3Bits <bits<3> value> : MxBead<0b0011, 0> { let Value{6-4} = value; }
-class MxBead4Bits <bits<4> value> : MxBead<0b0100, value>;
-class MxBeadDAReg <bits<4> opN>   : MxBead<0b0101, opN>;
-class MxBeadReg   <bits<4> opN>   : MxBead<0b0110, opN>;
-class MxBead8Imm  <bits<4> opN>   : MxBead<0b0111, opN>;
-class MxBead16Imm <bits<4> opN>   : MxBead<0b1000, opN>;
-class MxBead32Imm <bits<4> opN>   : MxBead<0b1001, opN>;
-def   MxBeadIgnore                : MxBead<0b1111, 0b1111>;
+def   MxBeadTerm                         : MxBead<0b0000, 0, 0, 0, 0>;
+class MxBead1Bit  <bits<1> b>            : MxBead<0b0001, b>;
+class MxBead2Bits <bits<2> b>            : MxBead<0b0010, b{0}, b{1}>;
+class MxBead3Bits <bits<3> b>            : MxBead<0b0011, b{0}, b{1}, b{2}>;
+class MxBead4Bits <bits<4> b>            : MxBead<0b0100, b{0}, b{1}, b{2}, b{3}>;
+/// bits<3> o - operand number
+/// bit a     - use next similar operand, used to select index register or
+///             outer dispacement
+class MxBeadDAReg <bits<3> o, bit a = 0> : MxBead<0b0101, o{0}, o{1}, o{2}, a>;
+class MxBeadDA    <bits<3> o, bit a = 0> : MxBead<0b0110, o{0}, o{1}, o{2}, a>;
+class MxBeadReg   <bits<3> o, bit a = 0> : MxBead<0b0111, o{0}, o{1}, o{2}, a>;
+class MxBead8Imm  <bits<3> o, bit a = 0> : MxBead<0b1000, o{0}, o{1}, o{2}, a>;
+class MxBead16Imm <bits<3> o, bit a = 0> : MxBead<0b1001, o{0}, o{1}, o{2}, a>;
+class MxBead32Imm <bits<3> o, bit a = 0> : MxBead<0b1010, o{0}, o{1}, o{2}, a>;
+def   MxBeadIgnore                       : MxBead<0b1111, 1, 1, 1, 1>;
 
 class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm, 
                  MxBead n2  = MxBeadTerm, MxBead n3  = MxBeadTerm,
@@ -118,8 +97,10 @@ class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm,
                  MxBead n12 = MxBeadTerm, MxBead n13 = MxBeadTerm,
                  MxBead n14 = MxBeadTerm, MxBead n15 = MxBeadTerm,
                  MxBead n16 = MxBeadTerm, MxBead n17 = MxBeadTerm,
-                 MxBead n18 = MxBeadTerm, MxBead n19 = MxBeadTerm> {
-  bits <160> Value;
+                 MxBead n18 = MxBeadTerm, MxBead n19 = MxBeadTerm,
+                 MxBead n20 = MxBeadTerm, MxBead n21 = MxBeadTerm,
+                 MxBead n22 = MxBeadTerm, MxBead n23 = MxBeadTerm> {
+  bits <192> Value;
   let Value{7-0}     = n0.Value;
   let Value{15-8}    = n1.Value;
   let Value{23-16}   = n2.Value;
@@ -140,6 +121,10 @@ class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm,
   let Value{143-136} = n17.Value;
   let Value{151-144} = n18.Value;
   let Value{159-152} = n19.Value;
+  let Value{167-160} = n20.Value;
+  let Value{175-168} = n21.Value;
+  let Value{183-176} = n22.Value;
+  let Value{191-184} = n23.Value;
 }
 
 class MxEncFixed<bits<16> value> : MxEncoding {
@@ -152,31 +137,167 @@ class MxEncFixed<bits<16> value> : MxEncoding {
 def MxEncEmpty : MxEncoding;
 
 
-class MxEncEA<MxBead mode, MxBead reg> {
-  MxBead Mode = mode;
+/// M680x0 Standard Effective Address layout:
+///
+/// :-------------------:
+/// | 5  4  3 | 2  1  0 |
+/// |   mode  |   reg   |
+/// :-------------------:
+///
+/// If the EA is a direct register use the 3 bit is known to distinguish
+/// between Data and Address register types and bits 5 and 4 are 0. This allows
+/// us to encode EA as MxBead2Bits<0b00> and MxBeadDAReg<opN>.
+///
+///
+/// But MOVE instruction uses reversed layout for destination EA:
+///
+/// :-------------------:
+/// | 5  4  3 | 2  1  0 |
+/// |   reg   |  mode   |
+/// :-------------------:
+///
+/// And this complicates things a bit because the DA bit is now separated from
+/// the register and we have to encode those separately using MxBeadDA<opN>
+///
+class MxEncEA<MxBead reg, MxBead mode, MxBead da = MxBeadIgnore> {
   MxBead Reg = reg;
+  MxBead Mode = mode;
+  MxBead DA = da;
 }
 
-class MxEncEAr<bits<4> opN> : MxEncEA<MxBead2Bits<0b00>,  MxBeadDAReg<opN>>;
-class MxEncEAd<bits<4> opN> : MxEncEA<MxBead3Bits<0b000>, MxBeadReg<opN>>;
-class MxEncEAa<bits<4> opN> : MxEncEA<MxBead3Bits<0b001>, MxBeadReg<opN>>;
-class MxEncEAj<bits<4> opN> : MxEncEA<MxBead3Bits<0b010>, MxBeadReg<opN>>;
-class MxEncEAo<bits<4> opN> : MxEncEA<MxBead3Bits<0b011>, MxBeadReg<opN>>;
-class MxEncEAe<bits<4> opN> : MxEncEA<MxBead3Bits<0b100>, MxBeadReg<opN>>;
-class MxEncEAp<bits<4> opN> : MxEncEA<MxBead3Bits<0b101>, MxBeadReg<opN>>;
-class MxEncEAf<bits<4> opN> : MxEncEA<MxBead3Bits<0b110>, MxBeadReg<opN>>;
-class MxEncEAb<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b000>>;
-class MxEncEAB<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b001>>;
-class MxEncEAq<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b010>>;
-class MxEncEAg<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b011>>;
-class MxEncEAi<bits<4> opN> : MxEncEA<MxBead3Bits<0b111>, MxBead3Bits<0b100>>;
+// NOTE: freaking tablegen...
+def MxEncEAr_0: MxEncEA<MxBeadDAReg<0>, MxBead2Bits<0b00>>;
+def MxEncEAd_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b00>, MxBead1Bit<0>>;
+def MxEncEAa_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b00>, MxBead1Bit<1>>;
+def MxEncEAj_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b01>, MxBead1Bit<0>>;
+def MxEncEAo_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b01>, MxBead1Bit<1>>;
+def MxEncEAe_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b10>, MxBead1Bit<0>>;
+def MxEncEAp_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b10>, MxBead1Bit<1>>;
+def MxEncEAf_0: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b11>, MxBead1Bit<0>>;
+
+def MxEncEAr_0_x: MxEncEA<MxBeadReg<0>, MxBead2Bits<0b00>, MxBeadDA<0>>;
+
+def MxEncEAr_1: MxEncEA<MxBeadDAReg<1>, MxBead2Bits<0b00>>;
+def MxEncEAd_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b00>, MxBead1Bit<0>>;
+def MxEncEAa_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b00>, MxBead1Bit<1>>;
+def MxEncEAj_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b01>, MxBead1Bit<0>>;
+def MxEncEAo_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b01>, MxBead1Bit<1>>;
+def MxEncEAe_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b10>, MxBead1Bit<0>>;
+def MxEncEAp_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b10>, MxBead1Bit<1>>;
+def MxEncEAf_1: MxEncEA<MxBeadReg<1>, MxBead2Bits<0b11>, MxBead1Bit<0>>;
+
+def MxEncEAr_2: MxEncEA<MxBeadDAReg<2>, MxBead2Bits<0b00>>;
+def MxEncEAd_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b00>, MxBead1Bit<0>>;
+def MxEncEAa_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b00>, MxBead1Bit<1>>;
+def MxEncEAj_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b01>, MxBead1Bit<0>>;
+def MxEncEAo_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b01>, MxBead1Bit<1>>;
+def MxEncEAe_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b10>, MxBead1Bit<0>>;
+def MxEncEAp_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b10>, MxBead1Bit<1>>;
+def MxEncEAf_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b11>, MxBead1Bit<0>>;
+
+def MxEncEAb : MxEncEA<MxBead3Bits<0b000>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+def MxEncEAB : MxEncEA<MxBead3Bits<0b001>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+def MxEncEAq : MxEncEA<MxBead3Bits<0b010>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+def MxEncEAg : MxEncEA<MxBead3Bits<0b011>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+def MxEncEAi : MxEncEA<MxBead3Bits<0b100>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+
+
+// Represents two types of extension word:
+//   - Imm extension word
+//   - Brief extension word
+class MxEncExt<MxBead imm   = MxBeadIgnore,   MxBead b8 = MxBeadIgnore,
+               MxBead scale = MxBeadIgnore, MxBead wl = MxBeadIgnore,
+               MxBead daReg = MxBeadIgnore> {
+  MxBead Imm = imm;
+  MxBead B8 = b8;
+  MxBead Scale = scale;
+  MxBead WL = wl;
+  MxBead DAReg = daReg;
+}
+
+def MxExtEmpty : MxEncExt;
+
+def  MxExtI8_0 : MxEncExt<MxBead8Imm<0>>;
+def MxExtI16_0 : MxEncExt<MxBead16Imm<0>>;
+def MxExtI32_0 : MxEncExt<MxBead32Imm<0>>;
+
+def  MxExtI8_1 : MxEncExt<MxBead8Imm<1>>;
+def MxExtI16_1 : MxEncExt<MxBead16Imm<1>>;
+def MxExtI32_1 : MxEncExt<MxBead32Imm<1>>;
+
+def  MxExtI8_2 : MxEncExt<MxBead8Imm<2>>;
+def MxExtI16_2 : MxEncExt<MxBead16Imm<2>>;
+def MxExtI32_2 : MxEncExt<MxBead32Imm<2>>;
+
+/* class MxExtBrief<bits<3> opN, bits<1> wl = 0b1> */
+/*     : MxEncExt<MxBead8Imm<opN>,   MxBead1Bit<0b0>, */
+/*                MxBead2Bits<0b00>, MxBead1Bit<wl>, */
+/*                MxBeadDAReg<opN, 1>>; */
+
+// NOTE They are all using Long Xn
+def MxExtBrief_0 : MxEncExt<MxBead8Imm<0>, MxBead1Bit<0b0>,
+                            MxBead2Bits<0b00>, MxBead1Bit<1>,
+                            MxBeadDAReg<0, 1>>;
+
+def MxExtBrief_1 : MxEncExt<MxBead8Imm<1>, MxBead1Bit<0b0>,
+                            MxBead2Bits<0b00>, MxBead1Bit<1>,
+                            MxBeadDAReg<1, 1>>;
+
+def MxExtBrief_2 : MxEncExt<MxBead8Imm<2>, MxBead1Bit<0b0>,
+                            MxBead2Bits<0b00>, MxBead1Bit<1>,
+                            MxBeadDAReg<2, 1>>;
+
+def MxExtBrief_3 : MxEncExt<MxBead8Imm<3>, MxBead1Bit<0b0>,
+                            MxBead2Bits<0b00>, MxBead1Bit<1>,
+                            MxBeadDAReg<3, 1>>;
+
+def MxExtBrief_4 : MxEncExt<MxBead8Imm<4>, MxBead1Bit<0b0>,
+                            MxBead2Bits<0b00>, MxBead1Bit<1>,
+                            MxBeadDAReg<4, 1>>;
+
+class MxEncSize<bits<2> value> : MxBead2Bits<value>;
+def MxEncSize8  : MxEncSize<0b00>;
+def MxEncSize16 : MxEncSize<0b01>;
+def MxEncSize32 : MxEncSize<0b10>;
+def MxEncSize64 : MxEncSize<0b11>;
+
+// M680x0 INSTRUCTION. Most instructions specify the location of an operand by
+// using the effective address field in the operation word. The effective address
+// is composed of two 3-bit fields: the mode field and the register field. The
+// value in the mode field selects the different address modes. The register
+// field contains the number of a register.  The effective address field may
+// require additional information to fully specify the operand. This additional
+// information, called the effective address extension, is contained in the
+// following word or words and is considered part of the instruction. The
+// effective address modes are grouped into three categories: register direct,
+// memory addressing, and special.
+// FIXME remove this class
+class MxInst<bits<16> opcode,
+             dag outs, dag ins,
+             string asmStr = "",
+             list<dag> pattern = [],
+             InstrItinClass itin = NoItinerary>
+    : Instruction {
+  let Namespace      = "M680x0";
+  let OutOperandList = outs;
+  let InOperandList  = ins;
+  let AsmString      = asmStr;
+  let Pattern        = pattern;
+  let Itinerary      = itin;
+
+  // NOTE Opcode is no really applicable for the most instructions since they are
+  // composed based on the actual register used and EA mode
+  bits<16> Opcode = opcode;
+
+  field bits<192> Beads = MxEncEmpty.Value;
+}
 
 
 // FIXME rename to MxInst
 class MxInstruction<dag outs, dag ins,
              string asmStr = "",
              list<dag> pattern = [],
-             MxEncoding nimbles = MxEncEmpty,
+             MxEncoding beads = MxEncEmpty,
              InstrItinClass itin = NoItinerary>
     : Instruction {
   let Namespace      = "M680x0";
@@ -187,7 +308,7 @@ class MxInstruction<dag outs, dag ins,
   let Itinerary      = itin;
 
   // Byte stream
-  field bits<160> Inst = nimbles.Value;
+  field bits<192> Beads = beads.Value;
 
   // Number of bytes
   let Size = 0;

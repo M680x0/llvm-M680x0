@@ -225,7 +225,7 @@ MCAsmBackend *llvm::
 createM680x0AsmBackend(const Target &T, const MCRegisterInfo &MRI,
                        const Triple &TheTriple, StringRef CPU,
                        const MCTargetOptions &Options) {
-  assert (TheTriple.getEnvironment() == Triple::GNUX32);
+  // assert (TheTriple.getEnvironment() == Triple::GNU);
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
   return new M680x0ELFAsmBackend(T, OSABI, CPU);
 }
