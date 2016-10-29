@@ -71,6 +71,13 @@ printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O) {
 }
 
 void M680x0InstPrinter::
+printDisp(const MCInst *MI, int opNum, raw_ostream &O) {
+  const MCOperand &MO = MI->getOperand(opNum);
+  assert (MO.isImm());
+  O << (unsigned short int)MO.getImm();
+}
+
+void M680x0InstPrinter::
 printARIMem(const MCInst *MI, int opNum, raw_ostream &O) {
   O << '(';
   printOperand(MI, opNum, O);
@@ -90,7 +97,7 @@ printARIPDMem(const MCInst *MI, int opNum, raw_ostream &O) {
 void M680x0InstPrinter::
 printARIDMem(const MCInst *MI, int opNum, raw_ostream &O) {
   O << '(';
-  printOperand(MI, opNum + M680x0::MemDisp, O);
+  printDisp(MI, opNum + M680x0::MemDisp, O);
   O << ',';
   printOperand(MI, opNum + M680x0::MemBase, O);
   O << ')';
@@ -111,7 +118,7 @@ printAbsMem(const MCInst *MI, int opNum, raw_ostream &O) {
 void M680x0InstPrinter::
 printPCDMem(const MCInst *MI, int opNum, raw_ostream &O) {
   O << '(';
-  printOperand(MI, opNum + M680x0::PCRelDisp, O);
+  printDisp(MI, opNum + M680x0::PCRelDisp, O);
   O << ",%pc)";
 }
 

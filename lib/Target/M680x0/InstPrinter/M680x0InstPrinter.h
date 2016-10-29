@@ -41,6 +41,7 @@ public:
 private:
   void printOperand(const MCInst *MI, unsigned opNum, raw_ostream &O);
   void printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O);
+  void printDisp(const MCInst *MI, int opNum, raw_ostream &O);
   void printARIMem(const MCInst *MI, int opNum, raw_ostream &O);
   void printARIPIMem(const MCInst *MI, int opNum, raw_ostream &O);
   void printARIPDMem(const MCInst *MI, int opNum, raw_ostream &O);
