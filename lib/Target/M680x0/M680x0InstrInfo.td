@@ -28,7 +28,7 @@ def MxSDT_Ret          : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
 
 def MxSDT_TCRet        : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
-/* def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>; */
+def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;
 
 // RES, CCR <- op OPD
 def MxSDT_UnArithCCROut : SDTypeProfile<2, 1,
@@ -71,7 +71,8 @@ def MxRet   : SDNode<"M680x0ISD::RET", MxSDT_Ret,
 def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
                      [SDNPHasChain,  SDNPOptInGlue, SDNPVariadic]>;
 
-/* def MxWrapper : SDNode<"M680x0ISD::Wrapper", MxSDT_Wrapper>; */
+def MxWrapper   : SDNode<"M680x0ISD::Wrapper",   MxSDT_Wrapper>;
+def MxWrapperPC : SDNode<"M680x0ISD::WrapperPC", MxSDT_Wrapper>;
 
 // FIXME remove this
 def MxAdd  : SDNode<"M680x0ISD::ADD",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
@@ -308,6 +309,7 @@ def FarData      : Predicate<"TM.getCodeModel() != CodeModel::Small &&"
                              "TM.getCodeModel() != CodeModel::Kernel">;
 def NearData     : Predicate<"TM.getCodeModel() == CodeModel::Small ||"
                              "TM.getCodeModel() == CodeModel::Kernel">;
+def IsPIC        : Predicate<"TM.isPositionIndependent()">;
 def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
 
 //===----------------------------------------------------------------------===//
@@ -405,9 +407,11 @@ def MxExtLoadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 //===----------------------------------------------------------------------===//
 
 // TODO make it folded like MxType8.F.Op nad MxType8.F.Pat
+// TODO move strings into META subclass
 class MxType<ValueType vt,  /// Type of data this fixture refers to
             string prefix,  /// Prefix used to identify type
            string postfix,  /// Prefix used to qualify type
+              string rLet,  /// Register letter
             MxOperand rOp,  /// Supported any register operand
             MxOperand jOp,  /// Supported ARI operand
       ComplexPattern jPat,  /// What ARI pattern to use
@@ -427,6 +431,7 @@ class MxType<ValueType vt,  /// Type of data this fixture refers to
   ValueType VT = vt;
   string Prefix = prefix;
   string Postfix = postfix;
+  string RLet = rLet;
   MxOperand ROp = rOp;
   MxOperand JOp = jOp;
   ComplexPattern JPat = jPat;
@@ -443,8 +448,8 @@ class MxType<ValueType vt,  /// Type of data this fixture refers to
   PatFrag Load = load;
 }
 
-class MxType8Class<MxOperand reg>
-    : MxType<i8, "b", "", reg,
+class MxType8Class<string rLet, MxOperand reg>
+    : MxType<i8, "b", "", rLet, reg,
              MxARI8,   MxCP_ARI,
              MxARIPI8, MxCP_ARIPI,
              MxARIPD8, MxCP_ARIPD,
@@ -453,10 +458,10 @@ class MxType8Class<MxOperand reg>
              Mxi8imm,  MximmSExt8,
              Mxloadi8>;
 
-def MxType8 : MxType8Class<?>;
+def MxType8 : MxType8Class<?,?>;
 
-class MxType16Class<MxOperand reg>
-    : MxType<i16, "w", "", reg,
+class MxType16Class<string rLet, MxOperand reg>
+    : MxType<i16, "w", "", rLet, reg,
              MxARI16,   MxCP_ARI,
              MxARIPI16, MxCP_ARIPI,
              MxARIPD16, MxCP_ARIPD,
@@ -465,10 +470,10 @@ class MxType16Class<MxOperand reg>
              Mxi16imm,  MximmSExt16,
              Mxloadi16>;
 
-def MxType16 : MxType16Class<?>;
+def MxType16 : MxType16Class<?,?>;
 
-class MxType32Class<MxOperand reg>
-    : MxType<i32, "l", "", reg,
+class MxType32Class<string rLet, MxOperand reg>
+    : MxType<i32, "l", "", rLet, reg,
              MxARI32,   MxCP_ARI,
              MxARIPI32, MxCP_ARIPI,
              MxARIPD32, MxCP_ARIPD,
@@ -477,25 +482,25 @@ class MxType32Class<MxOperand reg>
              Mxi32imm,  MximmSExt32,
              Mxloadi32>;
 
-def MxType32 : MxType32Class<?>;
+def MxType32 : MxType32Class<?,?>;
 
 
-def MxType8d : MxType8Class<MxDRD8>;
+def MxType8d : MxType8Class<"d", MxDRD8>;
 
-def MxType16d : MxType16Class<MxDRD16>;
-def MxType16a : MxType16Class<MxARD16>;
-def MxType16r : MxType16Class<MxXRD16>;
-def MxType32d : MxType32Class<MxDRD32>;
-def MxType32a : MxType32Class<MxARD32>;
-def MxType32r : MxType32Class<MxXRD32>;
+def MxType16d : MxType16Class<"d", MxDRD16>;
+def MxType16a : MxType16Class<"a", MxARD16>;
+def MxType16r : MxType16Class<"r", MxXRD16>;
+def MxType32d : MxType32Class<"a", MxDRD32>;
+def MxType32a : MxType32Class<"a", MxARD32>;
+def MxType32r : MxType32Class<"r", MxXRD32>;
 
 let Postfix = "_TC" in {
-def MxType16d_TC : MxType16Class<MxDRD16_TC>;
-def MxType16a_TC : MxType16Class<MxARD16_TC>;
-def MxType16r_TC : MxType16Class<MxXRD16_TC>;
-def MxType32d_TC : MxType32Class<MxDRD32_TC>;
-def MxType32a_TC : MxType32Class<MxARD32_TC>;
-def MxType32r_TC : MxType32Class<MxXRD32_TC>;
+def MxType16d_TC : MxType16Class<"d", MxDRD16_TC>;
+def MxType16a_TC : MxType16Class<"a", MxARD16_TC>;
+def MxType16r_TC : MxType16Class<"r", MxXRD16_TC>;
+def MxType32d_TC : MxType32Class<"a", MxDRD32_TC>;
+def MxType32a_TC : MxType32Class<"a", MxARD32_TC>;
+def MxType32r_TC : MxType32Class<"r", MxXRD32_TC>;
 }
 
 //===----------------------------------------------------------------------===//

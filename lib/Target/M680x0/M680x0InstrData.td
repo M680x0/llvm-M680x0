@@ -19,7 +19,7 @@
 //
 //  Pseudo:
 //
-//     MOVSX [~]     MOVZX [~]     MOVX   [x]
+//     MOVSX [x]     MOVZX [x]     MOVX   [x]
 //
 //  Map:
 //
@@ -30,7 +30,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-// Note Move requires EA X version for direct register destination(0)
+//===----------------------------------------------------------------------===//
+// MOVE
+//===----------------------------------------------------------------------===//
+
+/// ----------------------------------------------------
+///  F  E | D  C | B  A  9 | 8  7  6 | 5  4  3 | 2  1  0
+/// ----------------------------------------------------
+///       |      |    DESTINATION    |       SOURCE
+///  x  x | SIZE |   REG   |   MODE  |   MODE  |   REG
+/// ----------------------------------------------------
+///
+/// NOTE Move requires EA X version for direct register destination(0)
 class MxMoveEncoding<MxBead2Bits size,
                      MxEncEA srcEA, MxEncExt srcExt,
                      MxEncEA dstEA, MxEncExt dstExt>
@@ -40,12 +51,13 @@ class MxMoveEncoding<MxBead2Bits size,
       dstExt.Imm, dstExt.B8, dstExt.Scale, dstExt.WL, dstExt.DAReg>;
 
 class MxMove<string size, dag outs, dag ins, list<dag> pattern, MxEncoding enc>
-    : MxInstruction<outs, ins, "move."#size#"\t$src, $dst", pattern, enc>;
+    : MxIIII<outs, ins, "move."#size#"\t$src, $dst", pattern, enc>;
 
-class MxMove_RR<MxType DST, MxType SRC>
+class MxMove_RR<MxType DST, MxType SRC, MxMoveEncoding ENC>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins SRC.ROp:$src),
-             [(null_frag)], MxEncEmpty>;
+             [(null_frag)], ENC>;
 
+let mayStore = 1 in
 class MxMove_MR<MxOperand MEMOpd, ComplexPattern MEMPat, MxType REG,
                 MxMoveEncoding ENC>
     : MxMove<REG.Prefix, (outs), (ins MEMOpd:$dst, REG.ROp:$src),
@@ -56,11 +68,12 @@ class MxMove_MI<MxOperand MEMOpd, ComplexPattern MEMPat, MxType TYPE,
     : MxMove<TYPE.Prefix, (outs), (ins MEMOpd:$dst, TYPE.IOp:$src),
              [(store TYPE.IPat:$src, MEMPat:$dst)], ENC>;
 
-class MxMove_RI<MxType DST>
+class MxMove_RI<MxType DST, MxMoveEncoding ENC>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins DST.IOp:$src),
-              [(set DST.VT:$dst, DST.IPat:$src)], MxEncEmpty>;
+              [(set DST.VT:$dst, DST.IPat:$src)], ENC>;
 
 
+let mayLoad = 1 in
 class MxMove_RM<MxType REG, MxOperand MEMOpd, ComplexPattern MEMPat,
                 MxBead2Bits SIZE,
                 MxEncEA SRCEA, MxEncExt SRCEXT,
@@ -69,7 +82,6 @@ class MxMove_RM<MxType REG, MxOperand MEMOpd, ComplexPattern MEMPat,
              [(set REG.VT:$dst, (REG.Load MEMPat:$src))],
              MxMoveEncoding<SIZE, SRCEA, SRCEXT, DSTEA, DSTEXT>>;
 
-let mayLoad = 1 in
 multiclass MMxMove_RM<MxType REG, MxEncSize SIZE, MxEncEA EA_0> {
 
 // FIXME tablegen defines implicitly created defs inside multiclass which
@@ -79,11 +91,13 @@ multiclass MMxMove_RM<MxType REG, MxEncSize SIZE, MxEncEA EA_0> {
 def NAME#REG.JOp.Letter#REG.Postfix : MxMove_RM<REG, REG.JOp, REG.JPat,
     SIZE, MxEncEAj_1, MxExtEmpty, EA_0, MxExtEmpty>;
 
-/* // REG <- (An)+ */
-/* def NAME#REG.OOp.Letter#REG.Postfix : MxMove_RM<REG, REG.OOp, REG.OPat>; */
+// REG <- (An)+
+def NAME#REG.OOp.Letter#REG.Postfix : MxMove_RM<REG, REG.OOp, REG.OPat,
+    SIZE, MxEncEAo_1, MxExtEmpty, EA_0, MxExtEmpty>;
 
-/* // REG <- -(An) */
-/* def NAME#REG.EOp.Letter#REG.Postfix : MxMove_RM<REG, REG.EOp, REG.EPat>; */
+// REG <- -(An)
+def NAME#REG.EOp.Letter#REG.Postfix : MxMove_RM<REG, REG.EOp, REG.EPat,
+    SIZE, MxEncEAe_1, MxExtEmpty, EA_0, MxExtEmpty>;
 
 // REG <- (i,An)
 def NAME#REG.POp.Letter#REG.Postfix : MxMove_RM<REG, REG.POp, REG.PPat,
@@ -134,7 +148,9 @@ def NAME#TYPE.FOp.Letter#TYPE.Postfix
 
 }
 
-def  MOV8dd : MxMove_RR<MxType8d, MxType8d>;
+def MOV8dd
+  : MxMove_RR<MxType8d, MxType8d,
+    MxMoveEncoding<MxEncSize8, MxEncEAd_1, MxExtEmpty, MxEncEAd_0, MxExtEmpty>>;
 
 // M <- R
 def MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d,
@@ -152,6 +168,16 @@ def MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAp_0, MxExtI16_0>>;
 
+def MOV8ed : MxMove_MR<MxType8.EOp, MxType8.EPat, MxType8d,
+                       MxMoveEncoding<MxEncSize8,
+                            /*src*/   MxEncEAd_1, MxExtEmpty,
+                            /*dst*/   MxEncEAe_0, MxExtEmpty>>;
+
+def MOV8od : MxMove_MR<MxType8.OOp, MxType8.OPat, MxType8d,
+                       MxMoveEncoding<MxEncSize8,
+                            /*src*/   MxEncEAd_1, MxExtEmpty,
+                            /*dst*/   MxEncEAo_0, MxExtEmpty>>;
+
 // M <- I
 // def  MOV8ji : MxMove_MI<MxType8.JOp, MxType8.JPat, MxType8>;
 // def  MOV8fi : MxMove_MI<MxType8.FOp, MxType8.FPat, MxType8>;
@@ -163,7 +189,10 @@ foreach S = [16, 32] in {
     foreach O = [ "r", "a" ] in {
       def MOV#S#D#O : MxMove_RR<
         !cast<MxType>("MxType"#S#D),
-        !cast<MxType>("MxType"#S#O)>;
+        !cast<MxType>("MxType"#S#O),
+        MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+                       !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
+                       !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
     }
 
     // M <- R
@@ -191,10 +220,28 @@ foreach S = [16, 32] in {
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAp_0, MxExtI16_0>>;
 
+    def MOV#S#"e"#D : MxMove_MR<
+      !cast<MxType>("MxType"#S).EOp,
+      !cast<MxType>("MxType"#S).EPat,
+      !cast<MxType>("MxType"#S#D),
+      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+                     !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
+                     MxEncEAe_0, MxExtEmpty>>;
+
+    def MOV#S#"o"#D : MxMove_MR<
+      !cast<MxType>("MxType"#S).OOp,
+      !cast<MxType>("MxType"#S).OPat,
+      !cast<MxType>("MxType"#S#D),
+      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+                     !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
+                     MxEncEAo_0, MxExtEmpty>>;
 
     // R <- I
     def MOV#S#D#"i" : MxMove_RI<
-      !cast<MxType>("MxType"#S#D)>;
+      !cast<MxType>("MxType"#S#D),
+        MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+                       MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
+                       !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
   }
 
   // M <- I
@@ -213,7 +260,7 @@ foreach S = [16, 32] in {
     MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
                    MxEncEAi, MxExtI32_1,
                    MxEncEAf_0, MxExtBrief_0>>;
-  
+
   def MOV#S#"p"#"i" : MxMove_MI<
     !cast<MxType>("MxType"#S).POp,
     !cast<MxType>("MxType"#S).PPat,
@@ -264,37 +311,6 @@ defm MOV16f : MMxMove_MM<MxType16, MxType16.FOp, MxType16.FPat,
 defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat,
                          MxEncSize32, MxEncEAf_0, MxExtBrief_0>;
 
-
-//===----------------------------------------------------------------------===//
-// PUSH
-//===----------------------------------------------------------------------===//
-
-// FIXME Make it nicier, mb as Pseudos?
-let Uses = [SP], Defs = [SP], hasSideEffects = 0 in {
-
-// SP <- SP - <size>; (SP) <- Dn
-let mayStore = 1 in {
-def PUSH8r  : MxInst<0x0, (outs), (ins DR8:$reg),
-                         "move.b\t$reg, -(SP)",[]>;
-def PUSH16r : MxInst<0x0, (outs), (ins DR16:$reg),
-                         "move.w\t$reg, -(SP)",[]>;
-def PUSH32r : MxInst<0x0, (outs), (ins AR32:$reg),
-                         "move.l\t$reg, -(SP)",[]>;
-} // let mayStore = 1
-
-// Dn <- (SP); SP <- SP + <size>
-let mayLoad = 1 in {
-def POP8r  : MxInst<0x0, (outs DR8:$reg),  (ins),
-                        "move.b\t(SP)+, $reg", []>;
-def POP16r : MxInst<0x0, (outs DR16:$reg), (ins),
-                        "move.w\t(SP)+, $reg", []>;
-def POP32r : MxInst<0x0, (outs AR32:$reg), (ins),
-                        "move.l\t(SP)+, $reg", []>;
-} // let mayLoad = 1
-
-} // let Uses/Defs = [SP], hasSideEffects = 0
-
-
 //===----------------------------------------------------------------------===//
 // LEA
 //===----------------------------------------------------------------------===//
@@ -310,6 +326,26 @@ def LEA32f : LEA32<MxARII32, MxCP_ARII>;
 //===----------------------------------------------------------------------===//
 // Pseudos
 //===----------------------------------------------------------------------===//
+
+/// Pushe/Pop to/from SP for simplicity
+let Uses = [SP], Defs = [SP], hasSideEffects = 0 in {
+
+// SP <- SP - <size>; (SP) <- Dn
+let mayStore = 1 in {
+def PUSH8d  : MxPseudo<(outs), (ins DR8:$reg)>;
+def PUSH16d : MxPseudo<(outs), (ins DR16:$reg)>;
+def PUSH32r : MxPseudo<(outs), (ins XR32:$reg)>;
+} // let mayStore = 1
+
+// Dn <- (SP); SP <- SP + <size>
+let mayLoad = 1 in {
+def POP8d  : MxPseudo<(outs DR8:$reg),  (ins)>;
+def POP16d : MxPseudo<(outs DR16:$reg), (ins)>;
+def POP32r : MxPseudo<(outs XR32:$reg), (ins)>;
+} // let mayLoad = 1
+
+} // let Uses/Defs = [SP], hasSideEffects = 0
+
 
 class MxPseudoMove_RR<MxType DST, MxType SRC, list<dag> PAT = []>
     : MxPseudo<(outs DST.ROp:$dst), (ins SRC.ROp:$src), "", PAT>;

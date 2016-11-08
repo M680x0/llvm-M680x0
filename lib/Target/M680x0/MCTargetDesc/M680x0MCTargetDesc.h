@@ -15,6 +15,7 @@
 #define LLVM_LIB_TARGET_M680X0_MCTARGETDESC_M680X0MCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/MC/MCInstrDesc.h"
 
 namespace llvm {
 class MCAsmBackend;

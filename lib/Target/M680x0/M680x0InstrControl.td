@@ -40,7 +40,7 @@
 
 // NOP
 let hasSideEffects = 0 in {
-  def NOP : MxInstruction<(outs), (ins), "nop", [], MxEncFixed<0x4E71>>;
+  def NOP : MxIIII<(outs), (ins), "nop", [], MxEncFixed<0x4E71>>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -152,6 +152,11 @@ foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
 // Call
 //===----------------------------------------------------------------------===//
 
+class MxCallEncoding<MxEncEA EA, MxEncExt EXT>
+    : MxEncoding<EA.Reg, EA.DA, EA.Mode,
+                 MxBead2Bits<0b10>, MxBead4Bits<0b1110>, MxBead4Bits<0b0100>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
+
 let isCall = 1 in
 // All calls clobber the non-callee saved registers. %SP is marked as
 // a use to prevent stack-pointer assignments that appear immediately
@@ -159,17 +164,23 @@ let isCall = 1 in
 // registers are added manually.
 let Uses = [SP] in {
 
-def CALLq : MxInst<0x0, (outs), (ins MxPCD32:$dst), "jsr\t$dst">;
-def CALLa : MxInst<0x0, (outs), (ins MxARI32:$dst), "jsr\t$dst">;
+def CALLB : MxIIII<(outs), (ins Mxi32imm:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
+def CALLq : MxIIII<(outs), (ins MxPCD32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
+def CALLj : MxIIII<(outs), (ins MxARI32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
 
 } // let Uses = [SP]
 
-def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>;
-def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>;
-def : Pat<(MxCall (i32 imm:$dst)),          (CALLq imm:$dst)>;
+def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>,  Requires<[IsPIC]>;
+def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>, Requires<[IsPIC]>;
+def : Pat<(MxCall (i32 imm:$dst)),          (CALLq imm:$dst)>,          Requires<[IsPIC]>;
+
+def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLB tglobaladdr:$dst)>,  Requires<[IsNotPIC]>;
+def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLB texternalsym:$dst)>, Requires<[IsNotPIC]>;
+def : Pat<(MxCall (i32 imm:$dst)),          (CALLB imm:$dst)>,          Requires<[IsNotPIC]>;
+
 // NOTE I use iPTR instead of MxCP_ARI so it won't match it for patterns above
 // since MxCP_ARI is a single operand pattern. Maybe there is a better solution
-def : Pat<(MxCall iPTR:$dst),           (CALLa MxARI32:$dst)>;
+def : Pat<(MxCall iPTR:$dst), (CALLj MxARI32:$dst)>, Requires<[IsPIC]>;
 
 //===----------------------------------------------------------------------===//
 // Tail Call
@@ -198,7 +209,7 @@ def TAILJMPj  : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
 
 let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
 
-def RTS : MxInstruction<(outs), (ins), "rts", [], MxEncFixed<0x4E75>>;
+def RTS : MxIIII<(outs), (ins), "rts", [], MxEncFixed<0x4E75>>;
 
 let isCodeGenOnly = 1 in {
 def RET : MxPseudo<(outs), (ins i32imm:$adj, variable_ops), "",

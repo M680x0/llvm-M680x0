@@ -134,6 +134,18 @@ EncodeReg(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
   return Written;
 }
 
+static unsigned
+EmitConstant(uint64_t Val, unsigned Size, uint64_t &Buffer, unsigned Offset) {
+  assert (Size);
+  assert (Size + Offset <= 64 && "Value does not fit");
+  assert (Val == (Val & (0xFFFFFFFFFFFFFFFF >> (64 - Size)))
+      && "Value does not fit");
+
+  // Writing Value in host's endianness
+  Buffer |= Val << Offset;
+  return Size;
+}
+
 unsigned M680x0MCCodeEmitter::
 EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
           uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
@@ -154,25 +166,46 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
   assert (Op < Desc.NumMIOperands);
   MIOperandInfo MIO = Desc.MIOpInfo[Op];
   MCOperand MCO;
-  // TODO PCRel operands
-  if (MIO.isTargetType() && MIO.OpsNum > 1) {
+  if (MIO.isTargetType()) {
+    bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
     MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemOuter : M680x0::MemDisp));
+    if (isPCRel) {
+      assert(!Alt && "You cannot use ALT operand with PCRel");
+      const MCExpr *Expr = nullptr;
+      if (MCO.isImm()) {
+        Expr = MCConstantExpr::create(MCO.getImm(), Ctx);
+      } else {
+        Expr = MCO.getExpr();
+      }
+      // PC offset is always 3rd byte in instruciton
+      Fixups.push_back(
+          MCFixup::create(2, Expr, getFixupForSize(Size, true), MI.getLoc()));
+      // Write zeros
+      return EmitConstant(0, Size, Buffer, Offset);
+    }
   } else {
     assert (!Alt && "You cannot use Alt immediate with a simple operand");
     MCO = MI.getOperand(MIO.MINo);
+    if (MCO.isExpr()) {
+      const MCExpr *Expr = MCO.getExpr();
+      Fixups.push_back(
+          MCFixup::create(2, Expr, getFixupForSize(Size, false), MI.getLoc()));
+      // Write zeros
+      return EmitConstant(0, Size, Buffer, Offset);
+    }
   }
 
-  uint32_t Val = MCO.getImm();
-  assert(Val == (Val & (0xFFFFFFFF >> (32 - Size))) && "Imm does not fit");
+  // 32 bit Imm requires HI16 first then LO16
+  if (Size == 32) {
+    uint64_t Imm = MCO.getImm();
+    Offset += EmitConstant((Imm >> 16) & 0xFFFF, 16, Buffer, Offset);
+    EmitConstant(Imm & 0xFFFF, 16, Buffer, Offset);
+    return Size;
+  }
 
-  // Writing Imm in host's endianness
-  Buffer |= Val << Offset;
-
-  return Size;
+  return EmitConstant(MCO.getImm(), Size, Buffer, Offset);
 }
 
-#define GET_INSTRINFO_MI_OPS_INFO
-#include "M680x0GenInstrInfo.inc"
 #include "M680x0GenMCCodeBeads.inc"
 
 void M680x0MCCodeEmitter::
@@ -183,12 +216,13 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
   const MCInstrDesc &Desc = MCII.get(Opcode);
   // uint64_t TSFlags = Desc.TSFlags;
 
-  DEBUG(dbgs() << "EncodeInstruction Opcode: " << Opcode << "\n");
+  DEBUG(dbgs() << "EncodeInstruction: "
+      <<  MCII.getName(Opcode) << "(" << Opcode << ")\n");
 
 
   const uint8_t * Beads = getGenInstrBeads(MI);
   if (!*Beads) {
-    llvm_unreachable("Instruction does not have Beads defined");
+    llvm_unreachable("*** Instruction does not have Beads defined");
   }
 
   uint64_t Buffer = 0;
@@ -198,9 +232,17 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
   while (*Beads) {
     uint8_t Bead = *Beads;
     Beads++;
+
+    // Check for control beads
+    if (!(Bead & 0xF)) {
+      switch (Bead >> 4) {
+        case M680x0Beads::Ignore:
+          continue;
+      }
+    }
+
     switch (Bead & 0xF) {
       default: llvm_unreachable("Unknown Bead code");
-      case M680x0Beads::Ignore:
         break;
       case M680x0Beads::Bits1:
       case M680x0Beads::Bits2:

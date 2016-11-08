@@ -30,25 +30,6 @@
 
 using namespace llvm;
 
-static unsigned getFixupKindLog2Size(unsigned Kind) {
-  switch (Kind) {
-  default:
-    llvm_unreachable("invalid fixup kind!");
-  case FK_PCRel_1:
-  case FK_SecRel_1:
-  case FK_Data_1:
-    return 0;
-  case FK_PCRel_2:
-  case FK_SecRel_2:
-  case FK_Data_2:
-    return 1;
-  case FK_PCRel_4:
-  case FK_SecRel_4:
-  case FK_Data_4:
-    return 2;
-  }
-}
-
 namespace {
 
 class M680x0ELFObjectWriter : public MCELFObjectTargetWriter {
@@ -80,8 +61,9 @@ public:
     assert(isIntN(Size * 8 + 1, Value) &&
            "Value does not fit in the Fixup field");
 
+    // Write in Big Endian
     for (unsigned i = 0; i != Size; ++i)
-      Data[Fixup.getOffset() + i] = uint8_t(Value >> (i * 8));
+      Data[Fixup.getOffset() + i] = uint8_t(Value >> ((Size - i - 1) * 8));
   }
 
   bool mayNeedRelaxation(const MCInst &Inst) const override;

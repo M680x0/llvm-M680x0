@@ -59,6 +59,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// ??? Is it possible to use this stuff for disassembling?
+/// NOTE 1: In case of conditional beads(DA, DAReg), cond part is able to
+/// consume any bit, though a more general instructions must be chosen, e.g.
+/// d -> r, a -> r
+
 //===----------------------------------------------------------------------===//
 // Encoding primitives
 //===----------------------------------------------------------------------===//
@@ -73,12 +78,14 @@ class MxBead<bits<4> type, bit b4 = 0, bit b5 = 0, bit b6 = 0, bit b7 = 0> {
 }
 
 def   MxBeadTerm                         : MxBead<0b0000, 0, 0, 0, 0>;
+def   MxBeadIgnore                       : MxBead<0b0000, 1, 0, 0, 0>;
 class MxBead1Bit  <bits<1> b>            : MxBead<0b0001, b>;
 class MxBead2Bits <bits<2> b>            : MxBead<0b0010, b{0}, b{1}>;
 class MxBead3Bits <bits<3> b>            : MxBead<0b0011, b{0}, b{1}, b{2}>;
 class MxBead4Bits <bits<4> b>            : MxBead<0b0100, b{0}, b{1}, b{2}, b{3}>;
+
 /// bits<3> o - operand number
-/// bit a     - use next similar operand, used to select index register or
+/// bit a     - use alternative, used to select index register or
 ///             outer dispacement
 class MxBeadDAReg <bits<3> o, bit a = 0> : MxBead<0b0101, o{0}, o{1}, o{2}, a>;
 class MxBeadDA    <bits<3> o, bit a = 0> : MxBead<0b0110, o{0}, o{1}, o{2}, a>;
@@ -86,7 +93,6 @@ class MxBeadReg   <bits<3> o, bit a = 0> : MxBead<0b0111, o{0}, o{1}, o{2}, a>;
 class MxBead8Imm  <bits<3> o, bit a = 0> : MxBead<0b1000, o{0}, o{1}, o{2}, a>;
 class MxBead16Imm <bits<3> o, bit a = 0> : MxBead<0b1001, o{0}, o{1}, o{2}, a>;
 class MxBead32Imm <bits<3> o, bit a = 0> : MxBead<0b1010, o{0}, o{1}, o{2}, a>;
-def   MxBeadIgnore                       : MxBead<0b1111, 1, 1, 1, 1>;
 
 class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm, 
                  MxBead n2  = MxBeadTerm, MxBead n3  = MxBeadTerm,
@@ -132,6 +138,19 @@ class MxEncFixed<bits<16> value> : MxEncoding {
   let Value{15-8}  = MxBead4Bits<value{7-4}>.Value;
   let Value{23-16} = MxBead4Bits<value{11-8}>.Value;
   let Value{31-24} = MxBead4Bits<value{15-12}>.Value;
+}
+
+//===----------------------------------------------------------------------===//
+// Encoding composites
+//
+// These must be lowered to MxEncoding by instr specific wrappers
+//
+// HERE BE DRAGONS...
+//===----------------------------------------------------------------------===//
+
+class MxEncByte<bits<8> value> : MxEncoding {
+  MxBead4Bits LO = MxBead4Bits<value{3-0}>;
+  MxBead4Bits HI = MxBead4Bits<value{7-4}>;
 }
 
 def MxEncEmpty : MxEncoding;
@@ -200,6 +219,39 @@ def MxEncEAB : MxEncEA<MxBead3Bits<0b001>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAq : MxEncEA<MxBead3Bits<0b010>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAg : MxEncEA<MxBead3Bits<0b011>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAi : MxEncEA<MxBead3Bits<0b100>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+
+// Allows you to specify each bit of opcode
+class MxEncOpMode<MxBead b0, MxBead b1 = MxBeadIgnore, MxBead b2 = MxBeadIgnore> {
+  MxBead B0 = b0;
+  MxBead B1 = b1;
+  MxBead B2 = b2;
+}
+
+// EA, Dn
+def MxOpMode8dEA  : MxEncOpMode<MxBead3Bits<0b000>>;
+def MxOpMode16dEA : MxEncOpMode<MxBead3Bits<0b001>>;
+def MxOpMode32dEA : MxEncOpMode<MxBead3Bits<0b010>>;
+
+// EA, An
+def MxOpMode16aEA : MxEncOpMode<MxBead3Bits<0b110>>;
+def MxOpMode32aEA : MxEncOpMode<MxBead3Bits<0b111>>;
+
+// EA, Rn
+// As you might noticed this guy is special... Since M680x0 differentiates
+// between Data and Address registers we required to use different OPMODE codes
+// for Address registers DST operands. One way of dealing with it is to use
+// separate tablegen instructions, but in this case it would force Register
+// Allocator to use specific Register Classes and eventually will lead to
+// superfluous moves. Another approach is to use reg-variadic encoding which will
+// change OPMODE base on Register Class used. Luckily, all the bits that differ go
+// from 0 to 1 and can be encoded with MxBeadDA.
+def MxOpMode16rEA : MxEncOpMode<MxBead1Bit<1>, MxBeadDA<0>, MxBead1Bit<0>>;
+def MxOpMode32rEA : MxEncOpMode<MxBeadDA<0>, MxBead1Bit<1>, MxBeadDA<0>>;
+
+// Dn, EA
+def MxOpMode8EAd : MxEncOpMode<MxBead3Bits<0b011>>;
+def MxOpMode16EAd : MxEncOpMode<MxBead3Bits<0b100>>;
+def MxOpMode32EAd : MxEncOpMode<MxBead3Bits<0b101>>;
 
 
 // Represents two types of extension word:
@@ -294,7 +346,7 @@ class MxInst<bits<16> opcode,
 
 
 // FIXME rename to MxInst
-class MxInstruction<dag outs, dag ins,
+class MxIIII<dag outs, dag ins,
              string asmStr = "",
              list<dag> pattern = [],
              MxEncoding beads = MxEncEmpty,

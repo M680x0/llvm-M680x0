@@ -103,6 +103,10 @@ private:
   // Move across register classes without extension
   bool ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
                      MVT MVTDst, MVT MVTSrc) const;
+
+  // Push/Pop to/from stack
+  bool ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc, 
+                      bool isPush) const;
 };
 
 } // namespace llvm

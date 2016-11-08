@@ -195,10 +195,26 @@ ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
 }
 
 bool M680x0InstrInfo::
+ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc, 
+               bool isPush) const {
+  MachineBasicBlock::iterator I = MIB.getInstr(); I++;
+  MachineBasicBlock &MBB = *MIB->getParent();
+  unsigned Reg = MIB->getOperand(0).getReg();
+  DebugLoc DL = MIB->getDebugLoc();
+  if (isPush) {
+    BuildMI(MBB, I, DL, Desc, RI.getStackRegister()).addReg(Reg);
+  } else {
+    BuildMI(MBB, I, DL, Desc, Reg).addReg(RI.getStackRegister());
+  }
+  MIB->eraseFromParent();
+  return true;
+}
+
+bool M680x0InstrInfo::
 expandPostRAPseudo(MachineInstr &MI) const {
   MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
   switch (MI.getOpcode()) {
-    // TODO would be nice to infer all these parameters
+    /// TODO would be nice to infer all these parameters
     case M680x0::MOVSXd16d8:
       return ExpandMOVSZX_RR(MIB, true, MVT::i16, MVT::i8);
     case M680x0::MOVSXd32d8:
@@ -262,6 +278,20 @@ expandPostRAPseudo(MachineInstr &MI) const {
       return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i32, MVT::i8);
     case M680x0::MOVXd32d16:
       return ExpandMOVX_RR(MIB, get(M680x0::MOV16rf), MVT::i32, MVT::i16);
+
+    case M680x0::PUSH8d:
+      return ExpandPUSH_POP(MIB, get(M680x0::MOV8ed), true);
+    case M680x0::PUSH16d:
+      return ExpandPUSH_POP(MIB, get(M680x0::MOV16er), true);
+    case M680x0::PUSH32r:
+      return ExpandPUSH_POP(MIB, get(M680x0::MOV32er), true);
+
+    case M680x0::POP8d:
+      return ExpandPUSH_POP(MIB, get(M680x0::MOV8do), false);
+    case M680x0::POP16d:
+      return ExpandPUSH_POP(MIB, get(M680x0::MOV16ro), false);
+    case M680x0::POP32r:
+      return ExpandPUSH_POP(MIB, get(M680x0::MOV32ro), false);
   }
   return false;
 }

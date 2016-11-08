@@ -66,6 +66,14 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
     setOperationAction(OP, MVT::i32, LibCall);
   }
 
+  // These guys must be wrapped and then lowered to ADD32ri/MOV32ri
+  setOperationAction(ISD::ConstantPool    , MVT::i32, Custom);
+  setOperationAction(ISD::JumpTable       , MVT::i32, Custom);
+  setOperationAction(ISD::GlobalAddress   , MVT::i32, Custom);
+  setOperationAction(ISD::GlobalTLSAddress, MVT::i32, Custom);
+  setOperationAction(ISD::ExternalSymbol  , MVT::i32, Custom);
+  setOperationAction(ISD::BlockAddress    , MVT::i32, Custom);
+
   computeRegisterProperties(STI.getRegisterInfo());
 
   setMinFunctionAlignment(2); // 2^2 bytes // ??? can it be just 2^1?
@@ -83,6 +91,11 @@ SDValue M680x0TargetLowering::LowerOperation(SDValue Op,
                                              SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default: llvm_unreachable("Should not custom lower this!");
+  case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
+  case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
+  case ISD::ExternalSymbol:     return LowerExternalSymbol(Op, DAG);
+  case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
+  case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
   }
 }
 
@@ -1311,7 +1324,7 @@ SDValue M680x0TargetLowering::
 LowerConstantPool(SDValue Op, SelectionDAG &DAG) const {
   ConstantPoolSDNode *CP = cast<ConstantPoolSDNode>(Op);
 
-  // In PIC mode (unless we're in RIPRel PIC mode) we add an offset to the
+  // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
   // global base reg.
   unsigned char OpFlag = Subtarget.classifyLocalReference(nullptr);
   unsigned WrapperKind = M680x0ISD::Wrapper;
@@ -1328,9 +1341,8 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const {
   Result = DAG.getNode(WrapperKind, DL, PtrVT, Result);
   // With PIC, the address is actually $g + Offset.
   if (OpFlag) {
-    Result =
-        DAG.getNode(ISD::ADD, DL, PtrVT,
-                    DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
+    Result = DAG.getNode(ISD::ADD, DL, PtrVT,
+                 DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
   }
 
   return Result;
@@ -1340,7 +1352,7 @@ SDValue M680x0TargetLowering::
 LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
   JumpTableSDNode *JT = cast<JumpTableSDNode>(Op);
 
-  // In PIC mode (unless we're in RIPRel PIC mode) we add an offset to the
+  // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
   // global base reg.
   unsigned char OpFlag = Subtarget.classifyLocalReference(nullptr);
   unsigned WrapperKind = M680x0ISD::Wrapper;
@@ -1357,9 +1369,8 @@ LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
 
   // With PIC, the address is actually $g + Offset.
   if (OpFlag)
-    Result =
-        DAG.getNode(ISD::ADD, DL, PtrVT,
-                    DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
+    Result = DAG.getNode(ISD::ADD, DL, PtrVT,
+                 DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
 
   return Result;
 }
@@ -1368,7 +1379,7 @@ SDValue M680x0TargetLowering::
 LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const {
   const char *Sym = cast<ExternalSymbolSDNode>(Op)->getSymbol();
 
-  // In PIC mode (unless we're in RIPRel PIC mode) we add an offset to the
+  // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
   // global base reg.
   const Module *Mod = DAG.getMachineFunction().getFunction()->getParent();
   unsigned char OpFlag = Subtarget.classifyGlobalReference(nullptr, *Mod);
@@ -1387,16 +1398,15 @@ LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const {
 
   // With PIC, the address is actually $g + Offset.
   if (isPositionIndependent()) {
-    Result =
-        DAG.getNode(ISD::ADD, DL, PtrVT,
-                    DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
+    Result = DAG.getNode(ISD::ADD, DL, PtrVT,
+                 DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
   }
 
   // For symbols that require a load from a stub to get the address, emit the
   // load.
   if (isGlobalStubReference(OpFlag))
     Result = DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), Result,
-                         MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+                 MachinePointerInfo::getGOT(DAG.getMachineFunction()));
 
   return Result;
 }
@@ -1422,7 +1432,7 @@ LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const {
   // With PIC, the address is actually $g + Offset.
   if (isGlobalRelativeToPICBase(OpFlags)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
-                         DAG.getNode(M680x0ISD::GlobalBaseReg, DL, PtrVT), Result);
+                 DAG.getNode(M680x0ISD::GlobalBaseReg, DL, PtrVT), Result);
   }
 
   return Result;
@@ -1455,20 +1465,20 @@ LowerGlobalAddress(const GlobalValue *GV, const SDLoc &DL, int64_t Offset,
   // With PIC, the address is actually $g + Offset.
   if (isGlobalRelativeToPICBase(OpFlags)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
-                         DAG.getNode(M680x0ISD::GlobalBaseReg, DL, PtrVT), Result);
+                 DAG.getNode(M680x0ISD::GlobalBaseReg, DL, PtrVT), Result);
   }
 
   // For globals that require a load from a stub to get the address, emit the
   // load.
   if (isGlobalStubReference(OpFlags))
     Result = DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), Result,
-                         MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+                 MachinePointerInfo::getGOT(DAG.getMachineFunction()));
 
   // If there was a non-zero offset that we didn't fold, create an explicit
   // addition for it.
   if (Offset != 0)
     Result = DAG.getNode(ISD::ADD, DL, PtrVT, Result,
-                         DAG.getConstant(Offset, DL, PtrVT));
+                 DAG.getConstant(Offset, DL, PtrVT));
 
   return Result;
 }
@@ -1498,6 +1508,7 @@ const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case M680x0ISD::XOR:       return "M680x0ISD::XOR";
   case M680x0ISD::AND:       return "M680x0ISD::AND";
   case M680x0ISD::Wrapper:   return "M680x0ISD::Wrapper";
+  case M680x0ISD::WrapperPC: return "M680x0ISD::WrapperPC";
   default:                   return NULL;
   }
 }
@@ -1507,6 +1518,7 @@ isOffsetSuitableForCodeModel(int64_t Offset, CodeModel::Model M,
                              bool hasSymbolicDisplacement) {
   // Offset should fit into 16 bit immediate field.
   // TODO Once x20 ISA is available change this
+  // FIXME depends on address mode
   if (!isInt<16>(Offset))
     return false;
 

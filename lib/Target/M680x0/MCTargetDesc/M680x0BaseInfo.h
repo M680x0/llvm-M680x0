@@ -22,6 +22,9 @@
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#define GET_INSTRINFO_MI_OPS_INFO
+#include "M680x0GenInstrInfo.inc"
+
 namespace llvm {
 
 namespace M680x0 {
@@ -51,7 +54,7 @@ namespace M680x0 {
 
 namespace M680x0Beads {
   enum {
-    Term   = 0x0,
+    Ctrl   = 0x0,
     Bits1  = 0x1,
     Bits2  = 0x2,
     Bits3  = 0x3,
@@ -61,8 +64,13 @@ namespace M680x0Beads {
     Reg    = 0x7,
     Imm8   = 0x8,
     Imm16  = 0x9,
-    Imm32  = 0xa,
-    Ignore = 0xF
+    Imm32  = 0xA,
+  };
+
+  // Ctrl payload
+  enum {
+    Term   = 0x0,
+    Ignore = 0x1,
   };
 } /* M680x0Beads */ 
 
@@ -181,6 +189,60 @@ isAddressRegister(unsigned RegNo) {
     case M680x0::D6:
     case M680x0::D7:
       return false;
+  }
+}
+
+static inline bool
+isPCRelOpd(unsigned Opd) {
+  switch (Opd) {
+    default: return false;
+    case M680x0::MIOpTypes::MxPCD32:
+    case M680x0::MIOpTypes::MxPCD16:
+    case M680x0::MIOpTypes::MxPCD8:
+    case M680x0::MIOpTypes::MxPCI32:
+    case M680x0::MIOpTypes::MxPCI16:
+    case M680x0::MIOpTypes::MxPCI8:
+      return true;
+  }
+}
+
+static inline unsigned
+getImmSize(unsigned Opd) {
+  switch (Opd) {
+    default: return 0;
+    case M680x0::MIOpTypes::MxBrTarget16:
+    case M680x0::MIOpTypes::MxBrTarget32:
+    case M680x0::MIOpTypes::MxBrTarget8:
+    case M680x0::MIOpTypes::MxAL16:
+    case M680x0::MIOpTypes::MxAL32:
+    case M680x0::MIOpTypes::MxAL8:
+    case M680x0::MIOpTypes::Mxi32imm:
+      return 32;
+    case M680x0::MIOpTypes::MxARID16:
+    case M680x0::MIOpTypes::MxARID16_TC:
+    case M680x0::MIOpTypes::MxARID32:
+    case M680x0::MIOpTypes::MxARID32_TC:
+    case M680x0::MIOpTypes::MxARID8:
+    case M680x0::MIOpTypes::MxARID8_TC:
+    case M680x0::MIOpTypes::MxPCD16:
+    case M680x0::MIOpTypes::MxPCD32:
+    case M680x0::MIOpTypes::MxPCD8:
+    case M680x0::MIOpTypes::MxAS16:
+    case M680x0::MIOpTypes::MxAS32:
+    case M680x0::MIOpTypes::MxAS8:
+    case M680x0::MIOpTypes::Mxi16imm:
+      return 16;
+    case M680x0::MIOpTypes::MxARII16:
+    case M680x0::MIOpTypes::MxARII16_TC:
+    case M680x0::MIOpTypes::MxARII32:
+    case M680x0::MIOpTypes::MxARII32_TC:
+    case M680x0::MIOpTypes::MxARII8:
+    case M680x0::MIOpTypes::MxARII8_TC:
+    case M680x0::MIOpTypes::MxPCI16:
+    case M680x0::MIOpTypes::MxPCI32:
+    case M680x0::MIOpTypes::MxPCI8:
+    case M680x0::MIOpTypes::Mxi8imm:
+      return 8;
   }
 }
 

@@ -80,15 +80,15 @@ getRelocType(MCContext &Ctx, const MCValue &Target,
       return ELF::R_M680x0_PC8;
     }
   // ??? Can we drop this?
-  case MCSymbolRefExpr::VK_GOT:
-    switch (Type) {
-    case RT_32:
-      return IsPCRel ? ELF::R_M680x0_GOTPC32 : ELF::R_M680x0_GOT32;
-    case RT_16:
-      return IsPCRel ? ELF::R_M680x0_GOTPC16 : ELF::R_M680x0_GOT16;
-    case RT_8:
-      llvm_unreachable("Unimplemented");
-    }
+  // case MCSymbolRefExpr::VK_GOT:
+  //   switch (Type) {
+  //   case RT_32:
+  //     return IsPCRel ? ELF::R_M680x0_GOTPC32 : ELF::R_M680x0_GOT32;
+  //   case RT_16:
+  //     return IsPCRel ? ELF::R_M680x0_GOTPC16 : ELF::R_M680x0_GOT16;
+  //   case RT_8:
+  //     llvm_unreachable("Unimplemented");
+  //   }
   case MCSymbolRefExpr::VK_GOTPCREL:
     switch (Type) {
     case RT_32:
@@ -96,16 +96,27 @@ getRelocType(MCContext &Ctx, const MCValue &Target,
     case RT_16:
       return ELF::R_M680x0_GOTPCREL16;
     case RT_8:
-      llvm_unreachable("Unimplemented");
+      return ELF::R_M680x0_GOTPCREL8;
     }
   case MCSymbolRefExpr::VK_GOTOFF:
     assert(!IsPCRel);
-    assert(Type != RT_8);
-    if (Type == RT_32) return ELF::R_M680x0_GOTOFF32;
-    else if (Type == RT_16) return ELF::R_M680x0_GOTOFF16;
+    switch (Type) {
+    case RT_32:
+      return ELF::R_M680x0_GOTOFF32;
+    case RT_16:
+      return ELF::R_M680x0_GOTOFF16;
+    case RT_8:
+      return ELF::R_M680x0_GOTOFF8;
+    }
   case MCSymbolRefExpr::VK_PLT:
-    assert(Type == RT_32);
-    return ELF::R_M680x0_PLT32;
+    switch (Type) {
+    case RT_32:
+      return ELF::R_M680x0_PLT32;
+    case RT_16:
+      return ELF::R_M680x0_PLT16;
+    case RT_8:
+      return ELF::R_M680x0_PLT8;
+    }
   }
 
 }

@@ -17,29 +17,29 @@
 //===----------------------------------------------------------------------===//
 
 // ConstantPool GlobalAddress, ExternalSymbol, and JumpTable
-/* def : Pat<(i32 (MxWrapper tconstpool    :$dst)), (MOV32ri tconstpool    :$dst)>; */
-/* def : Pat<(i32 (MxWrapper tglobaladdr   :$dst)), (MOV32ai tglobaladdr   :$dst)>; */
-/* def : Pat<(i32 (MxWrapper texternalsym  :$dst)), (MOV32ai texternalsym  :$dst)>; */
-/* def : Pat<(i32 (MxWrapper tjumptable    :$dst)), (MOV32ai tjumptable    :$dst)>; */
-/* def : Pat<(i32 (MxWrapper tblockaddress :$dst)), (MOV32ai tblockaddress :$dst)>; */
-/*  */
-/* def : Pat<(add MxDRD32:$src, (MxWrapper tconstpool:$opd)), */
-/*           (ADD32ri MxDRD32:$src, tconstpool:$opd)>; */
-/* def : Pat<(add MxARD32:$src, (MxWrapper tjumptable:$opd)), */
-/*           (ADD32ai MxARD32:$src, tjumptable:$opd)>; */
-/* def : Pat<(add MxARD32:$src, (MxWrapper tglobaladdr :$opd)), */
-/*           (ADD32ai MxARD32:$src, tglobaladdr:$opd)>; */
-/* def : Pat<(add MxARD32:$src, (MxWrapper texternalsym:$opd)), */
-/*           (ADD32ai MxARD32:$src, texternalsym:$opd)>; */
-/* def : Pat<(add MxARD32:$src, (MxWrapper tblockaddress:$opd)), */
-/*           (ADD32ai MxARD32:$src, tblockaddress:$opd)>; */
-/*  */
-/* def : Pat<(store (i32 (MxWrapper tglobaladdr:$src)), MxARI32:$dst), */
-/*           (MOV32ji MxARI32:$dst, tglobaladdr:$src)>; */
-/* def : Pat<(store (i32 (MxWrapper texternalsym:$src)), MxARI32:$dst), */
-/*           (MOV32ji MxARI32:$dst, texternalsym:$src)>; */
-/* def : Pat<(store (i32 (MxWrapper tblockaddress:$src)), MxARI32:$dst), */
-/*           (MOV32ji MxARI32:$dst, tblockaddress:$src)>; */
+def : Pat<(i32 (MxWrapper tconstpool    :$dst)), (MOV32ri tconstpool    :$dst)>;
+def : Pat<(i32 (MxWrapper tglobaladdr   :$dst)), (MOV32ri tglobaladdr   :$dst)>;
+def : Pat<(i32 (MxWrapper texternalsym  :$dst)), (MOV32ri texternalsym  :$dst)>;
+def : Pat<(i32 (MxWrapper tjumptable    :$dst)), (MOV32ri tjumptable    :$dst)>;
+def : Pat<(i32 (MxWrapper tblockaddress :$dst)), (MOV32ri tblockaddress :$dst)>;
+
+def : Pat<(add MxDRD32:$src, (MxWrapper tconstpool:$opd)),
+          (ADD32ri MxDRD32:$src, tconstpool:$opd)>;
+def : Pat<(add MxARD32:$src, (MxWrapper tjumptable:$opd)),
+          (ADD32ri MxARD32:$src, tjumptable:$opd)>;
+def : Pat<(add MxARD32:$src, (MxWrapper tglobaladdr :$opd)),
+          (ADD32ri MxARD32:$src, tglobaladdr:$opd)>;
+def : Pat<(add MxARD32:$src, (MxWrapper texternalsym:$opd)),
+          (ADD32ri MxARD32:$src, texternalsym:$opd)>;
+def : Pat<(add MxARD32:$src, (MxWrapper tblockaddress:$opd)),
+          (ADD32ri MxARD32:$src, tblockaddress:$opd)>;
+
+def : Pat<(store (i32 (MxWrapper tglobaladdr:$src)), iPTR:$dst),
+          (MOV32ji MxARI32:$dst, tglobaladdr:$src)>;
+def : Pat<(store (i32 (MxWrapper texternalsym:$src)), iPTR:$dst),
+          (MOV32ji MxARI32:$dst, texternalsym:$src)>;
+def : Pat<(store (i32 (MxWrapper tblockaddress:$src)), iPTR:$dst),
+          (MOV32ji MxARI32:$dst, tblockaddress:$src)>;
 
 
 //===----------------------------------------------------------------------===//
