@@ -72,9 +72,13 @@ printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printDisp(const MCInst *MI, int opNum, raw_ostream &O) {
-  const MCOperand &MO = MI->getOperand(opNum);
-  assert (MO.isImm());
-  O << (unsigned short int)MO.getImm();
+  const MCOperand &Op = MI->getOperand(opNum);
+  if (Op.isImm()) {
+    O << Op.getImm();
+      return;
+  }
+  assert(Op.isExpr() && "unknown operand kind in printOperand");
+  Op.getExpr()->print(O, &MAI);
 }
 
 void M680x0InstPrinter::
