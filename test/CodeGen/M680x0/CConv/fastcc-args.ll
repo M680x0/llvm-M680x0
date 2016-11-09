@@ -29,7 +29,7 @@ entry:
 ; x00:       add.l %d1, %d0
 ; x00-NEXT:  add.l %a0, %d0
 ; x00-NEXT:  add.l %a1, %d0
-; x00-NEXT:  add.l (#4,%sp), %d0
+; x00-NEXT:  add.l (4,%sp), %d0
 
 define fastcc i32 @test3(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) nounwind {
   %1 = add i32 %a, %b

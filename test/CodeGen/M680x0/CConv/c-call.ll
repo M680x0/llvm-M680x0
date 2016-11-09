@@ -4,10 +4,10 @@
 ; Pass all arguments on the stack in reverse order
 
 ; x00-LABEL: foo:
-; x00-DAG:  move.l #5, (#16,%sp)
-; x00-DAG:  move.l #4, (#12,%sp)
-; x00-DAG:  move.l #3, (#8,%sp)
-; x00-DAG:  move.l #2, (#4,%sp)
+; x00-DAG:  move.l #5, (16,%sp)
+; x00-DAG:  move.l #4, (12,%sp)
+; x00-DAG:  move.l #3, (8,%sp)
+; x00-DAG:  move.l #2, (4,%sp)
 ; x00-DAG:  move.l #1, (%sp)
 ; x00-NEXT:  jsr (bar@PLT,%pc)
 

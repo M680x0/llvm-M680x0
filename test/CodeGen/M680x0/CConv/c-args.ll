@@ -4,8 +4,8 @@
 ; C Call passes all arguments on stack ...
 
 ; x00-LABEL: foo:
-; x00:       move.l (#4,%sp), [[Reg:%a[0-7]]]
-; x00:       move.l (#8,%sp), ([[Reg]])
+; x00:       move.l (4,%sp), [[Reg:%a[0-7]]]
+; x00:       move.l (8,%sp), ([[Reg]])
 ; x00:       rts
 
 define void @foo(i32* nocapture %out, i32 %in) nounwind {
@@ -15,8 +15,8 @@ entry:
 }
 
 ; x00-LABEL: bar:
-; x00-DAG:   move.l (#4,%sp), [[Out:%a[0-7]]]
-; x00-DAG:   move.l (#8,%sp), [[In:%a[0-7]]]
+; x00-DAG:   move.l (4,%sp), [[Out:%a[0-7]]]
+; x00-DAG:   move.l (8,%sp), [[In:%a[0-7]]]
 ; x00:       move.l ([[In]]), ([[Out]])
 ; x00:       rts
 
