@@ -580,7 +580,8 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
                MCCFIInstruction::createDefCfaOffset(nullptr, 2 * stackGrowth));
 
       // Change the rule for the FramePtr to be an "offset" rule.
-      unsigned DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
+      int DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
+      assert(DwarfFramePtr > 0);
       BuildCFI(MBB, MBBI, DL, MCCFIInstruction::createOffset(
                                   nullptr, DwarfFramePtr, 2 * stackGrowth));
     }

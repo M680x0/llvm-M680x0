@@ -34,11 +34,15 @@ foreach Index = 0-7 in {
   def "BD"#Index : MxDataReg<"d"#Index, #Index>;
 
   let SubRegIndices = [ MxSubRegIndex8Lo ] in {
-    def "WD"#Index : MxDataReg<"d"#Index, #Index, [ !cast<Register>("BD"#Index) ]>;
+    def "WD"#Index
+      : MxDataReg<"d"#Index, #Index, [ !cast<Register>("BD"#Index) ]>,
+        DwarfRegNum<[Index]>;
   }
 
   let SubRegIndices = [ MxSubRegIndex16Lo ] in {
-    def "D"#Index : MxDataReg<"d"#Index, #Index, [ !cast<Register>("WD"#Index) ]>;
+    def "D"#Index
+      : MxDataReg<"d"#Index, #Index, [ !cast<Register>("WD"#Index) ]>,
+        DwarfRegNum<[Index]>;
   }
 
 } // foreach
@@ -49,10 +53,14 @@ class MxAddressReg<string n, bits<16> enc, list<Register> subregs = []>
 
 // Generate Address registers and theirs smaller variants
 foreach Index = 0-7 in {
-  def "WA"#Index : MxDataReg<"a"#Index, #Index>;
+  def "WA"#Index
+     : MxDataReg<"a"#Index, #Index>,
+       DwarfRegNum<[!add(8,Index)]>;
 
   let SubRegIndices = [ MxSubRegIndex16Lo ] in {
-    def "A"#Index : MxAddressReg<"a"#Index, #Index, [ !cast<Register>("WA"#Index) ]>;
+    def "A"#Index
+       : MxAddressReg<"a"#Index, #Index, [ !cast<Register>("WA"#Index) ]>,
+         DwarfRegNum<[!add(8,Index)]>;
   }
 }
 
