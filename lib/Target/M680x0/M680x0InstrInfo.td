@@ -30,7 +30,6 @@ def MxSDT_TCRet        : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>
 
 def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;
 
-// RES, CCR <- op OPD
 def MxSDT_UnArithCCROut : SDTypeProfile<2, 1,
                                       [SDTCisSameAs<0, 2>, SDTCisInt<0>,
                                        SDTCisVT<1, i8>]>;
@@ -74,21 +73,20 @@ def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
 def MxWrapper   : SDNode<"M680x0ISD::Wrapper",   MxSDT_Wrapper>;
 def MxWrapperPC : SDNode<"M680x0ISD::WrapperPC", MxSDT_Wrapper>;
 
-// FIXME remove this
-def MxAdd  : SDNode<"M680x0ISD::ADD",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxSub  : SDNode<"M680x0ISD::SUB",  MxSDT_BiArithCCROut>;
-def MxOr   : SDNode<"M680x0ISD::OR",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxXor  : SDNode<"M680x0ISD::XOR",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxAnd  : SDNode<"M680x0ISD::AND",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxAdd  : SDNode<"M680x0ISD::ADD",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxSub  : SDNode<"M680x0ISD::SUB",   MxSDT_BiArithCCROut>;
+def MxOr   : SDNode<"M680x0ISD::OR",    MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxXor  : SDNode<"M680x0ISD::XOR",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxAnd  : SDNode<"M680x0ISD::AND",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
 
-def MxAdc  : SDNode<"M680x0ISD::ADC",  MxSDT_BiArithCCRInOut>;
-def MxSbb  : SDNode<"M680x0ISD::SBB",  MxSDT_BiArithCCRInOut>;
+def MxAddX  : SDNode<"M680x0ISD::ADDX", MxSDT_BiArithCCRInOut>;
+def MxSubX  : SDNode<"M680x0ISD::SUBX", MxSDT_BiArithCCRInOut>;
 
-def MxInc  : SDNode<"M680x0ISD::INC",  MxSDT_UnArithCCROut>;
-def MxDec  : SDNode<"M680x0ISD::DEC",  MxSDT_UnArithCCROut>;
+def MxInc  : SDNode<"M680x0ISD::INC",   MxSDT_UnArithCCROut>;
+def MxDec  : SDNode<"M680x0ISD::DEC",   MxSDT_UnArithCCROut>;
 
-def MxSMul : SDNode<"M680x0ISD::SMUL", MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxUMul : SDNode<"M680x0ISD::UMUL", MxSDT_2BiArithCCROut, [SDNPCommutative]>;
+def MxSMul : SDNode<"M680x0ISD::SMUL",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxUMul : SDNode<"M680x0ISD::UMUL",  MxSDT_2BiArithCCROut, [SDNPCommutative]>;
 
 //===----------------------------------------------------------------------===//
 // Operands

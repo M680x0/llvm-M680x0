@@ -12,7 +12,7 @@
 //
 //  Machine:
 //
-//    ADD       [~]   ADDA      [ ]   ADDI        [ ]   ADDQ [ ]   ADDX [ ]
+//    ADD       [~]   ADDA      [ ]   ADDI        [ ]   ADDQ [ ]   ADDX [~]
 //    CLR       [ ]   CMP       [ ]   CMPA        [ ]   CMPI [ ]   CMPM [ ]
 //    CMP2      [ ]   DIVS/DIVU [x]   DIVSL/DIVUL [ ]   EXT  [x]   EXTB [ ]
 //    MULS/MULU [ ]   NEG       [ ]   NEGX        [ ]   SUB  [ ]   SUBA [ ]
@@ -22,7 +22,7 @@
 //
 //   [ ] - was not touched at all
 //   [!] - requires extarnal stuff implemented
-//   [~] - in progress but usable
+//   [~] - partially implemented
 //   [x] - done
 //
 //===----------------------------------------------------------------------===//
@@ -42,6 +42,19 @@ class MxArithEncoding<MxBead4Bits CMD, MxEncOpMode OPMODE, MxBeadReg REG,
                       MxEncEA EA, MxEncExt EXT>
     : MxEncoding<EA.Reg, EA.DA, EA.Mode, OPMODE.B0, OPMODE.B1, OPMODE.B2, REG, CMD,
       EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
+
+/// Encoding for Extended forms
+/// ------------------------------------------------------
+///  F  E  D  C | B  A  9 | 8 | 7  6 | 5  4 | 3 | 2  1  0
+/// ------------------------------------------------------
+///  x  x  x  x |  REG Rx | 1 | SIZE | 0  0 | M |  REG Ry
+/// ------------------------------------------------------
+/// Rx - destination
+/// Ry - source
+/// M  - address mode switch
+class MxArithXEncoding<MxBead4Bits CMD, MxEncSize SIZE, MxBead1Bit MODE,
+                       MxBeadReg SRC, MxBeadReg DST>
+    : MxEncoding<SRC, MODE, MxBead2Bits<0b00>, SIZE, MxBead1Bit<0b1>, DST, CMD>;
 
 /// Encoding for Immediate forms
 /// ---------------------------------------------------
@@ -67,11 +80,20 @@ class MxArithImmEncoding<MxBead4Bits CMD, MxEncSize SIZE,
 // Add/Sub
 //===----------------------------------------------------------------------===//
 
-// $reg <- $reg op $reg
-class MxBiArOp_RFRR<string MN, SDNode NODE, MxOperand DST, MxOperand OPD>
-    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
-           MN#"."#DST.Size.Id#"\t$opd, $dst",
-           [(set DST.VT:$dst, CCR, (NODE DST.VT:$src, OPD.VT:$opd))]>;
+// $reg, $ccr <- $reg op $reg
+class MxBiArOp_RFRR<string MN, SDNode NODE, MxType TYPE>
+    : MxInst<0x0, (outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
+           MN#"."#TYPE.Prefix#"\t$opd, $dst",
+           [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd))]>;
+
+// $reg, $ccr <- $reg op $reg op $ccr
+class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
+    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd, CCRC:$ccr),
+             MN#"."#TYPE.Prefix#"\t$opd, $dst",
+             [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd, i8:$ccr))],
+             MxArithXEncoding<MxBead4Bits<CMD>,
+                              !cast<MxEncSize>("MxEncSize"#TYPE.Size),
+                              MxBead1Bit<0>, MxBeadReg<2>, MxBeadReg<0>>>;
 
 // $reg <- $reg op $imm
 class MxBiArOp_RFRI<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
@@ -92,72 +114,94 @@ class MxBiArOp_RFRM<string MN, SDNode NODE, MxType TYPE, MxOperand OPD, ComplexP
                            MxBeadReg<0>, EA, EXT>>;
 
 
-// Allows use of An registers
-multiclass MxBiArOp_RF<string MN, SDNode MXNODE, bits<4> CMD, bits<4> CMDI> {
+multiclass MxBiArOp_RF<string MN, SDNode NODE, bit isComm, bits<4> CMD, bits<4> CMDI> {
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
-let isCommutable = 1 in {
+let isCommutable = isComm in {
 
-def NAME#"8dd"  : MxBiArOp_RFRR<MN, MXNODE, MxDRD8,  MxDRD8>;
-def NAME#"16dd" : MxBiArOp_RFRR<MN, MXNODE, MxXRD16, MxXRD16>;
-def NAME#"32rr" : MxBiArOp_RFRR<MN, MXNODE, MxXRD32, MxXRD32>;
+def NAME#"8dd"  : MxBiArOp_RFRR<MN, NODE, MxType8d>;
+def NAME#"16dd" : MxBiArOp_RFRR<MN, NODE, MxType16d>;
+def NAME#"32rr" : MxBiArOp_RFRR<MN, NODE, MxType32r>;
 
-} // isCommutable = 1
+} // isCommutable = ?
 
-def NAME#"8dj"  : MxBiArOp_RFRM<MN, MXNODE, MxType8d,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_2, MxExtEmpty>;
-def NAME#"16dj" : MxBiArOp_RFRM<MN, MXNODE, MxType16d, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
-def NAME#"32rj" : MxBiArOp_RFRM<MN, MXNODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"8dj"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"16dj" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"32rj" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
 
-def NAME#"8dp"  : MxBiArOp_RFRM<MN, MXNODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_2, MxExtI16_2>;
-def NAME#"16dp" : MxBiArOp_RFRM<MN, MXNODE, MxType16d, MxType16.POp, MxType16.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
-def NAME#"32rp" : MxBiArOp_RFRM<MN, MXNODE, MxType32r, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
+def NAME#"8dp"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_2, MxExtI16_2>;
+def NAME#"16dp" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.POp, MxType16.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
+def NAME#"32rp" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
 
-def NAME#"8df"  : MxBiArOp_RFRM<MN, MXNODE, MxType8d,  MxType8.FOp,  MxType8.FPat,  CMD, MxEncEAf_2, MxExtBrief_2>;
-def NAME#"16df" : MxBiArOp_RFRM<MN, MXNODE, MxType16d, MxType16.FOp, MxType16.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
-def NAME#"32rf" : MxBiArOp_RFRM<MN, MXNODE, MxType32r, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
+def NAME#"8df"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.FOp,  MxType8.FPat,  CMD, MxEncEAf_2, MxExtBrief_2>;
+def NAME#"16df" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.FOp, MxType16.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
+def NAME#"32rf" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
 
-def NAME#"8di"  : MxBiArOp_RFRI<MN, MXNODE, MxType8d,  CMDI>;
-def NAME#"16di" : MxBiArOp_RFRI<MN, MXNODE, MxType16d, CMDI>;
-def NAME#"32ri" : MxBiArOp_RFRI<MN, MXNODE, MxType32r, CMDI>;
+def NAME#"8di"  : MxBiArOp_RFRI<MN, NODE, MxType8d,  CMDI>;
+def NAME#"16di" : MxBiArOp_RFRI<MN, NODE, MxType16d, CMDI>;
+def NAME#"32ri" : MxBiArOp_RFRI<MN, NODE, MxType32r, CMDI>;
 
 } // $src = $dst
 } // Defs = [CCR]
 
 } // MxBiArOp_RF
 
-defm ADD : MxBiArOp_RF<"add", MxAdd, 0xD, 0x6>;
-defm SUB : MxBiArOp_RF<"sub", MxSub, 0x9, 0x4>;
+// NOTE These naturally produce CCR
+defm ADD : MxBiArOp_RF<"add", MxAdd, 1, 0xD, 0x6>;
+defm SUB : MxBiArOp_RF<"sub", MxSub, 0, 0x9, 0x4>;
+
+multiclass MxBiArOp_RFF<string MN, SDNode NODE, bit isComm, bits<4> CMD> {
+
+let Defs = [CCR], Uses = [CCR] in {
+let Constraints = "$src = $dst" in {
+let isCommutable = isComm in {
+
+def NAME#"8dd"  : MxBiArOp_RFRRF<MN, NODE, MxType8d,  CMD>;
+def NAME#"16dd" : MxBiArOp_RFRRF<MN, NODE, MxType16d, CMD>;
+def NAME#"32dd" : MxBiArOp_RFRRF<MN, NODE, MxType32d, CMD>;
+
+} // isCommutable = ?
+
+} // $src = $dst
+} // Defs = [CCR]
+
+} // MxBiArOp_RFF
+
+// NOTE These consume and produce CCR
+defm ADDX : MxBiArOp_RFF<"addx", MxAddX, 1, 0xD>;
+defm SUBX : MxBiArOp_RFF<"subx", MxSubX, 0, 0x9>;
 
 //===----------------------------------------------------------------------===//
 // And/Xor/Or
 //===----------------------------------------------------------------------===//
 
 // Does not allow use of An registers
-multiclass MxBiArOp_DF<string MN, SDNode MXNODE, SDNode NODE, bits<4> CMDI> {
+multiclass MxBiArOp_DF<string MN, SDNode NODE, bits<4> CMDI> {
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 let isCommutable = 1 in {
 
-def NAME#"8dd"  : MxBiArOp_RFRR<MN, MXNODE, MxDRD8,  MxDRD8>;
-def NAME#"16dd" : MxBiArOp_RFRR<MN, MXNODE, MxDRD16, MxDRD16>;
-def NAME#"32dd" : MxBiArOp_RFRR<MN, MXNODE, MxDRD32, MxDRD32>;
+def NAME#"8dd"  : MxBiArOp_RFRR<MN, NODE, MxType8d>;
+def NAME#"16dd" : MxBiArOp_RFRR<MN, NODE, MxType16d>;
+def NAME#"32dd" : MxBiArOp_RFRR<MN, NODE, MxType32d>;
 
 } // isCommutable = 1
 
-def NAME#"8di"  : MxBiArOp_RFRI<MN, MXNODE,  MxType8d, CMDI>;
-def NAME#"16di" : MxBiArOp_RFRI<MN, MXNODE, MxType16d, CMDI>;
-def NAME#"32di" : MxBiArOp_RFRI<MN, MXNODE, MxType32d, CMDI>;
+def NAME#"8di"  : MxBiArOp_RFRI<MN, NODE,  MxType8d, CMDI>;
+def NAME#"16di" : MxBiArOp_RFRI<MN, NODE, MxType16d, CMDI>;
+def NAME#"32di" : MxBiArOp_RFRI<MN, NODE, MxType32d, CMDI>;
 
 } // $src = $dst
 } // Defs = [CCR]
 
-} // MxBiArOp_RF
+} // MxBiArOp_DF
 
-defm AND : MxBiArOp_DF<"and", MxAnd, and, 0x2>;
-defm XOR : MxBiArOp_DF<"eor", MxXor, xor, 0xA>;
-defm OR  : MxBiArOp_DF<"or",  MxOr,   or, 0x0>;
+// NOTE These naturally produce CCR
+defm AND : MxBiArOp_DF<"and", MxAnd, 0x2>;
+defm XOR : MxBiArOp_DF<"eor", MxXor, 0xA>;
+defm OR  : MxBiArOp_DF<"or",  MxOr,  0x0>;
 
 //===----------------------------------------------------------------------===//
 // Cmp
@@ -274,66 +318,88 @@ def : Pat<(mulhu i16:$dst, i16:$opd),
 // no-CCR Patterns
 //===----------------------------------------------------------------------===//
 
-// TODO figure out why the fuck i cannot use Mxi8/16/32imm as operand,
-// but only imm.
+/// Basically the reason for this stuff is that add and addc share the same
+/// operand types constraints for whatever reasons and I had to define a common
+/// MxAdd and MxSub instructions that produce CCR and then pattern-map add and addc
+/// to it.
+/// NOTE On the other hand I see no reason why I cannot just drop explicit CCR
+/// result. Anyway works for now, hopefully I will better understand how this stuff
+/// is designed later
+foreach node = ["add", "addc"] in {
 
 // add reg, reg
-def : Pat<(add i8 :$src, i8 :$opd), (ADD8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
-def : Pat<(add i16:$src, i16:$opd), (ADD16dd MxDRD16:$src, MxDRD16:$opd)>;
-def : Pat<(add i32:$src, i32:$opd), (ADD32rr MxXRD32:$src, MxXRD32:$opd)>;
+def : Pat<(!cast<SDNode>(node) i8 :$src, i8 :$opd), (ADD8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(!cast<SDNode>(node) i16:$src, i16:$opd), (ADD16dd MxDRD16:$src, MxDRD16:$opd)>;
+def : Pat<(!cast<SDNode>(node) i32:$src, i32:$opd), (ADD32rr MxXRD32:$src, MxXRD32:$opd)>;
 
 // add (An), reg
-def : Pat<(add MxType8.VT:$src, (Mxloadi8 MxType8.JPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType8.VT:$src, (Mxloadi8 MxType8.JPat:$opd)),
           (ADD8dj MxDRD8:$src, MxType8.JOp:$opd)>;
-def : Pat<(add MxType16.VT:$src, (Mxloadi16 MxType16.JPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType16.VT:$src, (Mxloadi16 MxType16.JPat:$opd)),
           (ADD16dj MxDRD16:$src, MxType16.JOp:$opd)>;
-def : Pat<(add MxType32.VT:$src, (Mxloadi32 MxType32.JPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType32.VT:$src, (Mxloadi32 MxType32.JPat:$opd)),
           (ADD32rj MxXRD32:$src, MxType32.JOp:$opd)>;
 
 // add (i,An), reg
-def : Pat<(add MxType8.VT:$src, (Mxloadi8 MxType8.PPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType8.VT:$src, (Mxloadi8 MxType8.PPat:$opd)),
           (ADD8dp MxDRD8:$src, MxType8.POp:$opd)>;
-def : Pat<(add MxType16.VT:$src, (Mxloadi16 MxType16.PPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType16.VT:$src, (Mxloadi16 MxType16.PPat:$opd)),
           (ADD16dp MxDRD16:$src, MxType16.POp:$opd)>;
-def : Pat<(add MxType32.VT:$src, (Mxloadi32 MxType32.PPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType32.VT:$src, (Mxloadi32 MxType32.PPat:$opd)),
           (ADD32rp MxXRD32:$src, MxType32.POp:$opd)>;
 
 // add (i,An,Xn), reg
-def : Pat<(add MxType8.VT:$src, (Mxloadi8 MxType8.FPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType8.VT:$src, (Mxloadi8 MxType8.FPat:$opd)),
           (ADD8df MxDRD8:$src, MxType8.FOp:$opd)>;
-def : Pat<(add MxType16.VT:$src, (Mxloadi16 MxType16.FPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType16.VT:$src, (Mxloadi16 MxType16.FPat:$opd)),
           (ADD16df MxDRD16:$src, MxType16.FOp:$opd)>;
-def : Pat<(add MxType32.VT:$src, (Mxloadi32 MxType32.FPat:$opd)),
+def : Pat<(!cast<SDNode>(node) MxType32.VT:$src, (Mxloadi32 MxType32.FPat:$opd)),
           (ADD32rf MxXRD32:$src, MxType32.FOp:$opd)>;
 
 // add reg, imm
-def : Pat<(add i8: $src, MximmSExt8:$opd) , (ADD8di  MxDRD8 :$src, imm:$opd)>;
-def : Pat<(add i16:$src, MximmSExt16:$opd), (ADD16di MxDRD16:$src, imm:$opd)>;
-def : Pat<(add i32:$src, MximmSExt32:$opd), (ADD32ri MxXRD32:$src, imm:$opd)>;
+def : Pat<(!cast<SDNode>(node) i8: $src, MximmSExt8:$opd) , (ADD8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(!cast<SDNode>(node) i16:$src, MximmSExt16:$opd), (ADD16di MxDRD16:$src, imm:$opd)>;
+def : Pat<(!cast<SDNode>(node) i32:$src, MximmSExt32:$opd), (ADD32ri MxXRD32:$src, imm:$opd)>;
 
 // TODO checkout if i need a similar patters and for sub too
-/* def : Pat<(add MxXRD16:$src, i16immSExt8:$opd), */
+/* def : Pat<(!cast<SDNode>(node) MxXRD16:$src, i16immSExt8:$opd), */
 /*           (ADD16ri8 MxXRD16:$src, i16immSExt8:$opd)>; */
-/* def : Pat<(add MxXRD32:$src, i32immSExt8:$opd), */
+/* def : Pat<(!cast<SDNode>(node) MxXRD32:$src, i32immSExt8:$opd), */
 /*           (ADD32ri8 MxXRD32:$src, i32immSExt8:$opd)>; */
 
+} // foreach add, addc
+
+def : Pat<(adde i8 :$src, i8 :$opd), (ADDX8dd  MxDRD8 :$src, MxDRD8 :$opd, CCR)>;
+def : Pat<(adde i16:$src, i16:$opd), (ADDX16dd MxDRD16:$src, MxDRD16:$opd, CCR)>;
+def : Pat<(adde i32:$src, i32:$opd), (ADDX32dd MxDRD32:$src, MxDRD32:$opd, CCR)>;
+
+
+foreach node = ["sub", "subc"] in {
+
 // sub reg, reg
-def : Pat<(sub i8 :$src, i8 :$opd), (SUB8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
-def : Pat<(sub i16:$src, i16:$opd), (SUB16dd MxDRD16:$src, MxDRD16:$opd)>;
-def : Pat<(sub i32:$src, i32:$opd), (SUB32rr MxXRD32:$src, MxXRD32:$opd)>;
+def : Pat<(!cast<SDNode>(node) i8 :$src, i8 :$opd), (SUB8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
+def : Pat<(!cast<SDNode>(node) i16:$src, i16:$opd), (SUB16dd MxDRD16:$src, MxDRD16:$opd)>;
+def : Pat<(!cast<SDNode>(node) i32:$src, i32:$opd), (SUB32rr MxXRD32:$src, MxXRD32:$opd)>;
 
 /* // sub reg, mem */
-/* def : Pat<(sub MxDRD8:$src, (Mxloadi8 addr:$opd)), */
+/* def : Pat<(!cast<SDNode>(node) MxDRD8:$src, (Mxloadi8 addr:$opd)), */
 /*           (SUB8rm MxDRD8:$src, addr:$opd)>; */
-/* def : Pat<(sub MxXRD16:$src, (Mxloadi16 addr:$opd)), */
+/* def : Pat<(!cast<SDNode>(node) MxXRD16:$src, (Mxloadi16 addr:$opd)), */
 /*           (SUB16rm MxXRD16:$src, addr:$opd)>; */
-/* def : Pat<(sub MxXRD32:$src, (Mxloadi32 addr:$opd)), */
+/* def : Pat<(!cast<SDNode>(node) MxXRD32:$src, (Mxloadi32 addr:$opd)), */
 /*           (SUB32rm MxXRD32:$src, addr:$opd)>; */
 
 // sub reg, imm
-def : Pat<(sub i8 :$src, MximmSExt8 :$opd), (SUB8di  MxDRD8 :$src, imm:$opd)>;
-def : Pat<(sub i16:$src, MximmSExt16:$opd), (SUB16di MxDRD16:$src, imm:$opd)>;
-def : Pat<(sub i32:$src, MximmSExt32:$opd), (SUB32ri MxXRD32:$src, imm:$opd)>;
+def : Pat<(!cast<SDNode>(node) i8 :$src, MximmSExt8 :$opd), (SUB8di  MxDRD8 :$src, imm:$opd)>;
+def : Pat<(!cast<SDNode>(node) i16:$src, MximmSExt16:$opd), (SUB16di MxDRD16:$src, imm:$opd)>;
+def : Pat<(!cast<SDNode>(node) i32:$src, MximmSExt32:$opd), (SUB32ri MxXRD32:$src, imm:$opd)>;
+
+} // foreach sub, subx
+
+def : Pat<(sube i8 :$src, i8 :$opd), (SUBX8dd  MxDRD8 :$src, MxDRD8 :$opd, CCR)>;
+def : Pat<(sube i16:$src, i16:$opd), (SUBX16dd MxDRD16:$src, MxDRD16:$opd, CCR)>;
+def : Pat<(sube i32:$src, i32:$opd), (SUBX32dd MxDRD32:$src, MxDRD32:$opd, CCR)>;
+
 
 // and reg, reg
 def : Pat<(and i8 :$src, i8 :$opd), (AND8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
