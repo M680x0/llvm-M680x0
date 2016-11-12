@@ -178,10 +178,9 @@ def MOV8od : MxMove_MR<MxType8.OOp, MxType8.OPat, MxType8d,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAo_0, MxExtEmpty>>;
 
-// M <- I
-// def  MOV8ji : MxMove_MI<MxType8.JOp, MxType8.JPat, MxType8>;
-// def  MOV8fi : MxMove_MI<MxType8.FOp, MxType8.FPat, MxType8>;
-// def  MOV8pi : MxMove_MI<MxType8.POp, MxType8.PPat, MxType8>;
+// R <- I
+def MOV8di : MxMove_RI<MxType8d,
+    MxMoveEncoding<MxEncSize8, MxEncEAi, MxExtI8_1, MxEncEAd_0, MxExtEmpty>>;
 
 foreach S = [16, 32] in {
   foreach D = [ "r", "a" ] in {
@@ -243,8 +242,10 @@ foreach S = [16, 32] in {
                        MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                        !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
   }
+}
 
-  // M <- I
+// M <- I
+foreach S = [8, 16, 32] in {
   def MOV#S#"j"#"i" : MxMove_MI<
     !cast<MxType>("MxType"#S).JOp,
     !cast<MxType>("MxType"#S).JPat,

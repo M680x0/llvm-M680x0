@@ -47,13 +47,13 @@ void M680x0Subtarget::anchor() { }
 
 M680x0Subtarget::
 M680x0Subtarget(const Triple &TT, const std::string &CPU,
-                const std::string &FS, 
+                const std::string &FS,
                 const M680x0TargetMachine &_TM) :
   M680x0GenSubtargetInfo(TT, CPU, FS),
   PICStyle(PICStyles::None), TM(_TM), TSInfo(),
   InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
   FrameLowering(*this, this->getStackAlignment()),
-  TLInfo(TM, *this), TargetTriple(TT)  { 
+  TLInfo(TM, *this), TargetTriple(TT)  {
   // Determine the PICStyle based on the target selected.
   if (isPositionIndependent())
     // NOTE this limits offsets to 16bit. Newer CPUs can do 32bit
@@ -126,15 +126,21 @@ classifyGlobalFunctionReference(const GlobalValue *GV, const Module &M) const {
   return M680x0II::MO_NO_FLAG;
 }
 
-M680x0Subtarget &
-M680x0Subtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS,
-                                               const M680x0TargetMachine &TM) {
+M680x0Subtarget & M680x0Subtarget::
+initializeSubtargetDependencies(StringRef CPU, StringRef FS,
+                                const M680x0TargetMachine &TM) {
   std::string CPUName = selectM680x0CPU(TargetTriple, CPU);
 
   // Parse features string.
   ParseSubtargetFeatures(CPUName, FS);
   // Initialize scheduling itinerary for the specified CPU.
   InstrItins = getInstrItineraryForCPU(CPUName);
+
+  // Default stack alignment is 8 bytes, ??? Do I need this override?
+  // if (StackAlignOverride)
+  //   stackAlignment = StackAlignOverride;
+  // else
+    stackAlignment = 8;
 
   return *this;
 }

@@ -66,7 +66,9 @@ protected:
   M680x0FrameLowering    FrameLowering;
   M680x0TargetLowering   TLInfo;
 
-  Triple TargetTriple;
+  /// The minimum alignment known to hold of the stack frame on
+  /// entry to the function and which must be maintained by every function.
+  unsigned stackAlignment; Triple TargetTriple;
 
 public:
   /// This constructor initializes the data members to match that
@@ -123,7 +125,7 @@ public:
   unsigned char classifyBlockAddressReference() const;
 
   /// TODO this must be controlled by options like -malign-int and -mshort
-  unsigned getStackAlignment() const { return 4; }
+  unsigned getStackAlignment() const { return stackAlignment; }
 
   /// getSlotSize - Stack slot size in bytes.
   unsigned getSlotSize() const { return 4; }

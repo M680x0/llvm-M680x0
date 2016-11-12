@@ -133,13 +133,17 @@ EncodeReg(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
 
   return Written;
 }
+/// intDoseFit - Checks if an integer fits into the given bit width.
+/// non-templated version
+LLVM_CONSTEXPR static inline bool intDoseFit(unsigned N, int64_t x) {
+  return N >= 64 || (-(INT64_C(1)<<(N-1)) <= x && x < (INT64_C(1)<<(N-1)));
+}
 
 static unsigned
-EmitConstant(uint64_t Val, unsigned Size, uint64_t &Buffer, unsigned Offset) {
+EmitConstant(int64_t Val, unsigned Size, uint64_t &Buffer, unsigned Offset) {
   assert (Size);
   assert (Size + Offset <= 64 && "Value does not fit");
-  assert (Val == (Val & (0xFFFFFFFFFFFFFFFF >> (64 - Size)))
-      && "Value does not fit");
+  assert (intDoseFit(Size, Val));
 
   // Writing Value in host's endianness
   Buffer |= Val << Offset;

@@ -150,9 +150,14 @@ bool M680x0AsmBackend::
 fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                      const MCRelaxableFragment *DF,
                      const MCAsmLayout &Layout) const {
-  // Relax if the value is too big for a (signed) i8.
-  // NOTE This means that *8 instructions have to matched by default
-  return int64_t(Value) != int64_t(int8_t(Value));
+  // Relax if the value is too big for a (signed) i8. This means that byte-wide
+  // instructions have to matched by default
+  //
+  //                           NOTE
+  // A branch to the immediately following instruction automatically
+  // uses the 16-bit displacement format because the 8-bit
+  // displacement field contains $00 (zero offset).
+  return Value == 0 || int64_t(Value) != int64_t(int8_t(Value));
 }
 
 // FIXME: Can tblgen help at all here to verify there aren't other instructions

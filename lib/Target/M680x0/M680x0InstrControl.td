@@ -12,10 +12,10 @@
 //
 //  Machine:
 //
-//       BRA   [ ]     BSR  [ ]     Bcc [ ]     DBcc [ ]     FBcc [ ]
+//       BRA   [x]     BSR  [ ]     Bcc [ ]     DBcc [ ]     FBcc [ ]
 //       FDBcc [ ]     FNOP [ ]     FPn [ ]     FScc [ ]     FTST [ ]
-//       JMP   [~]     JSR  [ ]     NOP [x]     RTD  [ ]     RTR  [ ]
-//       RTS   [x]     Scc  [ ]     TST [ ]
+//       JMP   [~]     JSR  [x]     NOP [x]     RTD  [!]     RTR  [ ]
+//       RTS   [x]     Scc  [x]     TST [ ]
 //
 //  Pseudo:
 //
@@ -38,19 +38,19 @@
 //
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
 // NOP
+//===----------------------------------------------------------------------===//
+
 let hasSideEffects = 0 in {
   def NOP : MxIIII<(outs), (ins), "nop", [], MxEncFixed<0x4E71>>;
 }
+
 
 //===----------------------------------------------------------------------===//
 // Conditions
 //===----------------------------------------------------------------------===//
 
-class MxScc<string cc>
-    : MxInst<0x0, (outs MxDRD8:$dst), (ins CCRC:$ccr), "s"#cc#"\t$dst">;
-
-///
 /// cc—Carry clear      GE—Greater than or equal
 /// LS—Lower or same    PL—Plus
 /// CS—Carry set        GT—Greater than
@@ -61,6 +61,33 @@ class MxScc<string cc>
 /// NE—Not equal        VS—Overflow set
 ///
 /// *Not applicable to the Bcc instructions.
+def MxCCt  : MxBead4Bits<0b0000>;
+def MxCCf  : MxBead4Bits<0b0001>;
+def MxCChi : MxBead4Bits<0b0010>;
+def MxCCls : MxBead4Bits<0b0011>;
+def MxCCcc : MxBead4Bits<0b0100>;
+def MxCCcs : MxBead4Bits<0b0101>;
+def MxCCne : MxBead4Bits<0b0110>;
+def MxCCeq : MxBead4Bits<0b0111>;
+def MxCCvc : MxBead4Bits<0b1000>;
+def MxCCvs : MxBead4Bits<0b1001>;
+def MxCCpl : MxBead4Bits<0b1010>;
+def MxCCmi : MxBead4Bits<0b1011>;
+def MxCCge : MxBead4Bits<0b1100>;
+def MxCClt : MxBead4Bits<0b1101>;
+def MxCCgt : MxBead4Bits<0b1110>;
+def MxCCle : MxBead4Bits<0b1111>;
+
+/* def MxCONDeq : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOEQ; }]>; */
+/* def MxCONDne : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETONE; }]>; */
+/* def MxCONDgt : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOGT; }]>; */
+/* def MxCONDge : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOGE; }]>; */
+/* def MxCONDlt : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOLT; }]>; */
+/* def MxCONDle : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOLE; }]>; */
+
+class MxScc<string cc>
+    : MxInst<0x0, (outs MxDRD8:$dst), (ins CCRC:$ccr), "s"#cc#"\t$dst">;
+
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "f", "ne", "ge",
                "pl", "gt", "t", "hi", "vc", "le", "vs"] in
   def SET#cc : MxScc<cc>;
@@ -102,19 +129,20 @@ multiclass MMxSETPatterns<MxType TYPE> {
   /* defm : MMxSETCCPatterns<TYPE, setule, SETule>; */
   /* defm : MMxSETCCPatterns<TYPE, setune, SETune>; */
   defm : MMxSETCCPatterns<TYPE, seteq, SETeq>;
+  defm : MMxSETCCPatterns<TYPE, setne, SETne>;
   defm : MMxSETCCPatterns<TYPE, setgt, SETgt>;
   defm : MMxSETCCPatterns<TYPE, setge, SETge>;
   defm : MMxSETCCPatterns<TYPE, setlt, SETlt>;
   defm : MMxSETCCPatterns<TYPE, setle, SETle>;
-  defm : MMxSETCCPatterns<TYPE, setne, SETne>;
 }
 
 defm : MMxSETPatterns<MxType8d>;
 defm : MMxSETPatterns<MxType16d>;
 defm : MMxSETPatterns<MxType32d>;
 
+
 //===----------------------------------------------------------------------===//
-// Branches
+// Jumps
 //===----------------------------------------------------------------------===//
 
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
@@ -124,28 +152,84 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
 /*                             [(brind AR16:$dst)]>; */
 
 // jmp (An)
-def JMP32j : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst",
-                    [(brind iPTR:$dst)]>;
+def JMP32j
+  : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst", [(brind iPTR:$dst)]>;
+
 }
 
-let isBranch = 1, isTerminator = 1, Uses = [CCR] in
-class MxBcc<string cc, Operand brtarget>
-    : MxInst<0x0, (outs), (ins brtarget:$dst), "b"#cc#"\t$dst">;
 
-///
-/// cc—Carry clear      GE—Greater than or equal
-/// LS—Lower or same    PL—Plus
-/// CS—Carry set        GT—Greater than
-/// LT—Less than
-/// EQ—Equal            HI—Higher
-/// MI—Minus            VC—Overflow clear
-///                     LE—Less than or equal
-/// NE—Not equal        VS—Overflow set
+//===----------------------------------------------------------------------===//
+// Branches
+//===----------------------------------------------------------------------===//
+
+/// --------------------------------------------------
+///  F  E  D  C | B  A  9  8 | 7  6  5  4  3  2  1  0
+/// --------------------------------------------------
+///  x  x  x  x | CONDITION |   8-BIT DISPLACEMENT
+/// --------------------------------------------------
+///  16-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $00
+/// --------------------------------------------------
+///  32-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $FF
+/// --------------------------------------------------
+let isBranch = 1, isTerminator = 1 in
+class MxBcc<string cc, Operand TARGET, MxEncoding ENC = MxEncEmpty>
+    : MxIIII<(outs), (ins CCRC:$ccr, TARGET:$dst), "b"#cc#"\t$dst", [], ENC>;
+
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
                "pl", "gt", "hi", "vc", "le", "vs"] in {
-  def B#cc#"8"  : MxBcc<cc, MxBrTarget8>;
-  def B#cc#"16" : MxBcc<cc, MxBrTarget16>;
+def B#cc#"8"
+  : MxBcc<cc, MxBrTarget8,
+    MxEncoding<MxBead8Imm<0>, !cast<MxBead4Bits>("MxCC"#cc), MxBead4Bits<0x6>>>;
+def B#cc#"16"
+  : MxBcc<cc, MxBrTarget16,
+    MxEncoding<MxBead4Bits<0x0>, MxBead4Bits<0x0>, !cast<MxBead4Bits>("MxCC"#cc),
+               MxBead4Bits<0x6>, MxBead16Imm<0>>>;
 }
+
+def : Pat<(brcc SETEQ, i8:$lhs, i8:$rhs, bb:$target), (Beq8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETNE, i8:$lhs, i8:$rhs, bb:$target), (Bne8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETGT, i8:$lhs, i8:$rhs, bb:$target), (Bgt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETGE, i8:$lhs, i8:$rhs, bb:$target), (Bge8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETLT, i8:$lhs, i8:$rhs, bb:$target), (Blt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETLE, i8:$lhs, i8:$rhs, bb:$target), (Ble8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+
+def : Pat<(brcc SETEQ, i16:$lhs, i16:$rhs, bb:$target), (Beq8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETNE, i16:$lhs, i16:$rhs, bb:$target), (Bne8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETGT, i16:$lhs, i16:$rhs, bb:$target), (Bgt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETGE, i16:$lhs, i16:$rhs, bb:$target), (Bge8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETLT, i16:$lhs, i16:$rhs, bb:$target), (Blt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETLE, i16:$lhs, i16:$rhs, bb:$target), (Ble8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+
+def : Pat<(brcc SETEQ, i32:$lhs, i32:$rhs, bb:$target), (Beq8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETNE, i32:$lhs, i32:$rhs, bb:$target), (Bne8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETGT, i32:$lhs, i32:$rhs, bb:$target), (Bgt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETGE, i32:$lhs, i32:$rhs, bb:$target), (Bge8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETLT, i32:$lhs, i32:$rhs, bb:$target), (Blt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+
+def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8dd $value, 1), MxBrTarget8:$target)>;
+
+
+/// -------------------------------------------------
+///  F  E  D  C  B  A  9  8 | 7  6  5  4  3  2  1  0
+/// -------------------------------------------------
+///  x  x  x  x  x  x  x  x |   8-BIT DISPLACEMENT
+/// -------------------------------------------------
+///  16-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $00
+/// -------------------------------------------------
+///  32-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $FF
+/// -------------------------------------------------
+let isBranch = 1, isTerminator = 1 in
+class MxBra<Operand TARGET, MxEncoding ENC = MxEncEmpty>
+    : MxIIII<(outs), (ins TARGET:$dst), "bra\t$dst", [], ENC>;
+
+def BRA8  : MxBra<MxBrTarget8,
+            MxEncoding<MxBead8Imm<0>, MxBead4Bits<0x0>, MxBead4Bits<0x6>>>;
+def BRA16 : MxBra<MxBrTarget16,
+            MxEncoding<MxBead4Bits<0x0>, MxBead4Bits<0x0>,
+                       MxBead4Bits<0x0>, MxBead4Bits<0x6>, MxBead16Imm<0>>>;
+
+def : Pat<(br bb:$target), (BRA8 MxBrTarget8:$target)>;
 
 
 //===----------------------------------------------------------------------===//
