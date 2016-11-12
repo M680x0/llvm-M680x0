@@ -14,7 +14,7 @@
 //  Machine:
 //
 //     EXG   [ ]     FMOVE [ ]     FSMOVE [ ]     FDMOVE [ ]     FMOVEM [ ]
-//     LEA   [~]     PEA   [ ]     MOVE   [!]     MOVE16 [ ]     MOVEA  [ ]
+//     LEA   [~]     PEA   [ ]     MOVE   [~]     MOVE16 [ ]     MOVEA  [ ]
 //     MOVEM [ ]     MOVEP [ ]     MOVEQ  [ ]     LINK   [ ]     UNLK   [ ]
 //
 //  Pseudo:
@@ -312,16 +312,25 @@ defm MOV16f : MMxMove_MM<MxType16, MxType16.FOp, MxType16.FPat,
 defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat,
                          MxEncSize32, MxEncEAf_0, MxExtBrief_0>;
 
+
 //===----------------------------------------------------------------------===//
 // LEA
 //===----------------------------------------------------------------------===//
 
-class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat>
-    : MxInst<0x0, (outs MxARD32:$dst), (ins SRCOpd:$src),
-             "lea\t$src, $dst", [(set i32:$dst, SRCPat:$src)]>;
+/// ----------------------------------------------------
+///  F  E  D  C | B  A  9 | 8  7  6 | 5  4  3 | 2  1  0
+/// ----------------------------------------------------
+///  0  1  0  0 | DST REG | 1  1  1 |   MODE  |   REG
+/// ----------------------------------------------------
+class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat, MxEncEA EA, MxEncExt EXT>
+    : MxIIII<(outs MxARD32:$dst), (ins SRCOpd:$src),
+             "lea\t$src, $dst", [(set i32:$dst, SRCPat:$src)],
+             MxEncoding<EA.Reg, EA.DA, EA.Mode,
+                        MxBead3Bits<0b111>, MxBeadReg<0>, MxBead4Bits<0x4>,
+                        EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
 
-def LEA32p : LEA32<MxARID32, MxCP_ARID>;
-def LEA32f : LEA32<MxARII32, MxCP_ARII>;
+def LEA32p : LEA32<MxARID32, MxCP_ARID, MxEncEAp_1, MxExtI16_1>;
+def LEA32f : LEA32<MxARII32, MxCP_ARII, MxEncEAf_1, MxExtBrief_1>;
 
 
 //===----------------------------------------------------------------------===//
