@@ -140,10 +140,13 @@ LLVM_CONSTEXPR static inline bool intDoseFit(unsigned N, int64_t x) {
 }
 
 static unsigned
-EmitConstant(int64_t Val, unsigned Size, uint64_t &Buffer, unsigned Offset) {
-  assert (Size);
+EmitConstant(int64_t Val, unsigned Size, unsigned Pad, uint64_t &Buffer, unsigned Offset) {
+  assert (Size && (Size == 8 || Size == 16 || Size == 32));
   assert (Size + Offset <= 64 && "Value does not fit");
   assert (intDoseFit(Size, Val));
+
+  // Pad the instruction with zeros if any
+  Size += Pad;
 
   // Writing Value in host's endianness
   Buffer |= Val << Offset;
@@ -155,10 +158,12 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
           uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
           const MCSubtargetInfo &STI) const {
   unsigned Size = 0;
+  unsigned Pad = 0;
   switch (Bead & 0xF) {
-    case M680x0Beads::Imm8:  Size = 8;  break;
-    case M680x0Beads::Imm16: Size = 16; break;
-    case M680x0Beads::Imm32: Size = 32; break;
+    case M680x0Beads::Disp8:  Size = 8;  Pad = 0; break;
+    case M680x0Beads::Imm8:   Size = 8;  Pad = 8; break;
+    case M680x0Beads::Imm16:  Size = 16; Pad = 0; break;
+    case M680x0Beads::Imm32:  Size = 32; Pad = 0; break;
   }
   unsigned Op = (Bead & 0x70) >> 4;
   bool Alt = (Bead & 0x80);
@@ -185,7 +190,7 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
       Fixups.push_back(
           MCFixup::create(2, Expr, getFixupForSize(Size, true), MI.getLoc()));
       // Write zeros
-      return EmitConstant(0, Size, Buffer, Offset);
+      return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
   } else {
     assert (!Alt && "You cannot use Alt immediate with a simple operand");
@@ -195,19 +200,19 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
       Fixups.push_back(
           MCFixup::create(2, Expr, getFixupForSize(Size, false), MI.getLoc()));
       // Write zeros
-      return EmitConstant(0, Size, Buffer, Offset);
+      return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
   }
 
   // 32 bit Imm requires HI16 first then LO16
   if (Size == 32) {
     uint64_t Imm = MCO.getImm();
-    Offset += EmitConstant((Imm >> 16) & 0xFFFF, 16, Buffer, Offset);
-    EmitConstant(Imm & 0xFFFF, 16, Buffer, Offset);
+    Offset += EmitConstant((Imm >> 16) & 0xFFFF, 16, Pad, Buffer, Offset);
+    EmitConstant(Imm & 0xFFFF, 16, Pad, Buffer, Offset);
     return Size;
   }
 
-  return EmitConstant(MCO.getImm(), Size, Buffer, Offset);
+  return EmitConstant(MCO.getImm(), Size, Pad, Buffer, Offset);
 }
 
 #include "M680x0GenMCCodeBeads.inc"
@@ -259,6 +264,7 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
       case M680x0Beads::Reg:
         Offset += EncodeReg(Bead, MI, Desc, Buffer, Offset, Fixups, STI);
         break;
+      case M680x0Beads::Disp8:
       case M680x0Beads::Imm8:
       case M680x0Beads::Imm16:
       case M680x0Beads::Imm32:

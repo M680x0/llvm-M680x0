@@ -62,9 +62,10 @@ namespace M680x0Beads {
     DAReg  = 0x5,
     DA     = 0x6,
     Reg    = 0x7,
-    Imm8   = 0x8,
-    Imm16  = 0x9,
-    Imm32  = 0xA,
+    Disp8  = 0x8,
+    Imm8   = 0x9,
+    Imm16  = 0xA,
+    Imm32  = 0xB,
   };
 
   // Ctrl payload
