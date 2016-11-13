@@ -488,7 +488,7 @@ def MxType8d : MxType8Class<"d", MxDRD8>;
 def MxType16d : MxType16Class<"d", MxDRD16>;
 def MxType16a : MxType16Class<"a", MxARD16>;
 def MxType16r : MxType16Class<"r", MxXRD16>;
-def MxType32d : MxType32Class<"a", MxDRD32>;
+def MxType32d : MxType32Class<"d", MxDRD32>;
 def MxType32a : MxType32Class<"a", MxARD32>;
 def MxType32r : MxType32Class<"r", MxXRD32>;
 
@@ -496,7 +496,7 @@ let Postfix = "_TC" in {
 def MxType16d_TC : MxType16Class<"d", MxDRD16_TC>;
 def MxType16a_TC : MxType16Class<"a", MxARD16_TC>;
 def MxType16r_TC : MxType16Class<"r", MxXRD16_TC>;
-def MxType32d_TC : MxType32Class<"a", MxDRD32_TC>;
+def MxType32d_TC : MxType32Class<"d", MxDRD32_TC>;
 def MxType32a_TC : MxType32Class<"a", MxARD32_TC>;
 def MxType32r_TC : MxType32Class<"r", MxXRD32_TC>;
 }
