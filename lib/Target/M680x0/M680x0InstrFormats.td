@@ -77,22 +77,31 @@ class MxBead<bits<4> type, bit b4 = 0, bit b5 = 0, bit b6 = 0, bit b7 = 0> {
   let Value{7} = b7;
 }
 
-def   MxBeadTerm                         : MxBead<0b0000, 0, 0, 0, 0>;
-def   MxBeadIgnore                       : MxBead<0b0000, 1, 0, 0, 0>;
-class MxBead1Bit  <bits<1> b>            : MxBead<0b0001, b>;
-class MxBead2Bits <bits<2> b>            : MxBead<0b0010, b{0}, b{1}>;
-class MxBead3Bits <bits<3> b>            : MxBead<0b0011, b{0}, b{1}, b{2}>;
-class MxBead4Bits <bits<4> b>            : MxBead<0b0100, b{0}, b{1}, b{2}, b{3}>;
+/// System beads, allow to control beading flow
+def   MxBeadTerm   : MxBead<0b0000, 0, 0, 0, 0>;
+def   MxBeadIgnore : MxBead<0b0000, 1, 0, 0, 0>;
+
+/// Add plain bit to the instruciton
+class MxBead1Bit  <bits<1> b> : MxBead<0b0001, b>;
+class MxBead2Bits <bits<2> b> : MxBead<0b0010, b{0}, b{1}>;
+class MxBead3Bits <bits<3> b> : MxBead<0b0011, b{0}, b{1}, b{2}>;
+class MxBead4Bits <bits<4> b> : MxBead<0b0100, b{0}, b{1}, b{2}, b{3}>;
 
 /// bits<3> o - operand number
 /// bit a     - use alternative, used to select index register or
-///             outer dispacement
-class MxBeadDAReg <bits<3> o, bit a = 0> : MxBead<0b0101, o{0}, o{1}, o{2}, a>;
-class MxBeadDA    <bits<3> o, bit a = 0> : MxBead<0b0110, o{0}, o{1}, o{2}, a>;
-class MxBeadReg   <bits<3> o, bit a = 0> : MxBead<0b0111, o{0}, o{1}, o{2}, a>;
-class MxBead8Imm  <bits<3> o, bit a = 0> : MxBead<0b1000, o{0}, o{1}, o{2}, a>;
-class MxBead16Imm <bits<3> o, bit a = 0> : MxBead<0b1001, o{0}, o{1}, o{2}, a>;
-class MxBead32Imm <bits<3> o, bit a = 0> : MxBead<0b1010, o{0}, o{1}, o{2}, a>;
+///             outer dispacement/immediate
+/// suffix NP means non-padded
+class MxBeadDAReg  <bits<3> o, bit a = 0> : MxBead<0b0101, o{0}, o{1}, o{2}, a>;
+class MxBeadDA     <bits<3> o, bit a = 0> : MxBead<0b0110, o{0}, o{1}, o{2}, a>;
+class MxBeadReg    <bits<3> o, bit a = 0> : MxBead<0b0111, o{0}, o{1}, o{2}, a>;
+class MxBead8Disp  <bits<3> o, bit a = 0> : MxBead<0b1000, o{0}, o{1}, o{2}, a>;
+
+/// Add Immediate to the instruction. 8-bit version is padded with zeros to fit
+/// the word.
+class MxBead8Imm   <bits<3> o, bit a = 0> : MxBead<0b1001, o{0}, o{1}, o{2}, a>;
+class MxBead16Imm  <bits<3> o, bit a = 0> : MxBead<0b1010, o{0}, o{1}, o{2}, a>;
+class MxBead32Imm  <bits<3> o, bit a = 0> : MxBead<0b1011, o{0}, o{1}, o{2}, a>;
+
 
 class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm, 
                  MxBead n2  = MxBeadTerm, MxBead n3  = MxBeadTerm,
@@ -227,16 +236,16 @@ class MxEncOpMode<MxBead b0, MxBead b1 = MxBeadIgnore, MxBead b2 = MxBeadIgnore>
   MxBead B2 = b2;
 }
 
-// EA, Dn
+// op EA, Dn
 def MxOpMode8dEA  : MxEncOpMode<MxBead3Bits<0b000>>;
 def MxOpMode16dEA : MxEncOpMode<MxBead3Bits<0b001>>;
 def MxOpMode32dEA : MxEncOpMode<MxBead3Bits<0b010>>;
 
-// EA, An
+// op EA, An
 def MxOpMode16aEA : MxEncOpMode<MxBead3Bits<0b110>>;
 def MxOpMode32aEA : MxEncOpMode<MxBead3Bits<0b111>>;
 
-// EA, Rn
+// op EA, Rn
 // As you might noticed this guy is special... Since M680x0 differentiates
 // between Data and Address registers we required to use different OPMODE codes
 // for Address registers DST operands. One way of dealing with it is to use
@@ -245,10 +254,14 @@ def MxOpMode32aEA : MxEncOpMode<MxBead3Bits<0b111>>;
 // superfluous moves. Another approach is to use reg-variadic encoding which will
 // change OPMODE base on Register Class used. Luckily, all the bits that differ go
 // from 0 to 1 and can be encoded with MxBeadDA.
+// Basically, if the register used is of Data type these encodings will be
+// the same as MxOpMode{16,32}dEA above and used with regular instructions(e.g. ADD,
+// SUB), but if the register is of Address type the appropriate bits will flip and
+// the instructions become of *A type(e.g ADDA, SUBA).
 def MxOpMode16rEA : MxEncOpMode<MxBead1Bit<1>, MxBeadDA<0>, MxBead1Bit<0>>;
 def MxOpMode32rEA : MxEncOpMode<MxBeadDA<0>, MxBead1Bit<1>, MxBeadDA<0>>;
 
-// Dn, EA
+// op Dn, EA
 def MxOpMode8EAd : MxEncOpMode<MxBead3Bits<0b011>>;
 def MxOpMode16EAd : MxEncOpMode<MxBead3Bits<0b100>>;
 def MxOpMode32EAd : MxEncOpMode<MxBead3Bits<0b101>>;
