@@ -50,6 +50,12 @@ class MxMoveEncoding<MxBead2Bits size,
       srcExt.Imm, srcExt.B8, srcExt.Scale, srcExt.WL, srcExt.DAReg,
       dstExt.Imm, dstExt.B8, dstExt.Scale, dstExt.WL, dstExt.DAReg>;
 
+/// MOVE has alternate size encoding
+class MxMoveSize<bits<2> value> : MxBead2Bits<value>;
+def MxMoveSize8  : MxMoveSize<0b01>;
+def MxMoveSize16 : MxMoveSize<0b11>;
+def MxMoveSize32 : MxMoveSize<0b10>;
+
 class MxMove<string size, dag outs, dag ins, list<dag> pattern, MxEncoding enc>
     : MxIIII<outs, ins, "move."#size#"\t$src, $dst", pattern, enc>;
 
@@ -82,7 +88,7 @@ class MxMove_RM<MxType REG, MxOperand MEMOpd, ComplexPattern MEMPat,
              [(set REG.VT:$dst, (REG.Load MEMPat:$src))],
              MxMoveEncoding<SIZE, SRCEA, SRCEXT, DSTEA, DSTEXT>>;
 
-multiclass MMxMove_RM<MxType REG, MxEncSize SIZE, MxEncEA EA_0> {
+multiclass MMxMove_RM<MxType REG, MxMoveSize SIZE, MxEncEA EA_0> {
 
 // FIXME tablegen defines implicitly created defs inside multiclass which
 // breaks some code like letting Pattern afterwards in _TC
@@ -121,7 +127,7 @@ class MxMove_MM<string SIZE, PatFrag LOAD,
              MxMoveEncoding<ESIZE, SRCEA, SRCEXT, DSTEA, DSTEXT>>;
 
 multiclass MMxMove_MM<MxType TYPE, MxOperand DSTOpd, ComplexPattern DSTPat,
-                      MxEncSize SIZE, MxEncEA EA_0, MxEncExt EXT_0> {
+                      MxMoveSize SIZE, MxEncEA EA_0, MxEncExt EXT_0> {
 
 // MEM <- (An)
 def NAME#TYPE.JOp.Letter#TYPE.Postfix
@@ -150,37 +156,37 @@ def NAME#TYPE.FOp.Letter#TYPE.Postfix
 
 def MOV8dd
   : MxMove_RR<MxType8d, MxType8d,
-    MxMoveEncoding<MxEncSize8, MxEncEAd_1, MxExtEmpty, MxEncEAd_0, MxExtEmpty>>;
+    MxMoveEncoding<MxMoveSize8, MxEncEAd_1, MxExtEmpty, MxEncEAd_0, MxExtEmpty>>;
 
 // M <- R
 def MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d,
-                       MxMoveEncoding<MxEncSize8,
+                       MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAj_0, MxExtEmpty>>;
 
 def MOV8fd : MxMove_MR<MxType8.FOp, MxType8.FPat, MxType8d,
-                       MxMoveEncoding<MxEncSize8,
+                       MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAj_0, MxExtBrief_0>>;
 
 def MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d,
-                       MxMoveEncoding<MxEncSize8,
+                       MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAp_0, MxExtI16_0>>;
 
 def MOV8ed : MxMove_MR<MxType8.EOp, MxType8.EPat, MxType8d,
-                       MxMoveEncoding<MxEncSize8,
+                       MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAe_0, MxExtEmpty>>;
 
 def MOV8od : MxMove_MR<MxType8.OOp, MxType8.OPat, MxType8d,
-                       MxMoveEncoding<MxEncSize8,
+                       MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAo_0, MxExtEmpty>>;
 
 // R <- I
 def MOV8di : MxMove_RI<MxType8d,
-    MxMoveEncoding<MxEncSize8, MxEncEAi, MxExtI8_1, MxEncEAd_0, MxExtEmpty>>;
+    MxMoveEncoding<MxMoveSize8, MxEncEAi, MxExtI8_1, MxEncEAd_0, MxExtEmpty>>;
 
 foreach S = [16, 32] in {
   foreach D = [ "r", "a" ] in {
@@ -189,7 +195,7 @@ foreach S = [16, 32] in {
       def MOV#S#D#O : MxMove_RR<
         !cast<MxType>("MxType"#S#D),
         !cast<MxType>("MxType"#S#O),
-        MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+        MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                        !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                        !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
     }
@@ -199,7 +205,7 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S).JOp,
       !cast<MxType>("MxType"#S).JPat,
       !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAj_0, MxExtEmpty>>;
 
@@ -207,7 +213,7 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S).FOp,
       !cast<MxType>("MxType"#S).FPat,
       !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAf_0, MxExtBrief_0>>;
 
@@ -215,7 +221,7 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S).POp,
       !cast<MxType>("MxType"#S).PPat,
       !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAp_0, MxExtI16_0>>;
 
@@ -223,7 +229,7 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S).EOp,
       !cast<MxType>("MxType"#S).EPat,
       !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAe_0, MxExtEmpty>>;
 
@@ -231,14 +237,14 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S).OOp,
       !cast<MxType>("MxType"#S).OPat,
       !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAo_0, MxExtEmpty>>;
 
     // R <- I
     def MOV#S#D#"i" : MxMove_RI<
       !cast<MxType>("MxType"#S#D),
-        MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+        MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                        MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                        !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
   }
@@ -250,7 +256,7 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).JOp,
     !cast<MxType>("MxType"#S).JPat,
     !cast<MxType>("MxType"#S),
-    MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+    MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                    MxEncEAi, MxExtI32_1,
                    MxEncEAj_0, MxExtEmpty>>;
 
@@ -258,7 +264,7 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).FOp,
     !cast<MxType>("MxType"#S).FPat,
     !cast<MxType>("MxType"#S),
-    MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+    MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                    MxEncEAi, MxExtI32_1,
                    MxEncEAf_0, MxExtBrief_0>>;
 
@@ -266,7 +272,7 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).POp,
     !cast<MxType>("MxType"#S).PPat,
     !cast<MxType>("MxType"#S),
-    MxMoveEncoding<!cast<MxEncSize>("MxEncSize"#S),
+    MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                    MxEncEAi, MxExtI32_1,
                    MxEncEAp_0, MxExtI16_0>>;
 }
@@ -274,43 +280,43 @@ foreach S = [8, 16, 32] in {
 // FIXME Tablegen needs to parse complex defm names inside the loop FFS
 
 // R <- M
-defm MOV8d  : MMxMove_RM<MxType8d, MxEncSize8, MxEncEAd_0>;
+defm MOV8d  : MMxMove_RM<MxType8d, MxMoveSize8, MxEncEAd_0>;
 
-defm MOV16r : MMxMove_RM<MxType16r, MxEncSize16, MxEncEAr_0_x>;
-defm MOV16a : MMxMove_RM<MxType16a, MxEncSize16, MxEncEAa_0>;
+defm MOV16r : MMxMove_RM<MxType16r, MxMoveSize16, MxEncEAr_0_x>;
+defm MOV16a : MMxMove_RM<MxType16a, MxMoveSize16, MxEncEAa_0>;
 
-defm MOV32r : MMxMove_RM<MxType32r, MxEncSize32, MxEncEAr_0_x>;
-defm MOV32a : MMxMove_RM<MxType32a, MxEncSize32, MxEncEAa_0>;
+defm MOV32r : MMxMove_RM<MxType32r, MxMoveSize32, MxEncEAr_0_x>;
+defm MOV32a : MMxMove_RM<MxType32a, MxMoveSize32, MxEncEAa_0>;
 
 let Pattern = [(null_frag)] in {
-defm MOV16r : MMxMove_RM<MxType16r_TC, MxEncSize16, MxEncEAr_0_x>;
-defm MOV16a : MMxMove_RM<MxType16a_TC, MxEncSize16, MxEncEAa_0>;
+defm MOV16r : MMxMove_RM<MxType16r_TC, MxMoveSize16, MxEncEAr_0_x>;
+defm MOV16a : MMxMove_RM<MxType16a_TC, MxMoveSize16, MxEncEAa_0>;
 
-defm MOV32r : MMxMove_RM<MxType32r_TC, MxEncSize32, MxEncEAr_0_x>;
-defm MOV32a : MMxMove_RM<MxType32a_TC, MxEncSize32, MxEncEAa_0>;
+defm MOV32r : MMxMove_RM<MxType32r_TC, MxMoveSize32, MxEncEAr_0_x>;
+defm MOV32a : MMxMove_RM<MxType32a_TC, MxMoveSize32, MxEncEAa_0>;
 } // Pattern
 
 // M <- M
 defm MOV8j  : MMxMove_MM<MxType8,  MxType8.JOp,  MxType8.JPat,
-                         MxEncSize8, MxEncEAj_0, MxExtEmpty>;
+                         MxMoveSize8, MxEncEAj_0, MxExtEmpty>;
 defm MOV16j : MMxMove_MM<MxType16, MxType16.JOp, MxType16.JPat,
-                         MxEncSize16, MxEncEAj_0, MxExtEmpty>;
+                         MxMoveSize16, MxEncEAj_0, MxExtEmpty>;
 defm MOV32j : MMxMove_MM<MxType32, MxType32.JOp, MxType32.JPat,
-                         MxEncSize32, MxEncEAj_0, MxExtEmpty>;
+                         MxMoveSize32, MxEncEAj_0, MxExtEmpty>;
 
 defm MOV8p  : MMxMove_MM<MxType8,  MxType8.POp,  MxType8.PPat,
-                         MxEncSize8, MxEncEAp_0, MxExtI16_0>;
+                         MxMoveSize8, MxEncEAp_0, MxExtI16_0>;
 defm MOV16p : MMxMove_MM<MxType16, MxType16.POp, MxType16.PPat,
-                         MxEncSize16, MxEncEAp_0, MxExtI16_0>;
+                         MxMoveSize16, MxEncEAp_0, MxExtI16_0>;
 defm MOV32p : MMxMove_MM<MxType32, MxType32.POp, MxType32.PPat,
-                         MxEncSize32, MxEncEAp_0, MxExtI16_0>;
+                         MxMoveSize32, MxEncEAp_0, MxExtI16_0>;
 
 defm MOV8f  : MMxMove_MM<MxType8,  MxType8.FOp,  MxType8.FPat,
-                         MxEncSize8, MxEncEAf_0, MxExtBrief_0>;
+                         MxMoveSize8, MxEncEAf_0, MxExtBrief_0>;
 defm MOV16f : MMxMove_MM<MxType16, MxType16.FOp, MxType16.FPat,
-                         MxEncSize16, MxEncEAf_0, MxExtBrief_0>;
+                         MxMoveSize16, MxEncEAf_0, MxExtBrief_0>;
 defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat,
-                         MxEncSize32, MxEncEAf_0, MxExtBrief_0>;
+                         MxMoveSize32, MxEncEAf_0, MxExtBrief_0>;
 
 
 //===----------------------------------------------------------------------===//
