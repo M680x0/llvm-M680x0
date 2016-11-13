@@ -76,8 +76,7 @@ getRelocType(MCContext &Ctx, const MCValue &Target,
     case RT_16:
       return IsPCRel ? ELF::R_M680x0_PC16 : ELF::R_M680x0_16;
     case RT_8:
-      assert(IsPCRel);
-      return ELF::R_M680x0_PC8;
+      return IsPCRel ? ELF::R_M680x0_PC8  : ELF::R_M680x0_8;
     }
   // ??? Can we drop this?
   // case MCSymbolRefExpr::VK_GOT:
