@@ -81,10 +81,13 @@ class MxArithImmEncoding<MxBead4Bits CMD, MxEncSize SIZE,
 //===----------------------------------------------------------------------===//
 
 // $reg, $ccr <- $reg op $reg
-class MxBiArOp_RFRR<string MN, SDNode NODE, MxType TYPE>
-    : MxInst<0x0, (outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
+class MxBiArOp_RFRR<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
+    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
            MN#"."#TYPE.Prefix#"\t$opd, $dst",
-           [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd))]>;
+           [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd))],
+           MxArithEncoding<MxBead4Bits<CMD>,
+                           !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#TYPE.RLet#"EA"),
+                           MxBeadReg<0>, !cast<MxEncEA>("MxEncEA"#TYPE.RLet#"_2"), MxExtEmpty>>;
 
 // $reg, $ccr <- $reg op $reg op $ccr
 class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
@@ -98,7 +101,7 @@ class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
 // $reg <- $reg op $imm
 class MxBiArOp_RFRI<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
     : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
-              MN#"."#TYPE.Prefix#"\t$opd, $dst",
+              MN#"i."#TYPE.Prefix#"\t$opd, $dst",
               [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.IPat:$opd))],
               MxArithImmEncoding<MxBead4Bits<CMD>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                    !cast<MxEncEA>("MxEncEA"#TYPE.RLet#"_0"), MxExtEmpty,
@@ -120,9 +123,9 @@ let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 let isCommutable = isComm in {
 
-def NAME#"8dd"  : MxBiArOp_RFRR<MN, NODE, MxType8d>;
-def NAME#"16dd" : MxBiArOp_RFRR<MN, NODE, MxType16d>;
-def NAME#"32rr" : MxBiArOp_RFRR<MN, NODE, MxType32r>;
+def NAME#"8dd"  : MxBiArOp_RFRR<MN, NODE, MxType8d,  CMD>;
+def NAME#"16dd" : MxBiArOp_RFRR<MN, NODE, MxType16d, CMD>;
+def NAME#"32rr" : MxBiArOp_RFRR<MN, NODE, MxType32r, CMD>;
 
 } // isCommutable = ?
 
@@ -177,15 +180,15 @@ defm SUBX : MxBiArOp_RFF<"subx", MxSubX, 0, 0x9>;
 //===----------------------------------------------------------------------===//
 
 // Does not allow use of An registers
-multiclass MxBiArOp_DF<string MN, SDNode NODE, bits<4> CMDI> {
+multiclass MxBiArOp_DF<string MN, SDNode NODE, bits<4> CMD, bits<4> CMDI> {
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 let isCommutable = 1 in {
 
-def NAME#"8dd"  : MxBiArOp_RFRR<MN, NODE, MxType8d>;
-def NAME#"16dd" : MxBiArOp_RFRR<MN, NODE, MxType16d>;
-def NAME#"32dd" : MxBiArOp_RFRR<MN, NODE, MxType32d>;
+def NAME#"8dd"  : MxBiArOp_RFRR<MN, NODE, MxType8d,  CMD>;
+def NAME#"16dd" : MxBiArOp_RFRR<MN, NODE, MxType16d, CMD>;
+def NAME#"32dd" : MxBiArOp_RFRR<MN, NODE, MxType32d, CMD>;
 
 } // isCommutable = 1
 
@@ -199,38 +202,59 @@ def NAME#"32di" : MxBiArOp_RFRI<MN, NODE, MxType32d, CMDI>;
 } // MxBiArOp_DF
 
 // NOTE These naturally produce CCR
-defm AND : MxBiArOp_DF<"and", MxAnd, 0x2>;
-defm XOR : MxBiArOp_DF<"eor", MxXor, 0xA>;
-defm OR  : MxBiArOp_DF<"or",  MxOr,  0x0>;
+defm AND : MxBiArOp_DF<"and", MxAnd, 0xC, 0x2>;
+defm XOR : MxBiArOp_DF<"eor", MxXor, 0xB, 0xA>;
+defm OR  : MxBiArOp_DF<"or",  MxOr,  0x8, 0x0>;
+
 
 //===----------------------------------------------------------------------===//
 // Cmp
 //===----------------------------------------------------------------------===//
 
-class MxCmp<dag ins, string symbol = "cmp">
-    : MxInst<0x0, (outs CCRC:$ccr), ins, symbol#"\t$lhs, $rhs">;
+class MxCmp<dag INS, MxType TYPE, MxEncoding ENC = MxEncEmpty, string MN = "cmp">
+    : MxIIII<(outs CCRC:$ccr), INS, MN#"."#TYPE.Prefix#"\t$lhs, $rhs", [], ENC>;
 
-def CMP8dd  : MxCmp<(ins MxDRD8 :$lhs, MxDRD8 :$rhs)>;
-def CMP16dd : MxCmp<(ins MxDRD16:$lhs, MxDRD16:$rhs)>;
-def CMP32dd : MxCmp<(ins MxDRD32:$lhs, MxDRD32:$rhs)>;
+foreach S = [8, 16, 32] in {
+
+// cmp EA, Dn
+def CMP#S#dd 
+  : MxCmp<(ins !cast<MxRegOp>("MxDRD"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
+    !cast<MxType>("MxType"#S#"d"),
+    MxArithEncoding<MxBead4Bits<0xB>,
+                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
+                    MxBeadReg<1>, MxEncEAd_0, MxExtEmpty>>;
 
 let mayLoad = 1 in {
-def CMP8dj  : MxCmp<(ins MxARI8 :$lhs, MxDRD8 :$rhs)>;
-def CMP16dj : MxCmp<(ins MxARI16:$lhs, MxDRD16:$rhs)>;
-def CMP32dj : MxCmp<(ins MxARI32:$lhs, MxDRD32:$rhs)>;
+def CMP#S#dj
+  : MxCmp<(ins !cast<MxRegOp>("MxARI"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
+    !cast<MxType>("MxType"#S#"d"),
+    MxArithEncoding<MxBead4Bits<0xB>,
+                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
+                    MxBeadReg<1>, MxEncEAj_0, MxExtEmpty>>;
 
-def CMP8dp  : MxCmp<(ins MxARID8 :$lhs, MxDRD8 :$rhs)>;
-def CMP16dp : MxCmp<(ins MxARID16:$lhs, MxDRD16:$rhs)>;
-def CMP32dp : MxCmp<(ins MxARID32:$lhs, MxDRD32:$rhs)>;
+def CMP#S#dp
+  : MxCmp<(ins !cast<MxRegOp>("MxARID"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
+    !cast<MxType>("MxType"#S#"d"),
+    MxArithEncoding<MxBead4Bits<0xB>,
+                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
+                    MxBeadReg<1>, MxEncEAp_0, MxExtI16_0>>;
 
-def CMP8df  : MxCmp<(ins MxARII8 :$lhs, MxDRD8 :$rhs)>;
-def CMP16df : MxCmp<(ins MxARII16:$lhs, MxDRD16:$rhs)>;
-def CMP32df : MxCmp<(ins MxARII32:$lhs, MxDRD32:$rhs)>;
-}
+def CMP#S#df
+  : MxCmp<(ins !cast<MxRegOp>("MxARII"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
+    !cast<MxType>("MxType"#S#"d"),
+    MxArithEncoding<MxBead4Bits<0xB>,
+                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
+                    MxBeadReg<1>, MxEncEAf_0, MxExtBrief_0>>;
+} // let mayLoad = 1
 
-def CMP8di  : MxCmp<(ins MxDRD8 :$lhs, Mxi8imm :$rhs), "cmpi">;
-def CMP16di : MxCmp<(ins MxDRD16:$lhs, Mxi16imm:$rhs), "cmpi">;
-def CMP32di : MxCmp<(ins MxDRD32:$lhs, Mxi32imm:$rhs), "cmpi">;
+def CMP#S#di 
+  : MxCmp<(ins !cast<MxOp>("Mxi"#S#"imm"):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs), 
+    !cast<MxType>("MxType"#S#"d"),
+    MxArithImmEncoding<MxBead4Bits<0xB>, !cast<MxEncSize>("MxEncSize"#S),
+                       MxEncEAd_1, MxExtEmpty,
+                       !cast<MxEncExt>("MxExtI"#S#"_0")>, "cmpi">;
+
+} // foreach
 
 //===----------------------------------------------------------------------===//
 // Ext
