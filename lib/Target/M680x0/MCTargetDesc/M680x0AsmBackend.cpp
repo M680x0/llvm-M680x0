@@ -94,6 +94,7 @@ static unsigned getRelaxedOpcodeBranch(const MCInst &Inst) {
   unsigned Op = Inst.getOpcode();
   switch (Op) {
   default: return Op;
+  case M680x0::BRA8: return M680x0::BRA16;
   case M680x0::Bcc8: return M680x0::Bcc16;
   case M680x0::Bls8: return M680x0::Bls16;
   case M680x0::Blt8: return M680x0::Blt16;

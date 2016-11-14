@@ -42,15 +42,15 @@ public:
   // getGenInstrBeads - TableGen'erated function
   const uint8_t * getGenInstrBeads(const MCInst &MI) const;
 
-  unsigned EncodeBits(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
+  unsigned EncodeBits(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
             uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
             const MCSubtargetInfo &STI) const;
 
-  unsigned EncodeReg(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
+  unsigned EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
             uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
             const MCSubtargetInfo &STI) const;
 
-  unsigned EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
+  unsigned EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
             uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
             const MCSubtargetInfo &STI) const;
 
@@ -62,7 +62,7 @@ public:
 } // end anonymous namespace
 
 unsigned M680x0MCCodeEmitter::
-EncodeBits(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
+EncodeBits(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
            uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
            const MCSubtargetInfo &STI) const {
   unsigned Num = 0;
@@ -85,7 +85,7 @@ EncodeBits(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
 }
 
 unsigned M680x0MCCodeEmitter::
-EncodeReg(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
+EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
           uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
           const MCSubtargetInfo &STI) const {
   bool DA, Reg;
@@ -154,16 +154,22 @@ EmitConstant(int64_t Val, unsigned Size, unsigned Pad, uint64_t &Buffer, unsigne
 }
 
 unsigned M680x0MCCodeEmitter::
-EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
+EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
           uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
           const MCSubtargetInfo &STI) const {
   unsigned Size = 0;
   unsigned Pad = 0;
+  unsigned FixOffset = 0;
+  int64_t  ExprAdd = 0;
   switch (Bead & 0xF) {
-    case M680x0Beads::Disp8:  Size = 8;  Pad = 0; break;
-    case M680x0Beads::Imm8:   Size = 8;  Pad = 8; break;
-    case M680x0Beads::Imm16:  Size = 16; Pad = 0; break;
-    case M680x0Beads::Imm32:  Size = 32; Pad = 0; break;
+    // Disp8 requires +1 byte offset since it is not padded and the target is BE
+    // This will be fixed within the expression itself.
+    // ??? what happens if it is not byte aligned
+    // ??? is it even possible
+    case M680x0Beads::Disp8:  Size = 8;  Pad = 0; FixOffset = ThisByte + 1; ExprAdd = -1; break;
+    case M680x0Beads::Imm8:   Size = 8;  Pad = 8; FixOffset = ThisByte; break;
+    case M680x0Beads::Imm16:  Size = 16; Pad = 0; FixOffset = ThisByte; break;
+    case M680x0Beads::Imm32:  Size = 32; Pad = 0; FixOffset = ThisByte; break;
   }
   unsigned Op = (Bead & 0x70) >> 4;
   bool Alt = (Bead & 0x80);
@@ -175,8 +181,8 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
   assert (Op < Desc.NumMIOperands);
   MIOperandInfo MIO = Desc.MIOpInfo[Op];
   MCOperand MCO;
+  bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
   if (MIO.isTargetType()) {
-    bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
     MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemOuter : M680x0::MemDisp));
     if (isPCRel) {
       assert(!Alt && "You cannot use ALT operand with PCRel");
@@ -186,9 +192,14 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
       } else {
         Expr = MCO.getExpr();
       }
-      // PC offset is always 3rd byte in instruciton
+
+      if (ExprAdd != 0) {
+        Expr = MCBinaryExpr::createAdd(Expr,
+                 MCConstantExpr::create(ExprAdd, Ctx), Ctx);
+      }
+
       Fixups.push_back(
-          MCFixup::create(2, Expr, getFixupForSize(Size, true), MI.getLoc()));
+          MCFixup::create(FixOffset, Expr, getFixupForSize(Size, true), MI.getLoc()));
       // Write zeros
       return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
@@ -197,8 +208,14 @@ EncodeImm(uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
     MCO = MI.getOperand(MIO.MINo);
     if (MCO.isExpr()) {
       const MCExpr *Expr = MCO.getExpr();
+
+      if (ExprAdd != 0) {
+        Expr = MCBinaryExpr::createAdd(Expr,
+                 MCConstantExpr::create(ExprAdd, Ctx), Ctx);
+      }
+
       Fixups.push_back(
-          MCFixup::create(2, Expr, getFixupForSize(Size, false), MI.getLoc()));
+          MCFixup::create(FixOffset, Expr, getFixupForSize(Size, isPCRel), MI.getLoc()));
       // Write zeros
       return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
@@ -236,7 +253,7 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
 
   uint64_t Buffer = 0;
   unsigned Offset = 0;
-  unsigned Bytes = 0;
+  unsigned ThisByte = 0;
 
   while (*Beads) {
     uint8_t Bead = *Beads;
@@ -257,18 +274,18 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
       case M680x0Beads::Bits2:
       case M680x0Beads::Bits3:
       case M680x0Beads::Bits4:
-        Offset += EncodeBits(Bead, MI, Desc, Buffer, Offset, Fixups, STI);
+        Offset += EncodeBits(ThisByte, Bead, MI, Desc, Buffer, Offset, Fixups, STI);
         break;
       case M680x0Beads::DAReg:
       case M680x0Beads::DA:
       case M680x0Beads::Reg:
-        Offset += EncodeReg(Bead, MI, Desc, Buffer, Offset, Fixups, STI);
+        Offset += EncodeReg(ThisByte, Bead, MI, Desc, Buffer, Offset, Fixups, STI);
         break;
       case M680x0Beads::Disp8:
       case M680x0Beads::Imm8:
       case M680x0Beads::Imm16:
       case M680x0Beads::Imm32:
-        Offset += EncodeImm(Bead, MI, Desc, Buffer, Offset, Fixups, STI);
+        Offset += EncodeImm(ThisByte, Bead, MI, Desc, Buffer, Offset, Fixups, STI);
         break;
     }
 
@@ -278,7 +295,7 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
       OS.write((char)((Buffer >> 0) & 0xFF));
       Buffer >>= 16;
       Offset -= 16;
-      Bytes += 2;
+      ThisByte += 2;
     }
   }
 
@@ -286,11 +303,11 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
   //   OS.write((char)(Buffer & 0xFF));
   //   Buffer >>= 8;
   //   Offset -= 8;
-  //   Bytes++;
+  //   ThisByte++;
   // }
 
   assert (Offset == 0 && "M680x0 Instructions are % 2 bytes");
-  assert ((Bytes && !(Bytes % 2)) && "M680x0 Instructions are % 2 bytes");
+  assert ((ThisByte && !(ThisByte % 2)) && "M680x0 Instructions are % 2 bytes");
 }
 
 MCCodeEmitter *llvm::

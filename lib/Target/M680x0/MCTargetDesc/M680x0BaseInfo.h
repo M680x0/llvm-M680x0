@@ -203,21 +203,18 @@ isPCRelOpd(unsigned Opd) {
     case M680x0::MIOpTypes::MxPCI32:
     case M680x0::MIOpTypes::MxPCI16:
     case M680x0::MIOpTypes::MxPCI8:
+    case MCOI::OPERAND_PCREL:
       return true;
   }
 }
 
 static inline unsigned
-getImmSize(unsigned Opd) {
+getDispSize(unsigned Opd) {
   switch (Opd) {
     default: return 0;
-    case M680x0::MIOpTypes::MxBrTarget16:
-    case M680x0::MIOpTypes::MxBrTarget32:
-    case M680x0::MIOpTypes::MxBrTarget8:
     case M680x0::MIOpTypes::MxAL16:
     case M680x0::MIOpTypes::MxAL32:
     case M680x0::MIOpTypes::MxAL8:
-    case M680x0::MIOpTypes::Mxi32imm:
       return 32;
     case M680x0::MIOpTypes::MxARID16:
     case M680x0::MIOpTypes::MxARID16_TC:
@@ -231,7 +228,6 @@ getImmSize(unsigned Opd) {
     case M680x0::MIOpTypes::MxAS16:
     case M680x0::MIOpTypes::MxAS32:
     case M680x0::MIOpTypes::MxAS8:
-    case M680x0::MIOpTypes::Mxi16imm:
       return 16;
     case M680x0::MIOpTypes::MxARII16:
     case M680x0::MIOpTypes::MxARII16_TC:
@@ -242,7 +238,6 @@ getImmSize(unsigned Opd) {
     case M680x0::MIOpTypes::MxPCI16:
     case M680x0::MIOpTypes::MxPCI32:
     case M680x0::MIOpTypes::MxPCI8:
-    case M680x0::MIOpTypes::Mxi8imm:
       return 8;
   }
 }
