@@ -78,29 +78,29 @@ class MxBead<bits<4> type, bit b4 = 0, bit b5 = 0, bit b6 = 0, bit b7 = 0> {
 }
 
 /// System beads, allow to control beading flow
-def   MxBeadTerm   : MxBead<0b0000, 0, 0, 0, 0>;
-def   MxBeadIgnore : MxBead<0b0000, 1, 0, 0, 0>;
+def   MxBeadTerm   : MxBead<0x0, 0, 0, 0, 0>;
+def   MxBeadIgnore : MxBead<0x0, 1, 0, 0, 0>;
 
 /// Add plain bit to the instruciton
-class MxBead1Bit  <bits<1> b> : MxBead<0b0001, b>;
-class MxBead2Bits <bits<2> b> : MxBead<0b0010, b{0}, b{1}>;
-class MxBead3Bits <bits<3> b> : MxBead<0b0011, b{0}, b{1}, b{2}>;
-class MxBead4Bits <bits<4> b> : MxBead<0b0100, b{0}, b{1}, b{2}, b{3}>;
+class MxBead1Bit  <bits<1> b> : MxBead<0x1, b>;
+class MxBead2Bits <bits<2> b> : MxBead<0x2, b{0}, b{1}>;
+class MxBead3Bits <bits<3> b> : MxBead<0x3, b{0}, b{1}, b{2}>;
+class MxBead4Bits <bits<4> b> : MxBead<0x4, b{0}, b{1}, b{2}, b{3}>;
 
 /// bits<3> o - operand number
 /// bit a     - use alternative, used to select index register or
 ///             outer dispacement/immediate
 /// suffix NP means non-padded
-class MxBeadDAReg  <bits<3> o, bit a = 0> : MxBead<0b0101, o{0}, o{1}, o{2}, a>;
-class MxBeadDA     <bits<3> o, bit a = 0> : MxBead<0b0110, o{0}, o{1}, o{2}, a>;
-class MxBeadReg    <bits<3> o, bit a = 0> : MxBead<0b0111, o{0}, o{1}, o{2}, a>;
-class MxBead8Disp  <bits<3> o, bit a = 0> : MxBead<0b1000, o{0}, o{1}, o{2}, a>;
+class MxBeadDAReg  <bits<3> o, bit a = 0> : MxBead<0x5, o{0}, o{1}, o{2}, a>;
+class MxBeadDA     <bits<3> o, bit a = 0> : MxBead<0x6, o{0}, o{1}, o{2}, a>;
+class MxBeadReg    <bits<3> o, bit a = 0> : MxBead<0x7, o{0}, o{1}, o{2}, a>;
+class MxBead8Disp  <bits<3> o, bit a = 0> : MxBead<0x8, o{0}, o{1}, o{2}, a>;
 
 /// Add Immediate to the instruction. 8-bit version is padded with zeros to fit
 /// the word.
-class MxBead8Imm   <bits<3> o, bit a = 0> : MxBead<0b1001, o{0}, o{1}, o{2}, a>;
-class MxBead16Imm  <bits<3> o, bit a = 0> : MxBead<0b1010, o{0}, o{1}, o{2}, a>;
-class MxBead32Imm  <bits<3> o, bit a = 0> : MxBead<0b1011, o{0}, o{1}, o{2}, a>;
+class MxBead8Imm   <bits<3> o, bit a = 0> : MxBead<0x9, o{0}, o{1}, o{2}, a>;
+class MxBead16Imm  <bits<3> o, bit a = 0> : MxBead<0xA, o{0}, o{1}, o{2}, a>;
+class MxBead32Imm  <bits<3> o, bit a = 0> : MxBead<0xB, o{0}, o{1}, o{2}, a>;
 
 
 class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm, 
