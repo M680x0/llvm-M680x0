@@ -197,7 +197,7 @@ foreach S = [16, 32] in {
         !cast<MxType>("MxType"#S#O),
         MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                        !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
-                       !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
+                       !cast<MxEncEA>("MxEncEA"#D#"_0_reflected"), MxExtEmpty>>;
     }
 
     // M <- R
@@ -282,17 +282,17 @@ foreach S = [8, 16, 32] in {
 // R <- M
 defm MOV8d  : MMxMove_RM<MxType8d, MxMoveSize8, MxEncEAd_0>;
 
-defm MOV16r : MMxMove_RM<MxType16r, MxMoveSize16, MxEncEAr_0_x>;
+defm MOV16r : MMxMove_RM<MxType16r, MxMoveSize16, MxEncEAr_0_reflected>;
 defm MOV16a : MMxMove_RM<MxType16a, MxMoveSize16, MxEncEAa_0>;
 
-defm MOV32r : MMxMove_RM<MxType32r, MxMoveSize32, MxEncEAr_0_x>;
+defm MOV32r : MMxMove_RM<MxType32r, MxMoveSize32, MxEncEAr_0_reflected>;
 defm MOV32a : MMxMove_RM<MxType32a, MxMoveSize32, MxEncEAa_0>;
 
 let Pattern = [(null_frag)] in {
-defm MOV16r : MMxMove_RM<MxType16r_TC, MxMoveSize16, MxEncEAr_0_x>;
+defm MOV16r : MMxMove_RM<MxType16r_TC, MxMoveSize16, MxEncEAr_0_reflected>;
 defm MOV16a : MMxMove_RM<MxType16a_TC, MxMoveSize16, MxEncEAa_0>;
 
-defm MOV32r : MMxMove_RM<MxType32r_TC, MxMoveSize32, MxEncEAr_0_x>;
+defm MOV32r : MMxMove_RM<MxType32r_TC, MxMoveSize32, MxEncEAr_0_reflected>;
 defm MOV32a : MMxMove_RM<MxType32a_TC, MxMoveSize32, MxEncEAa_0>;
 } // Pattern
 
