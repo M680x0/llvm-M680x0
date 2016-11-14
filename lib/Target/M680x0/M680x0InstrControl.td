@@ -165,25 +165,25 @@ def JMP32j
 /// --------------------------------------------------
 ///  F  E  D  C | B  A  9  8 | 7  6  5  4  3  2  1  0
 /// --------------------------------------------------
-///  x  x  x  x | CONDITION |   8-BIT DISPLACEMENT
+///  0  1  1  0 | CONDITION |   8-BIT DISPLACEMENT
 /// --------------------------------------------------
 ///  16-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $00
 /// --------------------------------------------------
 ///  32-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $FF
 /// --------------------------------------------------
 let isBranch = 1, isTerminator = 1 in
-class MxBcc<string cc, Operand TARGET, MxEncoding ENC = MxEncEmpty>
-    : MxIIII<(outs), (ins CCRC:$ccr, TARGET:$dst), "b"#cc#"\t$dst", [], ENC>;
+class MxBcc<string cc, Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
+    : MxIIII<(outs), (ins CCRC:$ccr, TARGET:$dst), "b"#cc#"."#TYPE.Prefix#"\t$dst", [], ENC>;
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
                "pl", "gt", "hi", "vc", "le", "vs"] in {
 def B#cc#"8"
-  : MxBcc<cc, MxBrTarget8,
-    MxEncoding<MxBead8Imm<0>, !cast<MxBead4Bits>("MxCC"#cc), MxBead4Bits<0x6>>>;
+  : MxBcc<cc, MxBrTarget8, MxType8,
+    MxEncoding<MxBead8Disp<1>, !cast<MxBead4Bits>("MxCC"#cc), MxBead4Bits<0x6>>>;
 def B#cc#"16"
-  : MxBcc<cc, MxBrTarget16,
+  : MxBcc<cc, MxBrTarget16, MxType16,
     MxEncoding<MxBead4Bits<0x0>, MxBead4Bits<0x0>, !cast<MxBead4Bits>("MxCC"#cc),
-               MxBead4Bits<0x6>, MxBead16Imm<0>>>;
+               MxBead4Bits<0x6>, MxBead16Imm<1>>>;
 }
 
 def : Pat<(brcc SETEQ, i8:$lhs, i8:$rhs, bb:$target), (Beq8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
@@ -213,19 +213,19 @@ def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8dd $value, 1), MxBrTarget8:
 /// -------------------------------------------------
 ///  F  E  D  C  B  A  9  8 | 7  6  5  4  3  2  1  0
 /// -------------------------------------------------
-///  x  x  x  x  x  x  x  x |   8-BIT DISPLACEMENT
+///  0  1  1  0  0  0  0  0 |   8-BIT DISPLACEMENT
 /// -------------------------------------------------
 ///  16-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $00
 /// -------------------------------------------------
 ///  32-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $FF
 /// -------------------------------------------------
 let isBranch = 1, isTerminator = 1 in
-class MxBra<Operand TARGET, MxEncoding ENC = MxEncEmpty>
-    : MxIIII<(outs), (ins TARGET:$dst), "bra\t$dst", [], ENC>;
+class MxBra<Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
+    : MxIIII<(outs), (ins TARGET:$dst), "bra."#TYPE.Prefix#"\t$dst", [], ENC>;
 
-def BRA8  : MxBra<MxBrTarget8,
-            MxEncoding<MxBead8Imm<0>, MxBead4Bits<0x0>, MxBead4Bits<0x6>>>;
-def BRA16 : MxBra<MxBrTarget16,
+def BRA8  : MxBra<MxBrTarget8, MxType8,
+            MxEncoding<MxBead8Disp<0>, MxBead4Bits<0x0>, MxBead4Bits<0x6>>>;
+def BRA16 : MxBra<MxBrTarget16, MxType16,
             MxEncoding<MxBead4Bits<0x0>, MxBead4Bits<0x0>,
                        MxBead4Bits<0x0>, MxBead4Bits<0x6>, MxBead16Imm<0>>>;
 
