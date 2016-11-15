@@ -36,4 +36,6 @@ M680x0ELFMCAsmInfo::M680x0ELFMCAsmInfo(const Triple &T) {
   // Always enable the integrated assembler by default.
   // Clang also enabled it when the OS is Solaris but that is redundant here.
   UseIntegratedAssembler = true;
+
+  CommentString = ";";
 }
