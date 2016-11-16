@@ -95,13 +95,12 @@ getFrameIndexReference(const MachineFunction &MF, int FI,
   const M680x0MachineFunctionInfo *MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
   uint64_t StackSize = MFI.getStackSize();
   bool HasFP = hasFP(MF);
-  int64_t FPDelta = 0;
 
   if (TRI->hasBasePointer(MF)) {
     assert(HasFP && "VLAs and dynamic stack realign, but no FP?!");
     if (FI < 0) {
       // Skip the saved FP.
-      return Offset + SlotSize + FPDelta;
+      return Offset + SlotSize;
     } else {
       assert((-(Offset + StackSize)) % MFI.getObjectAlignment(FI) == 0);
       return Offset + StackSize;
@@ -109,7 +108,7 @@ getFrameIndexReference(const MachineFunction &MF, int FI,
   } else if (TRI->needsStackRealignment(MF)) {
     if (FI < 0) {
       // Skip the saved FP.
-      return Offset + SlotSize + FPDelta;
+      return Offset + SlotSize;
     } else {
       assert((-(Offset + StackSize)) % MFI.getObjectAlignment(FI) == 0);
       return Offset + StackSize;
@@ -128,7 +127,7 @@ getFrameIndexReference(const MachineFunction &MF, int FI,
       Offset -= TailCallReturnAddrDelta;
   }
 
-  return Offset + FPDelta;
+  return Offset;
 }
 
 static unsigned getSUBriOpcode(int64_t Imm) {
@@ -795,4 +794,33 @@ emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const {
       emitSPUpdate(MBB, MBBI, Offset, /*InEpilogue=*/true);
     }
   }
+}
+
+bool M680x0FrameLowering::
+assignCalleeSavedSpillSlots(MachineFunction &MF, const TargetRegisterInfo *TRI,
+                            std::vector<CalleeSavedInfo> &CSI) const {
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  M680x0MachineFunctionInfo *M680x0FI = MF.getInfo<M680x0MachineFunctionInfo>();
+
+  int SpillSlotOffset = getOffsetOfLocalArea() + M680x0FI->getTCReturnAddrDelta();
+
+  if (hasFP(MF)) {
+    // emitPrologue always spills frame register the first thing.
+    SpillSlotOffset -= SlotSize;
+    MFI.CreateFixedSpillStackObject(SlotSize, SpillSlotOffset);
+
+    // Since emitPrologue and emitEpilogue will handle spilling and restoring of
+    // the frame register, we can delete it from CSI list and not have to worry
+    // about avoiding it later.
+    unsigned FPReg = TRI->getFrameRegister(MF);
+    for (unsigned i = 0; i < CSI.size(); ++i) {
+      if (TRI->regsOverlap(CSI[i].getReg(),FPReg)) {
+        CSI.erase(CSI.begin() + i);
+        break;
+      }
+    }
+  }
+
+  // The rest must be handled as ususal
+  return false;
 }

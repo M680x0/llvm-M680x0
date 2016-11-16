@@ -74,6 +74,16 @@ public:
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 
+  /// assignCalleeSavedSpillSlots - Allows target to override spill slot
+  /// assignment logic.  If implemented, assignCalleeSavedSpillSlots() should
+  /// assign frame slots to all CSI entries and return true.  If this method
+  /// returns false, spill slots will be assigned using generic implementation.
+  /// assignCalleeSavedSpillSlots() may add, delete or rearrange elements of
+  /// CSI.
+  bool assignCalleeSavedSpillSlots(MachineFunction &MF,
+                              const TargetRegisterInfo *TRI,
+                              std::vector<CalleeSavedInfo> &CSI) const override;
+
   // hasFP - Return true if the specified function should have a dedicated frame
   // pointer register.  This is true if the function has variable sized allocas,
   // if it needs dynamic stack realignment, if frame pointer elimination is
