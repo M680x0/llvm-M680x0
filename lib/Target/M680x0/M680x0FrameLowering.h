@@ -65,6 +65,12 @@ public:
 
   static const M680x0FrameLowering *create(const M680x0Subtarget &ST);
 
+  /// This method is called during prolog/epilog code insertion to eliminate
+  /// call frame setup and destroy pseudo instructions (but only if the Target
+  /// is using them).  It is responsible for eliminating these instructions,
+  /// replacing them with concrete instructions.  This method need only be
+  /// implemented if using call frame setup/destroy pseudo instructions.
+  /// Returns an iterator pointing to the instruction after the replaced one.
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator MI) const override;
@@ -74,15 +80,43 @@ public:
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 
+  /// This method determines which of the registers reported by
+  /// TargetRegisterInfo::getCalleeSavedRegs() should actually get saved.
+  /// The default implementation checks populates the \p SavedRegs bitset with
+  /// all registers which are modified in the function, targets may override
+  /// this function to save additional registers.
+  /// This method also sets up the register scavenger ensuring there is a free
+  /// register or a frameindex available.
+  void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
+                            RegScavenger *RS = nullptr) const override;
+
   /// assignCalleeSavedSpillSlots - Allows target to override spill slot
   /// assignment logic.  If implemented, assignCalleeSavedSpillSlots() should
   /// assign frame slots to all CSI entries and return true.  If this method
   /// returns false, spill slots will be assigned using generic implementation.
-  /// assignCalleeSavedSpillSlots() may add, delete or rearrange elements of
-  /// CSI.
+  /// assignCalleeSavedSpillSlots() may add, delete or rearrange elements of CSI.
   bool assignCalleeSavedSpillSlots(MachineFunction &MF,
                               const TargetRegisterInfo *TRI,
                               std::vector<CalleeSavedInfo> &CSI) const override;
+
+  // TODO the next two overrides must use MOVEM to save/restore CSRs
+  /// spillCalleeSavedRegisters - Issues instruction(s) to spill all callee
+  /// saved registers and returns true if it isn't possible / profitable to do
+  /// so by issuing a series of store instructions via
+  /// storeRegToStackSlot(). Returns false otherwise.
+  // bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
+  //                                MachineBasicBlock::iterator MI,
+  //                                const std::vector<CalleeSavedInfo> &CSI,
+  //                                const TargetRegisterInfo *TRI) const override;
+
+  /// restoreCalleeSavedRegisters - Issues instruction(s) to restore all callee
+  /// saved registers and returns true if it isn't possible / profitable to do
+  /// so by issuing a series of load instructions via loadRegToStackSlot().
+  /// Returns false otherwise.
+  // bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+  //                                 MachineBasicBlock::iterator MI,
+  //                                 const std::vector<CalleeSavedInfo> &CSI,
+  //                                 const TargetRegisterInfo *TRI) const override;
 
   // hasFP - Return true if the specified function should have a dedicated frame
   // pointer register.  This is true if the function has variable sized allocas,
@@ -129,8 +163,15 @@ public:
   /// pointer by a constant value.
   void emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
                     int64_t NumBytes, bool InEpilogue) const;
-};
 
+  /// TODO
+  /// Order the symbols in the local stack.
+  /// We want to place the local stack objects in some sort of sensible order.
+  /// The heuristic we use is to try and pack them according to static number
+  /// of uses and size in order to minimize code size.
+  // void orderFrameObjects(const MachineFunction &MF,
+  //                        SmallVectorImpl<int> &ObjectsToAllocate) const override;
+};
 } // End llvm namespace
 
 #endif

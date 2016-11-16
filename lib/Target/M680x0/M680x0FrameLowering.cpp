@@ -679,7 +679,7 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
 
   // TODO interrupts...
   // M680x0 Interrupt handling function cannot assume anything about the direction
-  // flag (DF in EFLAGS register). Clear this flag by creating "cld" instruction
+  // flag (DF in CCR register). Clear this flag by creating "cld" instruction
   // in each prologue of interrupt handler function.
   //
   // FIXME: Create "cld" instruction only in these cases:
@@ -793,6 +793,36 @@ emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const {
       Offset += mergeSPUpdates(MBB, MBBI, true);
       emitSPUpdate(MBB, MBBI, Offset, /*InEpilogue=*/true);
     }
+  }
+}
+
+void M680x0FrameLowering::
+determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
+                     RegScavenger *RS) const {
+  TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
+
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  M680x0MachineFunctionInfo *M680x0FI = MF.getInfo<M680x0MachineFunctionInfo>();
+  int64_t TailCallReturnAddrDelta = M680x0FI->getTCReturnAddrDelta();
+
+  if (TailCallReturnAddrDelta < 0) {
+    // create RETURNADDR area
+    //   arg
+    //   arg
+    //   RETADDR
+    //   { ...
+    //     RETADDR area
+    //     ...
+    //   }
+    //   [FP]
+    MFI.CreateFixedObject(-TailCallReturnAddrDelta,
+                           TailCallReturnAddrDelta - SlotSize, true);
+  }
+
+  // Spill the BasePtr if it's used.
+  if (TRI->hasBasePointer(MF)) {
+    SavedRegs.set(TRI->getBaseRegister());
   }
 }
 
