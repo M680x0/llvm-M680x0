@@ -207,7 +207,7 @@ def : Pat<(brcc SETGE, i32:$lhs, i32:$rhs, bb:$target), (Bge8 (CMP32dd $lhs, $rh
 def : Pat<(brcc SETLT, i32:$lhs, i32:$rhs, bb:$target), (Blt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
 def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
 
-def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8dd $value, 1), MxBrTarget8:$target)>;
+def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8di 1, $value), MxBrTarget8:$target)>;
 
 
 /// -------------------------------------------------
