@@ -326,10 +326,11 @@ def MxCP_ARIPD : ComplexPattern<iPTR, 1, "SelectARIPD",
                                 [], [SDNPWantParent]>;
 
 def MxCP_ARID  : ComplexPattern<iPTR, 2, "SelectARID",
-                                [frameindex], [SDNPWantParent]>;
+                                [add, sub, mul, or, shl, frameindex], [SDNPWantParent]>;
 
 def MxCP_ARII  : ComplexPattern<iPTR, 3, "SelectARII",
-                                [frameindex], [SDNPWantParent]>;
+                                [add, sub, mul, or, shl, frameindex],
+                                [SDNPWantParent]>;
 
 def MxCP_PCD   : ComplexPattern<iPTR, 1, "SelectPCD",
                                 [], [SDNPWantParent]>;

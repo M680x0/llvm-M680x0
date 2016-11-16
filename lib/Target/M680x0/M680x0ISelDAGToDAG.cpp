@@ -188,7 +188,7 @@ private:
   bool matchAddressBase(SDValue N, M680x0ISelAddressMode &AM);
   bool matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM,
                                unsigned Depth);
-  bool matchAdd(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth);
+  bool matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth);
   bool SelectARI(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base);
@@ -350,8 +350,20 @@ matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
       return true;
     break;
 
+  case ISD::OR:
+    // We want to look through a transform in InstCombine and DAGCombiner that
+    // turns 'add' into 'or', so we can treat this 'or' exactly like an 'add'.
+    // Example: (or (and x, 1), (shl y, 3)) --> (add (and x, 1), (shl y, 3))
+    // An 'lea' can then be used to match the shift (multiply) and add:
+    // and $1, %esi
+    // lea (%rsi, %rdi, 8), %rax
+    if (CurDAG->haveNoCommonBitsSet(N.getOperand(0), N.getOperand(1)) &&
+        !matchADD(N, AM, Depth))
+      return false;
+    break;
+
   case ISD::ADD:
-    if (matchAdd(N, AM, Depth))
+    if (matchADD(N, AM, Depth))
       return true;
     break;
 
@@ -405,7 +417,7 @@ matchAddress(SDValue N, M680x0ISelAddressMode &AM) {
 }
 
 bool M680x0DAGToDAGISel::
-matchAdd(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
+matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
   // Add an artificial use to this node so that we can keep track of
   // it if it gets CSE'd with a different node.
   HandleSDNode Handle(N);
