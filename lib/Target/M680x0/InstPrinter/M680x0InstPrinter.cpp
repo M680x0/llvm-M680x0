@@ -90,12 +90,16 @@ printARIMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printARIPIMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (An)+
+  O << "(";
+  printOperand(MI, opNum, O);
+  O << ")+";
 }
 
 void M680x0InstPrinter::
 printARIPDMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print -(An)
+  O << "-(";
+  printOperand(MI, opNum, O);
+  O << ")";
 }
 
 void M680x0InstPrinter::
