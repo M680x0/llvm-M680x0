@@ -309,6 +309,11 @@ def NearData     : Predicate<"TM.getCodeModel() == CodeModel::Small ||"
                              "TM.getCodeModel() == CodeModel::Kernel">;
 def IsPIC        : Predicate<"TM.isPositionIndependent()">;
 def IsNotPIC     : Predicate<"!TM.isPositionIndependent()">;
+def IsM68000     : Predicate<"!Subtarget.IsM68000()">;
+def IsM68010     : Predicate<"!Subtarget.IsM68010()">;
+def IsM68020     : Predicate<"!Subtarget.IsM68020()">;
+def IsM68030     : Predicate<"!Subtarget.IsM68030()">;
+def IsM68040     : Predicate<"!Subtarget.IsM68040()">;
 
 //===----------------------------------------------------------------------===//
 // Complex Patterns
