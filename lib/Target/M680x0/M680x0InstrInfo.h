@@ -86,7 +86,6 @@ public:
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
-private:
   // Add appropriate SExt nodes
   void AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
                unsigned Reg, MVT From, MVT To) const;
