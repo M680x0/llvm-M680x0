@@ -34,12 +34,12 @@
 // MOVE
 //===----------------------------------------------------------------------===//
 
-/// ----------------------------------------------------
+/// -----------------------------------------------------
 ///  F  E | D  C | B  A  9 | 8  7  6 | 5  4  3 | 2  1  0
-/// ----------------------------------------------------
+/// -----------------------------------------------------
 ///       |      |    DESTINATION    |       SOURCE
-///  x  x | SIZE |   REG   |   MODE  |   MODE  |   REG
-/// ----------------------------------------------------
+///  0  0 | SIZE |   REG   |   MODE  |   MODE  |   REG
+/// -----------------------------------------------------
 ///
 /// NOTE Move requires EA X version for direct register destination(0)
 class MxMoveEncoding<MxBead2Bits size,
@@ -317,6 +317,66 @@ defm MOV16f : MMxMove_MM<MxType16, MxType16.FOp, MxType16.FPat,
                          MxMoveSize16, MxEncEAf_0, MxExtBrief_0>;
 defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat,
                          MxMoveSize32, MxEncEAf_0, MxExtBrief_0>;
+
+
+//===----------------------------------------------------------------------===//
+// MOVE to/from SR/CCR
+//
+// A special care must be taken working with to/from CCR since it is basically
+// word-size SR register truncated for user mode thus it only supports word-size
+// instructions. Plus the original M68000 does not support moves from CCR. So in
+// order to use CCR effectively one MUST use proper byte-size pseudo instructi-
+// ons that will be resolved sometime after RA pass.
+//===----------------------------------------------------------------------===//
+
+/// Move to CCR
+/// --------------------------------------------------
+///  F  E  D  C  B  A  9  8  7  6 | 5  4  3 | 2  1  0
+/// --------------------------------------------------
+///                               | EFFECTIVE ADDRESS
+///  0  1  0  0  0  1  0  0  1  1 |   MODE  |   REG
+/// --------------------------------------------------
+let mayStore = 1 in {
+class MxMoveToCCR<dag INS, MxEncEA EA, MxEncExt EXT>
+    : MxIIII<(outs CCRC:$dst), INS, "move.w\t$src, $dst", [],
+      MxEncoding<EA.Reg, EA.DA, EA.Mode,
+                 MxBead4Bits<0b0011>, MxBead4Bits<0b0001>, MxBead2Bits<0b01>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
+
+class MxMoveToCCRPseudo<dag INS> : MxPseudo<(outs CCRC:$dst), INS>;
+} // let mayLoad = 1
+
+def MOV16cp : MxMoveToCCR<(ins MxType16d.POp:$src), MxEncEAp_1, MxExtI16_1>;
+def MOV16cd : MxMoveToCCR<(ins MxType16d.ROp:$src), MxEncEAd_1, MxExtEmpty>;
+
+def MOV8cp : MxMoveToCCRPseudo<(ins MxType8d.POp:$src)>;
+def MOV8cd : MxMoveToCCRPseudo<(ins MxType8d.ROp:$src)>;
+
+/// Move from CCR
+/// --------------------------------------------------
+///  F  E  D  C  B  A  9  8  7  6 | 5  4  3 | 2  1  0
+/// --------------------------------------------------
+///                               | EFFECTIVE ADDRESS
+///  0  1  0  0  0  0  1  0  1  1 |   MODE  |   REG
+/// --------------------------------------------------
+let mayLoad = 1 in {
+class MxMoveFromCCR<dag INS, MxEncEA EA, MxEncExt EXT>
+    : MxIIII<(outs), INS, "move.w\t$src, $dst", [],
+      MxEncoding<EA.Reg, EA.DA, EA.Mode,
+                 MxBead4Bits<0b1011>, MxBead4Bits<0b0000>, MxBead2Bits<0b01>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>,
+      Requires<[ IsM68010 ]>;
+
+class MxMoveFromCCRPseudo<dag INS> : MxPseudo<(outs), INS>;
+} // let mayLoad = 1
+
+def MOV16pc
+  : MxMoveFromCCR<(ins MxType16d.POp:$dst, CCRC:$src), MxEncEAp_0, MxExtI16_0>;
+def MOV16dc
+  : MxMoveFromCCR<(ins MxType16d.ROp:$dst, CCRC:$src), MxEncEAd_0, MxExtEmpty>;
+
+def MOV8pc : MxMoveFromCCRPseudo<(ins MxType8d.POp:$dst, CCRC:$src)>;
+def MOV8dc : MxMoveFromCCRPseudo<(ins MxType8d.ROp:$dst, CCRC:$src)>;
 
 
 //===----------------------------------------------------------------------===//

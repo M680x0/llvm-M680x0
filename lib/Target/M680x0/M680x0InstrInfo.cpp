@@ -273,11 +273,11 @@ expandPostRAPseudo(MachineInstr &MI) const {
       return ExpandMOVSZX_RM(MIB, true, get(M680x0::MOV16rf), MVT::i32, MVT::i16);
 
     case M680x0::MOVXd16d8:
-      return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i16, MVT::i8);
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV8dd), MVT::i16, MVT::i8);
     case M680x0::MOVXd32d8:
-      return ExpandMOVX_RR(MIB, get(M680x0::MOV8df), MVT::i32, MVT::i8);
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV8dd), MVT::i32, MVT::i8);
     case M680x0::MOVXd32d16:
-      return ExpandMOVX_RR(MIB, get(M680x0::MOV16rf), MVT::i32, MVT::i16);
+      return ExpandMOVX_RR(MIB, get(M680x0::MOV16rr), MVT::i32, MVT::i16);
 
     case M680x0::PUSH8d:
       return ExpandPUSH_POP(MIB, get(M680x0::MOV8ed), true);
@@ -298,38 +298,78 @@ expandPostRAPseudo(MachineInstr &MI) const {
 
 void M680x0InstrInfo::
 copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-            const DebugLoc &DL, unsigned DestReg,
+            const DebugLoc &DL, unsigned DstReg,
             unsigned SrcReg, bool KillSrc) const {
   unsigned Opc = 0;
 
   // First deal with the normal symmetric copies.
-  if (M680x0::XR32RegClass.contains(DestReg, SrcReg))
+  if (M680x0::XR32RegClass.contains(DstReg, SrcReg))
     Opc = M680x0::MOV32rr;
-  else if (M680x0::XR16RegClass.contains(DestReg, SrcReg))
+  else if (M680x0::XR16RegClass.contains(DstReg, SrcReg))
     Opc = M680x0::MOV16rr;
-  else if (M680x0::DR8RegClass.contains(DestReg, SrcReg)) {
+  else if (M680x0::DR8RegClass.contains(DstReg, SrcReg)) {
     Opc = M680x0::MOV8dd;
   }
 
   if (Opc) {
-    BuildMI(MBB, MI, DL, get(Opc), DestReg)
+    BuildMI(MBB, MI, DL, get(Opc), DstReg)
+      .addReg(SrcReg, getKillRegState(KillSrc));
+    return;
+  }
+
+  // FIXME since these are pseudos they will be resolved on the next pseudo hook
+
+  // Now deal with asymmetrically sized copies. The cases that follow are upcast
+  // moves.
+  //
+  // NOTE
+  // These moves are not aware of type nature of these values and thus
+  // won't do any SExt or ZExt and upper bits will basically contain garbage.
+  MachineInstrBuilder MIB(*MBB.getParent(), MI);
+  if (M680x0::DR8RegClass.contains(SrcReg)) {
+    if (M680x0::XR16RegClass.contains(DstReg)) {
+      Opc = M680x0::MOVXd16d8;
+      return;
+    } else if (M680x0::XR32RegClass.contains(DstReg)) {
+      Opc = M680x0::MOVXd32d8;
+      return;
+    }
+  } else if (M680x0::XR16RegClass.contains(SrcReg)) {
+    if (M680x0::XR32RegClass.contains(DstReg)) {
+      Opc = M680x0::MOVXd32d16;
+      return;
+    }
+  }
+
+  if (Opc) {
+    BuildMI(MBB, MI, DL, get(Opc), DstReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
     return;
   }
 
   bool FromCCR = SrcReg == M680x0::CCR;
   bool FromSR = SrcReg == M680x0::SR;
-  bool ToCCR = DestReg == M680x0::CCR;
-  bool ToSR = DestReg == M680x0::SR;
+  bool ToCCR = DstReg == M680x0::CCR;
+  bool ToSR = DstReg == M680x0::SR;
 
-  if (FromCCR || ToCCR) {
-    // TODO
+  if (FromCCR) {
+    assert(M680x0::DR8RegClass.contains(DstReg) && "Need DR8 register to copy CCR");
+    Opc = M680x0::MOV8dc;
+  } else if (ToCCR) {
+    assert(M680x0::DR8RegClass.contains(SrcReg) && "Need DR8 register to copy CCR");
+    Opc = M680x0::MOV8cd;
   } else if (FromSR || ToSR) {
-    // TODO
+    llvm_unreachable("Cannot emit SR copy instruction");
+  }
+
+  if (Opc) {
+    BuildMI(MBB, MI, DL, get(Opc), DstReg)
+      .addReg(SrcReg, getKillRegState(KillSrc));
+    return;
   }
 
   DEBUG(dbgs() << "Cannot copy " << RI.getName(SrcReg)
-               << " to " << RI.getName(DestReg) << '\n');
+               << " to " << RI.getName(DstReg) << '\n');
   llvm_unreachable("Cannot emit physreg copy instruction");
 }
 
@@ -341,8 +381,12 @@ static unsigned getLoadStoreRegOpcode(unsigned Reg,
   default:
     llvm_unreachable("Unknown spill size");
   case 1:
-    assert(M680x0::DR8RegClass.hasSubClassEq(RC) && "Unknown 1-byte regclass");
-    return load ? M680x0::MOV8dp : M680x0::MOV8pd;
+    if (M680x0::DR8RegClass.hasSubClassEq(RC)) {
+      return load ? M680x0::MOV8dp : M680x0::MOV8pd;
+    } else if (M680x0::CCRCRegClass.hasSubClassEq(RC)) {
+      return load ? M680x0::MOV16cp : M680x0::MOV16pc;
+    }
+  llvm_unreachable("Unknown 1-byte regclass");
   case 2:
     assert(M680x0::XR16RegClass.hasSubClassEq(RC) && "Unknown 2-byte regclass");
     return load ? M680x0::MOV16rp : M680x0::MOV16pr;
@@ -358,10 +402,10 @@ static unsigned getStoreRegOpcode(unsigned SrcReg,
   return getLoadStoreRegOpcode(SrcReg, RC, STI, false);
 }
 
-static unsigned getLoadRegOpcode(unsigned DestReg,
+static unsigned getLoadRegOpcode(unsigned DstReg,
                                  const TargetRegisterClass *RC,
                                  const M680x0Subtarget &STI) {
-  return getLoadStoreRegOpcode(DestReg, RC, STI, true);
+  return getLoadStoreRegOpcode(DstReg, RC, STI, true);
 }
 
 void M680x0InstrInfo::
@@ -381,10 +425,10 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
 
 void M680x0InstrInfo::
 loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                     unsigned DestReg, int FI,
+                     unsigned DstReg, int FI,
                      const TargetRegisterClass *RC,
                      const TargetRegisterInfo *TRI) const {
-  unsigned Opc = getLoadRegOpcode(DestReg, RC, Subtarget);
+  unsigned Opc = getLoadRegOpcode(DstReg, RC, Subtarget);
   DebugLoc DL = MBB.findDebugLoc(MI);
-  addFrameReference(BuildMI(MBB, MI, DL, get(Opc), DestReg), FI);
+  addFrameReference(BuildMI(MBB, MI, DL, get(Opc), DstReg), FI);
 }
