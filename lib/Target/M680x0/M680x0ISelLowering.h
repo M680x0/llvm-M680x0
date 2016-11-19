@@ -30,23 +30,36 @@ namespace llvm {
       // Start the numbering from where ISD NodeType finishes.
       FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-      CALL,
+      CALL, RET, TAIL_CALL, TC_RETURN,
 
-      TAIL_CALL,
+      /// M680x0 compare and logical compare instructions.
+      CMP, COMI, UCOMI,
 
-      // Handle gp_rel (small data/bss sections) relocation.
-      GP_REL,
+      /// M680x0 bit-test instructions.
+      BT,
 
-      // Return
-      RET,
+      /// M680x0 Select
+      SELECT,
 
-      TC_RETURN,
+      /// M680x0 SetCC. Operand 0 is condition code, and operand 1 is the CCR
+      /// operand, usually produced by a CMP instruction.
+      SETCC,
+
+      // Same as SETCC except it's materialized with a subx and the value is all
+      // one's or all zero's.
+      SETCC_CARRY,  // R = carry_bit ? ~0 : 0
+
+      /// M680x0 conditional branches. Operand 0 is the chain operand, operand 1
+      /// is the block to branch if condition is true, operand 2 is the
+      /// condition code, and operand 3 is the flag operand produced by a CMP
+      /// or TEST instruction.
+      BRCOND,
 
       // Arithmetic operations with CCR results.
-      ADD, SUB, ADDX, SUBX, SMUL,
-      INC, DEC, OR, XOR, AND,
+      ADD, SUB, ADDX, SUBX,
+      SMUL, UMUL,
+      OR, XOR, AND,
 
-      // FIXME description
       /// On Darwin, this node represents the result of the popl
       /// at function entry, used for PIC code.
       GlobalBaseReg,
@@ -131,6 +144,11 @@ namespace llvm {
                              const CCValAssign &VA,
                              ISD::ArgFlagsTy Flags) const;
 
+    SDValue LowerXALUO(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerToBT(SDValue And, ISD::CondCode CC, const SDLoc &DL,
+                      SelectionDAG &DAG) const;
+    SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const;
@@ -142,7 +160,7 @@ namespace llvm {
     SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
                             CallingConv::ID CallConv, bool isVarArg,
                             const SmallVectorImpl<ISD::InputArg> &Ins,
-                            const SDLoc &dl, SelectionDAG &DAG,
+                            const SDLoc &DL, SelectionDAG &DAG,
                             SmallVectorImpl<SDValue> &InVals) const;
 
     /// LowerFormalArguments - transform physical registers into virtual
@@ -162,6 +180,16 @@ namespace llvm {
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
                         const SmallVectorImpl<SDValue> &OutVals,
                         const SDLoc &DL, SelectionDAG &DAG) const override;
+
+    /// Emit nodes that will be selected as "test Op0,Op0", or something
+    /// equivalent, for use with the given M680x0 condition code.
+    SDValue EmitTest(SDValue Op0, unsigned M680x0CC, const SDLoc &dl,
+                     SelectionDAG &DAG) const;
+
+    /// Emit nodes that will be selected as "cmp Op0,Op1", or something
+    /// equivalent, for use with the given M680x0 condition code.
+    SDValue EmitCmp(SDValue Op0, SDValue Op1, unsigned M680x0CC, const SDLoc &dl,
+                    SelectionDAG &DAG) const;
 
     /// Check whether the call is eligible for tail call optimization. Targets
     /// that want to do tail call optimization should implement this function.

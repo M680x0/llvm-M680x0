@@ -22,33 +22,68 @@ include "M680x0InstrFormats.td"
 def MxSDT_CallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>]>;
 def MxSDT_CallSeqEnd   : SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 
-def MxSDT_Call         : SDTypeProfile<0, -1, [SDTCisVT<0, iPTR>]>;
+def MxSDT_Call    : SDTypeProfile<0, -1, [SDTCisVT<0, iPTR>]>;
 
-def MxSDT_Ret          : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
-
-def MxSDT_TCRet        : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
+def MxSDT_Ret     : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def MxSDT_TCRet   : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
 def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;
 
-def MxSDT_UnArithCCROut : SDTypeProfile<2, 1,
-                                      [SDTCisSameAs<0, 2>, SDTCisInt<0>,
-                                       SDTCisVT<1, i8>]>;
+def MxSDT_UnArithCCROut : SDTypeProfile<2, 1, [
+  /* RES */ SDTCisInt<0>,
+  /* CCR */ SDTCisVT<1, i8>,
+  /* OPD */ SDTCisSameAs<0, 2>
+]>;
 
 // RES, CCR <- op LHS, RHS
-def MxSDT_BiArithCCROut : SDTypeProfile<2, 2,
-                                      [SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,
-                                       SDTCisInt<0>, SDTCisVT<1, i8>]>;
+def MxSDT_BiArithCCROut : SDTypeProfile<2, 2, [
+  /* RES */ SDTCisInt<0>,
+  /* CCR */ SDTCisVT<1, i8>,
+  /* LHS */ SDTCisSameAs<0, 2>,
+  /* RHS */ SDTCisSameAs<0, 3>
+]>;
 
 // RES, CCR <- op LHS, RHS, CCR
-def MxSDT_BiArithCCRInOut : SDTypeProfile<2, 3,
-                                        [SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>,
-                                         SDTCisInt<0>, SDTCisVT<1, i8>,
-                                         SDTCisVT<4, i8>]>;
+def MxSDT_BiArithCCRInOut : SDTypeProfile<2, 3, [
+  /* RES 1 */ SDTCisInt<0>,
+  /*   CCR */ SDTCisVT<1, i8>,
+  /*   LHS */ SDTCisSameAs<0, 2>,
+  /*   RHS */ SDTCisSameAs<0, 3>,
+  /*   CCR */ SDTCisSameAs<1, 4>
+]>;
+
 // RES1, RES2, CCR <- op LHS, RHS
-def MxSDT_2BiArithCCROut : SDTypeProfile<3, 2,
-                                       [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
-                                        SDTCisSameAs<0, 3>, SDTCisInt<0>,
-                                        SDTCisVT<1, i8>]>;
+def MxSDT_2BiArithCCROut : SDTypeProfile<3, 2, [
+  /* RES 1 */ SDTCisInt<0>,
+  /* RES 2 */ SDTCisSameAs<0, 1>,
+  /*   CCR */ SDTCisVT<1, i8>,
+  /*   LHS */ SDTCisSameAs<0, 2>,
+  /*   RHS */ SDTCisSameAs<0, 3>
+]>;
+
+def MxSDT_CmpTest : SDTypeProfile<1, 2, [
+   /* CCR */ SDTCisVT<0, i8>,
+   /* Ops */ SDTCisSameAs<1, 2>
+]>;
+
+def MxSDT_BrCond : SDTypeProfile<0, 3, [
+  /* Dest */ SDTCisVT<0, OtherVT>,
+  /* Cond */ SDTCisVT<1, i8>,
+  /*  CCR */ SDTCisVT<2, i8>
+]>;
+
+def MxSDT_SetCC : SDTypeProfile<1, 2, [
+  /* BOOL */ SDTCisVT<0, i8>,
+  /* Cond */ SDTCisVT<1, i8>,
+  /*  CCR */ SDTCisVT<2, i8>
+]>;
+
+def MxSDT_SetCC_C : SDTypeProfile<1, 2, [
+  /* BOOL */ SDTCisInt<0>,
+  /* Cond */ SDTCisVT<1, i8>,
+  /*  CCR */ SDTCisVT<2, i8>
+]>;
+
 
 //===----------------------------------------------------------------------===//
 // Nodes
@@ -73,20 +108,25 @@ def MxTCRet : SDNode<"M680x0ISD::TC_RETURN", MxSDT_TCRet,
 def MxWrapper   : SDNode<"M680x0ISD::Wrapper",   MxSDT_Wrapper>;
 def MxWrapperPC : SDNode<"M680x0ISD::WrapperPC", MxSDT_Wrapper>;
 
-def MxAdd  : SDNode<"M680x0ISD::ADD",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxSub  : SDNode<"M680x0ISD::SUB",   MxSDT_BiArithCCROut>;
-def MxOr   : SDNode<"M680x0ISD::OR",    MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxXor  : SDNode<"M680x0ISD::XOR",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxAnd  : SDNode<"M680x0ISD::AND",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxAdd  : SDNode<"M680x0ISD::ADD",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxSub  : SDNode<"M680x0ISD::SUB",  MxSDT_BiArithCCROut>;
+def MxOr   : SDNode<"M680x0ISD::OR",   MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxXor  : SDNode<"M680x0ISD::XOR",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxAnd  : SDNode<"M680x0ISD::AND",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
 
-def MxAddX  : SDNode<"M680x0ISD::ADDX", MxSDT_BiArithCCRInOut>;
-def MxSubX  : SDNode<"M680x0ISD::SUBX", MxSDT_BiArithCCRInOut>;
+def MxAddX : SDNode<"M680x0ISD::ADDX", MxSDT_BiArithCCRInOut>;
+def MxSubX : SDNode<"M680x0ISD::SUBX", MxSDT_BiArithCCRInOut>;
 
-def MxInc  : SDNode<"M680x0ISD::INC",   MxSDT_UnArithCCROut>;
-def MxDec  : SDNode<"M680x0ISD::DEC",   MxSDT_UnArithCCROut>;
+def MxSMul : SDNode<"M680x0ISD::SMUL", MxSDT_BiArithCCROut, [SDNPCommutative]>;
+def MxUMul : SDNode<"M680x0ISD::UMUL", MxSDT_2BiArithCCROut, [SDNPCommutative]>;
 
-def MxSMul : SDNode<"M680x0ISD::SMUL",  MxSDT_BiArithCCROut, [SDNPCommutative]>;
-def MxUMul : SDNode<"M680x0ISD::UMUL",  MxSDT_2BiArithCCROut, [SDNPCommutative]>;
+def MxCmp     : SDNode<"M680x0ISD::CMP", MxSDT_CmpTest>;
+def MxBt      : SDNode<"M680x0ISD::BT",  MxSDT_CmpTest>;
+
+def MxBrcond  : SDNode<"M680x0ISD::BRCOND", MxSDT_BrCond, [SDNPHasChain]>;
+def MxSetcc   : SDNode<"M680x0ISD::SETCC",  MxSDT_SetCC>;
+def MxSetcc_c : SDNode<"M680x0ISD::SETCC_CARRY", MxSDT_SetCC_C>;
+
 
 //===----------------------------------------------------------------------===//
 // Operands
@@ -297,6 +337,7 @@ def MxBrTarget32 : Operand<OtherVT>;
 
 } // OPERAND_PCREL
 
+
 //===----------------------------------------------------------------------===//
 // Predicates
 //===----------------------------------------------------------------------===//
@@ -314,6 +355,31 @@ def IsM68010     : Predicate<"!Subtarget.IsM68010()">;
 def IsM68020     : Predicate<"!Subtarget.IsM68020()">;
 def IsM68030     : Predicate<"!Subtarget.IsM68030()">;
 def IsM68040     : Predicate<"!Subtarget.IsM68040()">;
+
+
+//===----------------------------------------------------------------------===//
+// Condition Codes
+//
+// These MUST be kept in sync with codes enum in M680x0InstrInfo.h
+//===----------------------------------------------------------------------===//
+
+def MxCOND_T   : PatLeaf<(i8 0)>;  // True
+def MxCOND_F   : PatLeaf<(i8 1)>;  // False
+def MxCOND_HI  : PatLeaf<(i8 2)>;  // High
+def MxCOND_LS  : PatLeaf<(i8 3)>;  // Less or Same
+def MxCOND_CC  : PatLeaf<(i8 4)>;  // Carry Clear
+def MxCOND_CS  : PatLeaf<(i8 5)>;  // Carry Set
+def MxCOND_NE  : PatLeaf<(i8 6)>;  // Not Equal
+def MxCOND_EQ  : PatLeaf<(i8 7)>;  // Equal
+def MxCOND_VC  : PatLeaf<(i8 8)>;  // Overflow Clear
+def MxCOND_VS  : PatLeaf<(i8 9)>;  // Overflow Set
+def MxCOND_PL  : PatLeaf<(i8 10)>; // Plus
+def MxCOND_MI  : PatLeaf<(i8 11)>; // Minus
+def MxCOND_GE  : PatLeaf<(i8 12)>; // Greater or Equal
+def MxCOND_LT  : PatLeaf<(i8 13)>; // Less Than
+def MxCOND_GT  : PatLeaf<(i8 14)>; // Greater Than
+def MxCOND_LE  : PatLeaf<(i8 15)>; // Less or Equal
+
 
 //===----------------------------------------------------------------------===//
 // Complex Patterns
@@ -342,6 +408,7 @@ def MxCP_PCD   : ComplexPattern<iPTR, 1, "SelectPCD",
 
 def MxCP_PCI   : ComplexPattern<iPTR, 2, "SelectPCI",
                                 [], [SDNPWantParent]>;
+
 
 //===----------------------------------------------------------------------===//
 // Pattern Fragments
@@ -402,12 +469,11 @@ def MxExtLoadi16i8   : PatFrag<(ops node:$ptr), (i16 (extloadi8 node:$ptr))>;
 def MxExtLoadi32i8   : PatFrag<(ops node:$ptr), (i32 (extloadi8 node:$ptr))>;
 def MxExtLoadi32i16  : PatFrag<(ops node:$ptr), (i32 (extloadi16 node:$ptr))>;
 
+
 //===----------------------------------------------------------------------===//
 // Type Fixtures
-//===----------------------------------------------------------------------===//
 //
 // Type Fixtures are ValueType related information sets that usually go together
-//
 //===----------------------------------------------------------------------===//
 
 // TODO make it folded like MxType8.F.Op nad MxType8.F.Pat
@@ -507,6 +573,7 @@ def MxType32a_TC : MxType32Class<"a", MxARD32_TC>;
 def MxType32r_TC : MxType32Class<"r", MxXRD32_TC>;
 }
 
+
 //===----------------------------------------------------------------------===//
 // Subsystems
 //===----------------------------------------------------------------------===//
@@ -516,5 +583,4 @@ include "M680x0InstrShiftRotate.td"
 include "M680x0InstrArithmetic.td"
 include "M680x0InstrControl.td"
 
-// Compiler Pseudo Instructions and Pat Patterns
 include "M680x0InstrCompiler.td"

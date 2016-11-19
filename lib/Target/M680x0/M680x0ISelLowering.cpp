@@ -40,8 +40,8 @@ using namespace llvm;
 
 STATISTIC(NumTailCalls, "Number of tail calls");
 
-M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
-                                           const M680x0Subtarget &STI)
+M680x0TargetLowering::
+M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
     : TargetLowering(TM), Subtarget(STI) {
 
   setBooleanContents(ZeroOrOneBooleanContent);
@@ -66,6 +66,18 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
     setOperationAction(OP, MVT::i32, LibCall);
   }
 
+  setOperationAction(ISD::BRCOND, MVT::Other, Custom);
+
+  // SADDO and friends are legal with this setup, i hope
+  for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
+    setOperationAction(ISD::SADDO, VT, Custom);
+    setOperationAction(ISD::UADDO, VT, Custom);
+    setOperationAction(ISD::SSUBO, VT, Custom);
+    setOperationAction(ISD::USUBO, VT, Custom);
+    // setOperationAction(ISD::SMULO, VT, Custom);
+    // setOperationAction(ISD::UMULO, VT, Custom);
+  }
+
   // These guys must be wrapped and then lowered to ADD32ri/MOV32ri
   setOperationAction(ISD::ConstantPool    , MVT::i32, Custom);
   setOperationAction(ISD::JumpTable       , MVT::i32, Custom);
@@ -84,19 +96,6 @@ EVT M680x0TargetLowering::
 getSetCCResultType(const DataLayout &DL, LLVMContext& Context, EVT VT) const {
   // M680x0 SETcc producess either 0x00 or 0xFF
   return MVT::i8;
-}
-
-
-SDValue M680x0TargetLowering::LowerOperation(SDValue Op,
-                                             SelectionDAG &DAG) const {
-  switch (Op.getOpcode()) {
-  default: llvm_unreachable("Should not custom lower this!");
-  case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-  case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
-  case ISD::ExternalSymbol:     return LowerExternalSymbol(Op, DAG);
-  case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
-  case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
-  }
 }
 
 #include "M680x0GenCallingConv.inc"
@@ -1314,6 +1313,933 @@ IsEligibleForTailCallOptimization(SDValue Callee, CallingConv::ID CalleeCC,
   return true;
 }
 
+//===----------------------------------------------------------------------===//
+// Custom Lower
+//===----------------------------------------------------------------------===//
+
+SDValue M680x0TargetLowering::
+LowerOperation(SDValue Op, SelectionDAG &DAG) const {
+  switch (Op.getOpcode()) {
+  default: llvm_unreachable("Should not custom lower this!");
+  case ISD::SADDO:
+  case ISD::UADDO:
+  case ISD::SSUBO:
+  case ISD::USUBO:
+  case ISD::SMULO:
+  case ISD::UMULO:              return LowerXALUO(Op, DAG);
+  case ISD::SETCC:              return LowerSETCC(Op, DAG);
+  case ISD::BRCOND:             return LowerBRCOND(Op, DAG);
+  case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
+  case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
+  case ISD::ExternalSymbol:     return LowerExternalSymbol(Op, DAG);
+  case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
+  case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
+  }
+}
+
+SDValue M680x0TargetLowering::
+LowerXALUO(SDValue Op, SelectionDAG &DAG) const {
+  // Lower the "add/sub/mul with overflow" instruction into a regular ins plus
+  // a "setcc" instruction that checks the overflow flag. The "brcond" lowering
+  // looks for this combo and may remove the "setcc" instruction if the "setcc"
+  // has only one use.
+  SDNode *N = Op.getNode();
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+  unsigned BaseOp = 0;
+  unsigned Cond = 0;
+  SDLoc DL(Op);
+  switch (Op.getOpcode()) {
+  default: llvm_unreachable("Unknown ovf instruction!");
+  case ISD::SADDO:
+    BaseOp = M680x0ISD::ADD;
+    Cond = M680x0::COND_VS;
+    break;
+  case ISD::UADDO:
+    BaseOp = M680x0ISD::ADD;
+    Cond = M680x0::COND_CS;
+    break;
+  case ISD::SSUBO:
+    BaseOp = M680x0ISD::SUB;
+    Cond = M680x0::COND_VS;
+    break;
+  case ISD::USUBO:
+    BaseOp = M680x0ISD::SUB;
+    Cond = M680x0::COND_CS;
+    break;
+  case ISD::SMULO:
+    BaseOp = M680x0ISD::SMUL;
+    Cond = M680x0::COND_VS;
+    break;
+  case ISD::UMULO: { // i64, i8 = umulo lhs, rhs --> i64, i64, i32 umul lhs,rhs
+    SDVTList VTs =
+      DAG.getVTList(N->getValueType(0), N->getValueType(0), MVT::i8);
+    SDValue Sum = DAG.getNode(M680x0ISD::UMUL, DL, VTs, LHS, RHS);
+
+    SDValue SetCC =
+      DAG.getNode(M680x0ISD::SETCC, DL, N->getValueType(1),
+                  DAG.getConstant(M680x0::COND_VS, DL, MVT::i8),
+                  SDValue(Sum.getNode(), 2));
+
+    return DAG.getNode(ISD::MERGE_VALUES, DL, N->getVTList(), Sum, SetCC);
+  }
+  }
+
+  // Also sets CCR.
+  SDVTList VTs = DAG.getVTList(N->getValueType(0), MVT::i8);
+  SDValue Sum = DAG.getNode(BaseOp, DL, VTs, LHS, RHS);
+
+  SDValue SetCC =
+    DAG.getNode(M680x0ISD::SETCC, DL, N->getValueType(1),
+                DAG.getConstant(Cond, DL, MVT::i8),
+                SDValue(Sum.getNode(), 1));
+
+  return DAG.getNode(ISD::MERGE_VALUES, DL, N->getVTList(), Sum, SetCC);
+}
+
+/// Create a BT (Bit Test) node - Test bit \p BitNo in \p Src and set condition
+/// according to equal/not-equal condition code \p CC.
+static SDValue
+getBitTestCondition(SDValue Src, SDValue BitNo, ISD::CondCode CC,
+                    const SDLoc &DL, SelectionDAG &DAG) {
+  // If Src is i8, promote it to i32 with any_extend.  There is no i8 BT
+  // instruction.  Since the shift amount is in-range-or-undefined, we know
+  // that doing a bittest on the i32 value is ok.  We extend to i32 because
+  // the encoding for the i16 version is larger than the i32 version.
+  // Also promote i16 to i32 for performance / code size reason.
+  if (Src.getValueType() == MVT::i8 || Src.getValueType() == MVT::i16)
+    Src = DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i32, Src);
+
+  // If the operand types disagree, extend the shift amount to match.  Since
+  // BT ignores high bits (like shifts) we can use anyextend.
+  if (Src.getValueType() != BitNo.getValueType())
+    BitNo = DAG.getNode(ISD::ANY_EXTEND, DL, Src.getValueType(), BitNo);
+
+  SDValue BT = DAG.getNode(M680x0ISD::BT, DL, MVT::i32, Src, BitNo);
+  M680x0::CondCode Cond = CC == ISD::SETEQ ? M680x0::COND_CC : M680x0::COND_CS;
+  return DAG.getNode(M680x0ISD::SETCC, DL, MVT::i8,
+                     DAG.getConstant(Cond, DL, MVT::i8), BT);
+}
+
+/// Result of 'and' is compared against zero. Change to a BT node if possible.
+static SDValue
+LowerAndToBT(SDValue And, ISD::CondCode CC, const SDLoc &DL, SelectionDAG &DAG) {
+  SDValue Op0 = And.getOperand(0);
+  SDValue Op1 = And.getOperand(1);
+  if (Op0.getOpcode() == ISD::TRUNCATE)
+    Op0 = Op0.getOperand(0);
+  if (Op1.getOpcode() == ISD::TRUNCATE)
+    Op1 = Op1.getOperand(0);
+
+  SDValue LHS, RHS;
+  if (Op1.getOpcode() == ISD::SHL)
+    std::swap(Op0, Op1);
+  if (Op0.getOpcode() == ISD::SHL) {
+    if (isOneConstant(Op0.getOperand(0))) {
+      // If we looked past a truncate, check that it's only truncating away
+      // known zeros.
+      unsigned BitWidth = Op0.getValueSizeInBits();
+      unsigned AndBitWidth = And.getValueSizeInBits();
+      if (BitWidth > AndBitWidth) {
+        APInt Zeros, Ones;
+        DAG.computeKnownBits(Op0, Zeros, Ones);
+        if (Zeros.countLeadingOnes() < BitWidth - AndBitWidth)
+          return SDValue();
+      }
+      LHS = Op1;
+      RHS = Op0.getOperand(1);
+    }
+  } else if (Op1.getOpcode() == ISD::Constant) {
+    ConstantSDNode *AndRHS = cast<ConstantSDNode>(Op1);
+    uint64_t AndRHSVal = AndRHS->getZExtValue();
+    SDValue AndLHS = Op0;
+
+    if (AndRHSVal == 1 && AndLHS.getOpcode() == ISD::SRL) {
+      LHS = AndLHS.getOperand(0);
+      RHS = AndLHS.getOperand(1);
+    }
+
+    // Use BT if the immediate can't be encoded in a TEST instruction.
+    if (!isUInt<32>(AndRHSVal) && isPowerOf2_64(AndRHSVal)) {
+      LHS = AndLHS;
+      RHS = DAG.getConstant(Log2_64_Ceil(AndRHSVal), DL, LHS.getValueType());
+    }
+  }
+
+  if (LHS.getNode())
+    return getBitTestCondition(LHS, RHS, CC, DL, DAG);
+
+  return SDValue();
+}
+
+static M680x0::CondCode
+TranslateIntegerM680x0CC(ISD::CondCode SetCCOpcode) {
+  switch (SetCCOpcode) {
+  default: llvm_unreachable("Invalid integer condition!");
+  case ISD::SETEQ:  return M680x0::COND_EQ;
+  case ISD::SETGT:  return M680x0::COND_GT;
+  case ISD::SETGE:  return M680x0::COND_GE;
+  case ISD::SETLT:  return M680x0::COND_LT;
+  case ISD::SETLE:  return M680x0::COND_LE;
+  case ISD::SETNE:  return M680x0::COND_NE;
+  case ISD::SETULT: return M680x0::COND_CS;
+  case ISD::SETUGE: return M680x0::COND_CC;
+  case ISD::SETUGT: return M680x0::COND_HI;
+  case ISD::SETULE: return M680x0::COND_LS;
+  }
+}
+
+/// Do a one-to-one translation of a ISD::CondCode to the M680x0-specific
+/// condition code, returning the condition code and the LHS/RHS of the
+/// comparison to make.
+static unsigned
+TranslateM680x0CC(ISD::CondCode SetCCOpcode, const SDLoc &DL,
+               bool isFP, SDValue &LHS, SDValue &RHS, SelectionDAG &DAG) {
+  if (!isFP) {
+    if (ConstantSDNode *RHSC = dyn_cast<ConstantSDNode>(RHS)) {
+      if (SetCCOpcode == ISD::SETGT && RHSC->isAllOnesValue()) {
+        // X > -1   -> X == 0, jump !sign.
+        RHS = DAG.getConstant(0, DL, RHS.getValueType());
+        return M680x0::COND_PL;
+      }
+      if (SetCCOpcode == ISD::SETLT && RHSC->isNullValue()) {
+        // X < 0   -> X == 0, jump on sign.
+        return M680x0::COND_MI;
+      }
+      if (SetCCOpcode == ISD::SETLT && RHSC->getZExtValue() == 1) {
+        // X < 1   -> X <= 0
+        RHS = DAG.getConstant(0, DL, RHS.getValueType());
+        return M680x0::COND_LE;
+      }
+    }
+
+    return TranslateIntegerM680x0CC(SetCCOpcode);
+  }
+
+  // First determine if it is required or is profitable to flip the operands.
+
+  // If LHS is a foldable load, but RHS is not, flip the condition.
+  if (ISD::isNON_EXTLoad(LHS.getNode()) &&
+      !ISD::isNON_EXTLoad(RHS.getNode())) {
+    SetCCOpcode = getSetCCSwappedOperands(SetCCOpcode);
+    std::swap(LHS, RHS);
+  }
+
+  switch (SetCCOpcode) {
+  default: break;
+  case ISD::SETOLT:
+  case ISD::SETOLE:
+  case ISD::SETUGT:
+  case ISD::SETUGE:
+    std::swap(LHS, RHS);
+    break;
+  }
+
+  // On a floating point condition, the flags are set as follows:
+  // ZF  PF  CF   op
+  //  0 | 0 | 0 | X > Y
+  //  0 | 0 | 1 | X < Y
+  //  1 | 0 | 0 | X == Y
+  //  1 | 1 | 1 | unordered
+  switch (SetCCOpcode) {
+  default: llvm_unreachable("Condcode should be pre-legalized away");
+  case ISD::SETUEQ:
+  case ISD::SETEQ:   return M680x0::COND_EQ;
+  case ISD::SETOLT:              // flipped
+  case ISD::SETOGT:
+  case ISD::SETGT:   return M680x0::COND_HI;
+  case ISD::SETOLE:              // flipped
+  case ISD::SETOGE:
+  case ISD::SETGE:   return M680x0::COND_CC;
+  case ISD::SETUGT:              // flipped
+  case ISD::SETULT:
+  case ISD::SETLT:   return M680x0::COND_CS;
+  case ISD::SETUGE:              // flipped
+  case ISD::SETULE:
+  case ISD::SETLE:   return M680x0::COND_LS;
+  case ISD::SETONE:
+  case ISD::SETNE:   return M680x0::COND_NE;
+  // case ISD::SETUO:   return M680x0::COND_P;
+  // case ISD::SETO:    return M680x0::COND_NP;
+  case ISD::SETOEQ:
+  case ISD::SETUNE:  return M680x0::COND_INVALID;
+  }
+}
+
+// Convert (truncate (srl X, N) to i1) to (bt X, N)
+static SDValue
+LowerTruncateToBT(SDValue Op, ISD::CondCode CC,
+                  const SDLoc &DL, SelectionDAG &DAG) {
+
+  assert(Op.getOpcode() == ISD::TRUNCATE && Op.getValueType() == MVT::i1 &&
+         "Expected TRUNCATE to i1 node");
+
+  if (Op.getOperand(0).getOpcode() != ISD::SRL)
+    return SDValue();
+
+  SDValue ShiftRight = Op.getOperand(0);
+  return getBitTestCondition(ShiftRight.getOperand(0), ShiftRight.getOperand(1),
+                             CC, DL, DAG);
+}
+
+/// \brief return true if \c Op has a use that doesn't just read flags.
+static bool
+hasNonFlagsUse(SDValue Op) {
+  for (SDNode::use_iterator UI = Op->use_begin(), UE = Op->use_end(); UI != UE;
+       ++UI) {
+    SDNode *User = *UI;
+    unsigned UOpNo = UI.getOperandNo();
+    if (User->getOpcode() == ISD::TRUNCATE && User->hasOneUse()) {
+      // Look pass truncate.
+      UOpNo = User->use_begin().getOperandNo();
+      User = *User->use_begin();
+    }
+
+    if (User->getOpcode() != ISD::BRCOND && User->getOpcode() != ISD::SETCC &&
+        !(User->getOpcode() == ISD::SELECT && UOpNo == 0))
+      return true;
+  }
+  return false;
+}
+
+SDValue M680x0TargetLowering::
+EmitTest(SDValue Op, unsigned M680x0CC, const SDLoc &DL,
+         SelectionDAG &DAG) const {
+
+  // CF and OF aren't always set the way we want. Determine which
+  // of these we need.
+  bool NeedCF = false;
+  bool NeedOF = false;
+  switch (M680x0CC) {
+  default: break;
+  case M680x0::COND_HI: case M680x0::COND_CC:
+  case M680x0::COND_CS: case M680x0::COND_LS:
+    NeedCF = true;
+    break;
+  case M680x0::COND_GT: case M680x0::COND_GE:
+  case M680x0::COND_LT: case M680x0::COND_LE:
+  case M680x0::COND_VS: case M680x0::COND_VC: {
+    // Check if we really need to set the
+    // Overflow flag. If NoSignedWrap is present
+    // that is not actually needed.
+    switch (Op->getOpcode()) {
+    case ISD::ADD:
+    case ISD::SUB:
+    case ISD::MUL:
+    case ISD::SHL: {
+      const auto *BinNode = cast<BinaryWithFlagsSDNode>(Op.getNode());
+      if (BinNode->Flags.hasNoSignedWrap())
+        break;
+    }
+    default:
+      NeedOF = true;
+      break;
+    }
+    break;
+  }
+  }
+  // See if we can use the CCR value from the operand instead of
+  // doing a separate TEST. TEST always sets OF and CF to 0, so unless
+  // we prove that the arithmetic won't overflow, we can't use OF or CF.
+  if (Op.getResNo() != 0 || NeedOF || NeedCF) {
+    // Emit a CMP with 0, which is the TEST pattern.
+    return DAG.getNode(M680x0ISD::CMP, DL, MVT::i32, Op,
+                       DAG.getConstant(0, DL, Op.getValueType()));
+  }
+  unsigned Opcode = 0;
+  unsigned NumOperands = 0;
+
+  // Truncate operations may prevent the merge of the SETCC instruction
+  // and the arithmetic instruction before it. Attempt to truncate the operands
+  // of the arithmetic instruction and use a reduced bit-width instruction.
+  bool NeedTruncation = false;
+  SDValue ArithOp = Op;
+  if (Op->getOpcode() == ISD::TRUNCATE && Op->hasOneUse()) {
+    SDValue Arith = Op->getOperand(0);
+    // Both the trunc and the arithmetic op need to have one user each.
+    if (Arith->hasOneUse())
+      switch (Arith.getOpcode()) {
+        default: break;
+        case ISD::ADD:
+        case ISD::SUB:
+        case ISD::AND:
+        case ISD::OR:
+        case ISD::XOR: {
+          NeedTruncation = true;
+          ArithOp = Arith;
+        }
+      }
+  }
+
+  // NOTICE: In the code below we use ArithOp to hold the arithmetic operation
+  // which may be the result of a CAST.  We use the variable 'Op', which is the
+  // non-casted variable when we check for possible users.
+  switch (ArithOp.getOpcode()) {
+  case ISD::ADD:
+    Opcode = M680x0ISD::ADD;
+    NumOperands = 2;
+    break;
+  case ISD::SHL:
+  case ISD::SRL:
+    // If we have a constant logical shift that's only used in a comparison
+    // against zero turn it into an equivalent AND. This allows turning it into
+    // a TEST instruction later.
+    if ((M680x0CC == M680x0::COND_EQ || M680x0CC == M680x0::COND_NE) && Op->hasOneUse() &&
+        isa<ConstantSDNode>(Op->getOperand(1)) && !hasNonFlagsUse(Op)) {
+      EVT VT = Op.getValueType();
+      unsigned BitWidth = VT.getSizeInBits();
+      unsigned ShAmt = Op->getConstantOperandVal(1);
+      if (ShAmt >= BitWidth) // Avoid undefined shifts.
+        break;
+      APInt Mask = ArithOp.getOpcode() == ISD::SRL
+                       ? APInt::getHighBitsSet(BitWidth, BitWidth - ShAmt)
+                       : APInt::getLowBitsSet(BitWidth, BitWidth - ShAmt);
+      if (!Mask.isSignedIntN(32)) // Avoid large immediates.
+        break;
+      Op = DAG.getNode(ISD::AND, DL, VT, Op->getOperand(0),
+                       DAG.getConstant(Mask, DL, VT));
+    }
+    break;
+
+  case ISD::AND:
+    // If the primary 'and' result isn't used, don't bother using M680x0ISD::AND,
+    // because a TEST instruction will be better.
+    if (!hasNonFlagsUse(Op)) {
+      SDValue Op0 = ArithOp->getOperand(0);
+      SDValue Op1 = ArithOp->getOperand(1);
+      EVT VT = ArithOp.getValueType();
+      bool isAndn = isBitwiseNot(Op0) || isBitwiseNot(Op1);
+      bool isLegalAndnType = VT == MVT::i32 || VT == MVT::i64;
+
+      // But if we can combine this into an ANDN operation, then create an AND
+      // now and allow it to be pattern matched into an ANDN.
+      if (/*!Subtarget.hasBMI() ||*/ !isAndn || !isLegalAndnType)
+        break;
+    }
+    LLVM_FALLTHROUGH;
+  case ISD::SUB:
+  case ISD::OR:
+  case ISD::XOR:
+    // Due to the ISEL shortcoming noted above, be conservative if this op is
+    // likely to be selected as part of a load-modify-store instruction.
+    for (SDNode::use_iterator UI = Op.getNode()->use_begin(),
+           UE = Op.getNode()->use_end(); UI != UE; ++UI)
+      if (UI->getOpcode() == ISD::STORE)
+        goto default_case;
+
+    // Otherwise use a regular CCR-setting instruction.
+    switch (ArithOp.getOpcode()) {
+    default: llvm_unreachable("unexpected operator!");
+    case ISD::SUB: Opcode = M680x0ISD::SUB; break;
+    case ISD::XOR: Opcode = M680x0ISD::XOR; break;
+    case ISD::AND: Opcode = M680x0ISD::AND; break;
+    case ISD::OR:  Opcode = M680x0ISD::OR; break;
+    }
+
+    NumOperands = 2;
+    break;
+  case M680x0ISD::ADD:
+  case M680x0ISD::SUB:
+  case M680x0ISD::OR:
+  case M680x0ISD::XOR:
+  case M680x0ISD::AND:
+    return SDValue(Op.getNode(), 1);
+  default:
+  default_case:
+    break;
+  }
+
+  // If we found that truncation is beneficial, perform the truncation and
+  // update 'Op'.
+  if (NeedTruncation) {
+    EVT VT = Op.getValueType();
+    SDValue WideVal = Op->getOperand(0);
+    EVT WideVT = WideVal.getValueType();
+    unsigned ConvertedOp = 0;
+    // Use a target machine opcode to prevent further DAGCombine
+    // optimizations that may separate the arithmetic operations
+    // from the setcc node.
+    switch (WideVal.getOpcode()) {
+      default: break;
+      case ISD::ADD: ConvertedOp = M680x0ISD::ADD; break;
+      case ISD::SUB: ConvertedOp = M680x0ISD::SUB; break;
+      case ISD::AND: ConvertedOp = M680x0ISD::AND; break;
+      case ISD::OR:  ConvertedOp = M680x0ISD::OR;  break;
+      case ISD::XOR: ConvertedOp = M680x0ISD::XOR; break;
+    }
+
+    if (ConvertedOp) {
+      const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+      if (TLI.isOperationLegal(WideVal.getOpcode(), WideVT)) {
+        SDValue V0 = DAG.getNode(ISD::TRUNCATE, DL, VT, WideVal.getOperand(0));
+        SDValue V1 = DAG.getNode(ISD::TRUNCATE, DL, VT, WideVal.getOperand(1));
+        Op = DAG.getNode(ConvertedOp, DL, VT, V0, V1);
+      }
+    }
+  }
+
+  if (Opcode == 0) {
+    // Emit a CMP with 0, which is the TEST pattern.
+    return DAG.getNode(M680x0ISD::CMP, DL, MVT::i8, Op,
+                       DAG.getConstant(0, DL, Op.getValueType()));
+  }
+  SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::i8);
+  SmallVector<SDValue, 4> Ops(Op->op_begin(), Op->op_begin() + NumOperands);
+
+  SDValue New = DAG.getNode(Opcode, DL, VTs, Ops);
+  DAG.ReplaceAllUsesWith(Op, New);
+  return SDValue(New.getNode(), 1);
+}
+
+/// \brief Return true if the condition is an unsigned comparison operation.
+static bool isM680x0CCUnsigned(unsigned M680x0CC) {
+  switch (M680x0CC) {
+  default:
+    llvm_unreachable("Invalid integer condition!");
+  case M680x0::COND_EQ:
+  case M680x0::COND_NE:
+  case M680x0::COND_CS:
+  case M680x0::COND_HI:
+  case M680x0::COND_LS:
+  case M680x0::COND_CC:
+    return true;
+  case M680x0::COND_GT:
+  case M680x0::COND_GE:
+  case M680x0::COND_LT:
+  case M680x0::COND_LE:
+    return false;
+  }
+}
+
+SDValue M680x0TargetLowering::
+EmitCmp(SDValue Op0, SDValue Op1, unsigned M680x0CC,
+        const SDLoc &DL, SelectionDAG &DAG) const {
+  if (isNullConstant(Op1))
+    return EmitTest(Op0, M680x0CC, DL, DAG);
+
+  assert(!(isa<ConstantSDNode>(Op1) && Op0.getValueType() == MVT::i1) &&
+         "Unexpected comparison operation for MVT::i1 operands");
+
+  if ((Op0.getValueType() == MVT::i8 || Op0.getValueType() == MVT::i16 ||
+       Op0.getValueType() == MVT::i32 || Op0.getValueType() == MVT::i64)) {
+    // Only promote the compare up to I32 if it is a 16 bit operation
+    // with an immediate.  16 bit immediates are to be avoided.
+    if ((Op0.getValueType() == MVT::i16 &&
+         (isa<ConstantSDNode>(Op0) || isa<ConstantSDNode>(Op1))) &&
+        !DAG.getMachineFunction().getFunction()->optForMinSize()) {
+      unsigned ExtendOp =
+          isM680x0CCUnsigned(M680x0CC) ? ISD::ZERO_EXTEND : ISD::SIGN_EXTEND;
+      Op0 = DAG.getNode(ExtendOp, DL, MVT::i32, Op0);
+      Op1 = DAG.getNode(ExtendOp, DL, MVT::i32, Op1);
+    }
+    // Use SUB instead of CMP to enable CSE between SUB and CMP.
+    SDVTList VTs = DAG.getVTList(Op0.getValueType(), MVT::i8);
+    SDValue Sub = DAG.getNode(M680x0ISD::SUB, DL, VTs,
+                              Op0, Op1);
+    return SDValue(Sub.getNode(), 1);
+  }
+  return DAG.getNode(M680x0ISD::CMP, DL, MVT::i8, Op0, Op1);
+}
+
+/// Result of 'and' or 'trunc to i1' is compared against zero.
+/// Change to a BT node if possible.
+SDValue M680x0TargetLowering::
+LowerToBT(SDValue Op, ISD::CondCode CC,
+          const SDLoc &DL, SelectionDAG &DAG) const {
+  if (Op.getOpcode() == ISD::AND)
+    return LowerAndToBT(Op, CC, DL, DAG);
+  if (Op.getOpcode() == ISD::TRUNCATE && Op.getValueType() == MVT::i1)
+    return LowerTruncateToBT(Op, CC, DL, DAG);
+  return SDValue();
+}
+
+SDValue M680x0TargetLowering::
+LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
+  MVT VT = Op.getSimpleValueType();
+  assert(VT == MVT::i1 && "SetCC type must be 1-bit integer");
+
+  SDValue Op0 = Op.getOperand(0);
+  SDValue Op1 = Op.getOperand(1);
+  SDLoc DL(Op);
+  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(2))->get();
+
+  // Optimize to BT if possible.
+  // Lower (X & (1 << N)) == 0 to BT(X, N).
+  // Lower ((X >>u N) & 1) != 0 to BT(X, N).
+  // Lower ((X >>s N) & 1) != 0 to BT(X, N).
+  // Lower (trunc (X >> N) to i1) to BT(X, N).
+  if (Op0.hasOneUse() && isNullConstant(Op1) &&
+      (CC == ISD::SETEQ || CC == ISD::SETNE)) {
+    if (SDValue NewSetCC = LowerToBT(Op0, CC, DL, DAG)) {
+      if (VT == MVT::i1)
+        return DAG.getNode(ISD::TRUNCATE, DL, MVT::i1, NewSetCC);
+      return NewSetCC;
+    }
+  }
+
+  // Look for X == 0, X == 1, X != 0, or X != 1.  We can simplify some forms of
+  // these.
+  if ((isOneConstant(Op1) || isNullConstant(Op1)) &&
+      (CC == ISD::SETEQ || CC == ISD::SETNE)) {
+
+    // If the input is a setcc, then reuse the input setcc or use a new one with
+    // the inverted condition.
+    if (Op0.getOpcode() == M680x0ISD::SETCC) {
+      M680x0::CondCode CCode = (M680x0::CondCode)Op0.getConstantOperandVal(0);
+      bool Invert = (CC == ISD::SETNE) ^ isNullConstant(Op1);
+      if (!Invert)
+        return Op0;
+
+      CCode = M680x0::GetOppositeBranchCondition(CCode);
+      SDValue SetCC = DAG.getNode(M680x0ISD::SETCC, DL, MVT::i8,
+                                  DAG.getConstant(CCode, DL, MVT::i8),
+                                  Op0.getOperand(1));
+      if (VT == MVT::i1)
+        return DAG.getNode(ISD::TRUNCATE, DL, MVT::i1, SetCC);
+      return SetCC;
+    }
+  }
+  if (Op0.getValueType() == MVT::i1 && (CC == ISD::SETEQ || CC == ISD::SETNE)) {
+    if (isOneConstant(Op1)) {
+      ISD::CondCode NewCC = ISD::getSetCCInverse(CC, true);
+      return DAG.getSetCC(DL, VT, Op0, DAG.getConstant(0, DL, MVT::i1), NewCC);
+    }
+    if (!isNullConstant(Op1)) {
+      SDValue Xor = DAG.getNode(ISD::XOR, DL, MVT::i1, Op0, Op1);
+      return DAG.getSetCC(DL, VT, Xor, DAG.getConstant(0, DL, MVT::i1), CC);
+    }
+  }
+
+  bool isFP = Op1.getSimpleValueType().isFloatingPoint();
+  unsigned M680x0CC = TranslateM680x0CC(CC, DL, isFP, Op0, Op1, DAG);
+  if (M680x0CC == M680x0::COND_INVALID)
+    return SDValue();
+
+  SDValue CCR = EmitCmp(Op0, Op1, M680x0CC, DL, DAG);
+  // CCR = ConvertCmpIfNecessary(CCR, DAG);
+  return DAG.getNode(M680x0ISD::SETCC, DL, MVT::i8,
+                     DAG.getConstant(M680x0CC, DL, MVT::i8), CCR);
+}
+
+/// Return true if node is an ISD::AND or ISD::OR of two M680x0::SETcc nodes
+/// each of which has no other use apart from the AND / OR.
+static bool isAndOrOfSetCCs(SDValue Op, unsigned &Opc) {
+  Opc = Op.getOpcode();
+  if (Opc != ISD::OR && Opc != ISD::AND)
+    return false;
+  return (M680x0::IsSETCC(Op.getOperand(0).getOpcode()) &&
+          Op.getOperand(0).hasOneUse() &&
+          M680x0::IsSETCC(Op.getOperand(1).getOpcode()) &&
+          Op.getOperand(1).hasOneUse());
+}
+
+/// Return true if opcode is a M680x0 logical comparison.
+static bool isM680x0LogicalCmp(SDValue Op) {
+  unsigned Opc = Op.getNode()->getOpcode();
+
+  if (M680x0::IsCMP(Opc))
+    return true;
+
+  if (Op.getResNo() == 1 &&
+      (Opc == M680x0ISD::ADD ||
+       Opc == M680x0ISD::SUB ||
+       Opc == M680x0ISD::ADDX ||
+       Opc == M680x0ISD::SUBX ||
+       // Opc == M680x0ISD::SMUL ||
+       // Opc == M680x0ISD::UMUL ||
+       Opc == M680x0ISD::OR ||
+       Opc == M680x0ISD::XOR ||
+       Opc == M680x0ISD::AND))
+    return true;
+
+  // if (Op.getResNo() == 2 && Opc == M680x0ISD::UMUL)
+  //   return true;
+
+  return false;
+}
+
+static bool isTruncWithZeroHighBitsInput(SDValue V, SelectionDAG &DAG) {
+  if (V.getOpcode() != ISD::TRUNCATE)
+    return false;
+
+  SDValue VOp0 = V.getOperand(0);
+  unsigned InBits = VOp0.getValueSizeInBits();
+  unsigned Bits = V.getValueSizeInBits();
+  return DAG.MaskedValueIsZero(VOp0, APInt::getHighBitsSet(InBits,InBits-Bits));
+}
+
+/// Return true if node is an ISD::XOR of a M680x0ISD::SETCC and 1 and that the
+/// SETCC node has a single use.
+static bool isXor1OfSetCC(SDValue Op) {
+  if (Op.getOpcode() != ISD::XOR)
+    return false;
+  if (isOneConstant(Op.getOperand(1)))
+    return Op.getOperand(0).getOpcode() == M680x0ISD::SETCC &&
+           Op.getOperand(0).hasOneUse();
+  return false;
+}
+
+SDValue M680x0TargetLowering::
+LowerBRCOND(SDValue Op, SelectionDAG &DAG) const {
+  bool addTest = true;
+  SDValue Chain = Op.getOperand(0);
+  SDValue Cond  = Op.getOperand(1);
+  SDValue Dest  = Op.getOperand(2);
+  SDLoc DL(Op);
+  SDValue CC;
+  bool Inverted = false;
+
+  if (Cond.getOpcode() == ISD::SETCC) {
+    // Check for setcc([su]{add,sub,mul}o == 0).
+    if (cast<CondCodeSDNode>(Cond.getOperand(2))->get() == ISD::SETEQ &&
+        isNullConstant(Cond.getOperand(1)) &&
+        Cond.getOperand(0).getResNo() == 1 &&
+        (Cond.getOperand(0).getOpcode() == ISD::SADDO ||
+         Cond.getOperand(0).getOpcode() == ISD::UADDO ||
+         Cond.getOperand(0).getOpcode() == ISD::SSUBO ||
+         Cond.getOperand(0).getOpcode() == ISD::USUBO ||
+         Cond.getOperand(0).getOpcode() == ISD::SMULO ||
+         Cond.getOperand(0).getOpcode() == ISD::UMULO)) {
+      Inverted = true;
+      Cond = Cond.getOperand(0);
+    } else {
+      if (SDValue NewCond = LowerSETCC(Cond, DAG))
+        Cond = NewCond;
+    }
+  }
+#if 0
+  // FIXME: LowerXALUO doesn't handle these!!
+  else if (Cond.getOpcode() == M680x0ISD::ADD  ||
+           Cond.getOpcode() == M680x0ISD::SUB  ||
+           Cond.getOpcode() == M680x0ISD::SMUL ||
+           Cond.getOpcode() == M680x0ISD::UMUL)
+    Cond = LowerXALUO(Cond, DAG);
+#endif
+
+  // Look pass (and (setcc_carry (cmp ...)), 1).
+  if (Cond.getOpcode() == ISD::AND &&
+      Cond.getOperand(0).getOpcode() == M680x0ISD::SETCC_CARRY &&
+      isOneConstant(Cond.getOperand(1)))
+    Cond = Cond.getOperand(0);
+
+  // If condition flag is set by a M680x0ISD::CMP, then use it as the condition
+  // setting operand in place of the M680x0ISD::SETCC.
+  unsigned CondOpcode = Cond.getOpcode();
+  if (CondOpcode == M680x0ISD::SETCC ||
+      CondOpcode == M680x0ISD::SETCC_CARRY) {
+    CC = Cond.getOperand(0);
+
+    SDValue Cmp = Cond.getOperand(1);
+    unsigned Opc = Cmp.getOpcode();
+    // FIXME: WHY THE SPECIAL CASING OF LogicalCmp??
+    if (isM680x0LogicalCmp(Cmp) || Opc == M680x0ISD::BT) {
+      Cond = Cmp;
+      addTest = false;
+    } else {
+      switch (cast<ConstantSDNode>(CC)->getZExtValue()) {
+      default: break;
+      case M680x0::COND_VS:
+      case M680x0::COND_CS:
+        // These can only come from an arithmetic instruction with overflow,
+        // e.g. SADDO, UADDO.
+        Cond = Cond.getNode()->getOperand(1);
+        addTest = false;
+        break;
+      }
+    }
+  }
+  CondOpcode = Cond.getOpcode();
+  if (CondOpcode == ISD::UADDO || CondOpcode == ISD::SADDO ||
+      CondOpcode == ISD::USUBO || CondOpcode == ISD::SSUBO ||
+      ((CondOpcode == ISD::UMULO || CondOpcode == ISD::SMULO) &&
+       Cond.getOperand(0).getValueType() != MVT::i8)) {
+    SDValue LHS = Cond.getOperand(0);
+    SDValue RHS = Cond.getOperand(1);
+    unsigned M680x0Opcode;
+    unsigned M680x0Cond;
+    SDVTList VTs;
+    // Keep this in sync with LowerXALUO, otherwise we might create redundant
+    // instructions that can't be removed afterwards (i.e. M680x0ISD::ADD and
+    // M680x0ISD::INC).
+    switch (CondOpcode) {
+    case ISD::UADDO: M680x0Opcode = M680x0ISD::ADD;  M680x0Cond = M680x0::COND_CS; break;
+    case ISD::SADDO: M680x0Opcode = M680x0ISD::ADD;  M680x0Cond = M680x0::COND_VS; break;
+    case ISD::USUBO: M680x0Opcode = M680x0ISD::SUB;  M680x0Cond = M680x0::COND_CS; break;
+    case ISD::SSUBO: M680x0Opcode = M680x0ISD::SUB;  M680x0Cond = M680x0::COND_VS; break;
+    case ISD::UMULO: M680x0Opcode = M680x0ISD::UMUL; M680x0Cond = M680x0::COND_VS; break;
+    case ISD::SMULO: M680x0Opcode = M680x0ISD::SMUL; M680x0Cond = M680x0::COND_VS; break;
+    default: llvm_unreachable("unexpected overflowing operator");
+    }
+
+    if (Inverted)
+      M680x0Cond = M680x0::GetOppositeBranchCondition((M680x0::CondCode)M680x0Cond);
+    if (CondOpcode == ISD::UMULO)
+      VTs = DAG.getVTList(LHS.getValueType(), LHS.getValueType(), MVT::i8);
+    else
+      VTs = DAG.getVTList(LHS.getValueType(), MVT::i8);
+
+    SDValue M680x0Op = DAG.getNode(M680x0Opcode, DL, VTs, LHS, RHS);
+
+    if (CondOpcode == ISD::UMULO)
+      Cond = M680x0Op.getValue(2);
+    else
+      Cond = M680x0Op.getValue(1);
+
+    CC = DAG.getConstant(M680x0Cond, DL, MVT::i8);
+    addTest = false;
+  } else {
+    unsigned CondOpc;
+    if (Cond.hasOneUse() && isAndOrOfSetCCs(Cond, CondOpc)) {
+      SDValue Cmp = Cond.getOperand(0).getOperand(1);
+      if (CondOpc == ISD::OR) {
+        // Also, recognize the pattern generated by an FCMP_UNE. We can emit
+        // two branches instead of an explicit OR instruction with a
+        // separate test.
+        if (Cmp == Cond.getOperand(1).getOperand(1) &&
+            isM680x0LogicalCmp(Cmp)) {
+          CC = Cond.getOperand(0).getOperand(0);
+          Chain = DAG.getNode(M680x0ISD::BRCOND, DL, Op.getValueType(),
+                              Chain, Dest, CC, Cmp);
+          CC = Cond.getOperand(1).getOperand(0);
+          Cond = Cmp;
+          addTest = false;
+        }
+      } else { // ISD::AND
+        // Also, recognize the pattern generated by an FCMP_OEQ. We can emit
+        // two branches instead of an explicit AND instruction with a
+        // separate test. However, we only do this if this block doesn't
+        // have a fall-through edge, because this requires an explicit
+        // jmp when the condition is false.
+        if (Cmp == Cond.getOperand(1).getOperand(1) &&
+            isM680x0LogicalCmp(Cmp) &&
+            Op.getNode()->hasOneUse()) {
+          M680x0::CondCode CCode =
+            (M680x0::CondCode)Cond.getOperand(0).getConstantOperandVal(0);
+          CCode = M680x0::GetOppositeBranchCondition(CCode);
+          CC = DAG.getConstant(CCode, DL, MVT::i8);
+          SDNode *User = *Op.getNode()->use_begin();
+          // Look for an unconditional branch following this conditional branch.
+          // We need this because we need to reverse the successors in order
+          // to implement FCMP_OEQ.
+          if (User->getOpcode() == ISD::BR) {
+            SDValue FalseBB = User->getOperand(1);
+            SDNode *NewBR =
+              DAG.UpdateNodeOperands(User, User->getOperand(0), Dest);
+            assert(NewBR == User);
+            (void)NewBR;
+            Dest = FalseBB;
+
+            Chain = DAG.getNode(M680x0ISD::BRCOND, DL, Op.getValueType(),
+                                Chain, Dest, CC, Cmp);
+            M680x0::CondCode CCode =
+              (M680x0::CondCode)Cond.getOperand(1).getConstantOperandVal(0);
+            CCode = M680x0::GetOppositeBranchCondition(CCode);
+            CC = DAG.getConstant(CCode, DL, MVT::i8);
+            Cond = Cmp;
+            addTest = false;
+          }
+        }
+      }
+    } else if (Cond.hasOneUse() && isXor1OfSetCC(Cond)) {
+      // Recognize for xorb (setcc), 1 patterns. The xor inverts the condition.
+      // It should be transformed during dag combiner except when the condition
+      // is set by a arithmetics with overflow node.
+      M680x0::CondCode CCode =
+        (M680x0::CondCode)Cond.getOperand(0).getConstantOperandVal(0);
+      CCode = M680x0::GetOppositeBranchCondition(CCode);
+      CC = DAG.getConstant(CCode, DL, MVT::i8);
+      Cond = Cond.getOperand(0).getOperand(1);
+      addTest = false;
+    } /*else if (Cond.getOpcode() == ISD::SETCC &&
+               cast<CondCodeSDNode>(Cond.getOperand(2))->get() == ISD::SETOEQ) {
+      // For FCMP_OEQ, we can emit
+      // two branches instead of an explicit AND instruction with a
+      // separate test. However, we only do this if this block doesn't
+      // have a fall-through edge, because this requires an explicit
+      // jmp when the condition is false.
+      if (Op.getNode()->hasOneUse()) {
+        SDNode *User = *Op.getNode()->use_begin();
+        // Look for an unconditional branch following this conditional branch.
+        // We need this because we need to reverse the successors in order
+        // to implement FCMP_OEQ.
+        if (User->getOpcode() == ISD::BR) {
+          SDValue FalseBB = User->getOperand(1);
+          SDNode *NewBR =
+            DAG.UpdateNodeOperands(User, User->getOperand(0), Dest);
+          assert(NewBR == User);
+          (void)NewBR;
+          Dest = FalseBB;
+
+          SDValue Cmp = DAG.getNode(M680x0ISD::CMP, DL, MVT::i32,
+                                    Cond.getOperand(0), Cond.getOperand(1));
+          // Cmp = ConvertCmpIfNecessary(Cmp, DAG);
+          CC = DAG.getConstant(M680x0::COND_NE, DL, MVT::i8);
+          Chain = DAG.getNode(M680x0ISD::BRCOND, DL, Op.getValueType(),
+                              Chain, Dest, CC, Cmp);
+          CC = DAG.getConstant(M680x0::COND_P, DL, MVT::i8);
+          Cond = Cmp;
+          addTest = false;
+        }
+      }
+    } else if (Cond.getOpcode() == ISD::SETCC &&
+               cast<CondCodeSDNode>(Cond.getOperand(2))->get() == ISD::SETUNE) {
+      // For FCMP_UNE, we can emit
+      // two branches instead of an explicit AND instruction with a
+      // separate test. However, we only do this if this block doesn't
+      // have a fall-through edge, because this requires an explicit
+      // jmp when the condition is false.
+      if (Op.getNode()->hasOneUse()) {
+        SDNode *User = *Op.getNode()->use_begin();
+        // Look for an unconditional branch following this conditional branch.
+        // We need this because we need to reverse the successors in order
+        // to implement FCMP_UNE.
+        if (User->getOpcode() == ISD::BR) {
+          SDValue FalseBB = User->getOperand(1);
+          SDNode *NewBR =
+            DAG.UpdateNodeOperands(User, User->getOperand(0), Dest);
+          assert(NewBR == User);
+          (void)NewBR;
+
+          SDValue Cmp = DAG.getNode(M680x0ISD::CMP, DL, MVT::i32,
+                                    Cond.getOperand(0), Cond.getOperand(1));
+          Cmp = ConvertCmpIfNecessary(Cmp, DAG);
+          CC = DAG.getConstant(M680x0::COND_NE, DL, MVT::i8);
+          Chain = DAG.getNode(M680x0ISD::BRCOND, DL, Op.getValueType(),
+                              Chain, Dest, CC, Cmp);
+          CC = DAG.getConstant(M680x0::COND_NP, DL, MVT::i8);
+          Cond = Cmp;
+          addTest = false;
+          Dest = FalseBB;
+        }
+      }
+    } */
+  }
+
+  if (addTest) {
+    // Look pass the truncate if the high bits are known zero.
+    if (isTruncWithZeroHighBitsInput(Cond, DAG))
+        Cond = Cond.getOperand(0);
+
+    // We know the result is compared against zero. Try to match it to BT.
+    if (Cond.hasOneUse()) {
+      if (SDValue NewSetCC = LowerToBT(Cond, ISD::SETNE, DL, DAG)) {
+        CC = NewSetCC.getOperand(0);
+        Cond = NewSetCC.getOperand(1);
+        addTest = false;
+      }
+    }
+  }
+
+  if (addTest) {
+    M680x0::CondCode M680x0Cond = Inverted ? M680x0::COND_EQ : M680x0::COND_NE;
+    CC = DAG.getConstant(M680x0Cond, DL, MVT::i8);
+    Cond = EmitTest(Cond, M680x0Cond, DL, DAG);
+  }
+  // Cond = ConvertCmpIfNecessary(Cond, DAG);
+  return DAG.getNode(M680x0ISD::BRCOND, DL, Op.getValueType(),
+                     Chain, Dest, CC, Cond);
+}
+
 // ConstantPool, JumpTable, GlobalAddress, and ExternalSymbol are lowered as
 // their target countpart wrapped in the M680x0ISD::Wrapper node. Suppose N is
 // one of the above mentioned nodes. It has to be wrapped because otherwise
@@ -1492,24 +2418,29 @@ LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const {
 
 const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
-  case M680x0ISD::CALL:      return "M680x0ISD::CALL";
-  case M680x0ISD::TAIL_CALL: return "M680x0ISD::TAIL_CALL";
-  case M680x0ISD::GP_REL:    return "M680x0ISD::GP_REL";
-  case M680x0ISD::RET:       return "M680x0ISD::RET";
-  case M680x0ISD::TC_RETURN: return "M680x0ISD::TC_RETURN";
-  case M680x0ISD::ADD:       return "M680x0ISD::ADD";
-  case M680x0ISD::SUB:       return "M680x0ISD::SUB";
-  case M680x0ISD::ADDX:      return "M680x0ISD::ADDX";
-  case M680x0ISD::SUBX:      return "M680x0ISD::SUBX";
-  case M680x0ISD::SMUL:      return "M680x0ISD::SMUL";
-  case M680x0ISD::INC:       return "M680x0ISD::INC";
-  case M680x0ISD::DEC:       return "M680x0ISD::DEC";
-  case M680x0ISD::OR:        return "M680x0ISD::OR";
-  case M680x0ISD::XOR:       return "M680x0ISD::XOR";
-  case M680x0ISD::AND:       return "M680x0ISD::AND";
-  case M680x0ISD::Wrapper:   return "M680x0ISD::Wrapper";
-  case M680x0ISD::WrapperPC: return "M680x0ISD::WrapperPC";
-  default:                   return NULL;
+  case M680x0ISD::CALL:        return "M680x0ISD::CALL";
+  case M680x0ISD::TAIL_CALL:   return "M680x0ISD::TAIL_CALL";
+  case M680x0ISD::RET:         return "M680x0ISD::RET";
+  case M680x0ISD::TC_RETURN:   return "M680x0ISD::TC_RETURN";
+  case M680x0ISD::ADD:         return "M680x0ISD::ADD";
+  case M680x0ISD::SUB:         return "M680x0ISD::SUB";
+  case M680x0ISD::ADDX:        return "M680x0ISD::ADDX";
+  case M680x0ISD::SUBX:        return "M680x0ISD::SUBX";
+  case M680x0ISD::SMUL:        return "M680x0ISD::SMUL";
+  case M680x0ISD::UMUL:        return "M680x0ISD::UMUL";
+  case M680x0ISD::OR:          return "M680x0ISD::OR";
+  case M680x0ISD::XOR:         return "M680x0ISD::XOR";
+  case M680x0ISD::AND:         return "M680x0ISD::AND";
+  case M680x0ISD::BT:          return "M680x0ISD::BT";
+  case M680x0ISD::CMP:         return "M680x0ISD::CMP";
+  case M680x0ISD::COMI:        return "M680x0ISD::COMI";
+  case M680x0ISD::UCOMI:       return "M680x0ISD::UCOMI";
+  case M680x0ISD::BRCOND:      return "M680x0ISD::BRCOND";
+  case M680x0ISD::SETCC:       return "M680x0ISD::SETCC";
+  case M680x0ISD::SETCC_CARRY: return "M680x0ISD::SETCC_CARRY";
+  case M680x0ISD::Wrapper:     return "M680x0ISD::Wrapper";
+  case M680x0ISD::WrapperPC:   return "M680x0ISD::WrapperPC";
+  default:                     return NULL;
   }
 }
 

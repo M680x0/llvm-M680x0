@@ -27,6 +27,93 @@ namespace llvm {
 
 class M680x0Subtarget;
 
+namespace M680x0 {
+
+// These MUST be kept in sync with codes definitions in M680x0InstrInfo.td
+enum CondCode {
+  COND_T  = 0,  // True
+  COND_F  = 1,  // False
+  COND_HI = 2,  // High
+  COND_LS = 3,  // Less or Same
+  COND_CC = 4,  // Carry Clear
+  COND_CS = 5,  // Carry Set
+  COND_NE = 6,  // Not Equal
+  COND_EQ = 7,  // Equal
+  COND_VC = 8,  // Overflow Clear
+  COND_VS = 9,  // Overflow Set
+  COND_PL = 10, // Plus
+  COND_MI = 11, // Minus
+  COND_GE = 12, // Greater or Equal
+  COND_LT = 13, // Less Than
+  COND_GT = 14, // Greater Than
+  COND_LE = 15, // Less or Equal
+  LAST_VALID_COND = COND_LE,
+  COND_INVALID
+};
+
+static inline M680x0::CondCode
+GetOppositeBranchCondition(M680x0::CondCode CC) {
+  switch (CC) {
+  default: llvm_unreachable("Illegal condition code!");
+  case M680x0::COND_T:  return M680x0::COND_F;
+  case M680x0::COND_F:  return M680x0::COND_T;
+  case M680x0::COND_HI: return M680x0::COND_LS;
+  case M680x0::COND_LS: return M680x0::COND_HI;
+  case M680x0::COND_CC: return M680x0::COND_CS;
+  case M680x0::COND_CS: return M680x0::COND_CC;
+  case M680x0::COND_NE: return M680x0::COND_EQ;
+  case M680x0::COND_EQ: return M680x0::COND_NE;
+  case M680x0::COND_VC: return M680x0::COND_VS;
+  case M680x0::COND_VS: return M680x0::COND_VC;
+  case M680x0::COND_PL: return M680x0::COND_MI;
+  case M680x0::COND_MI: return M680x0::COND_PL;
+  case M680x0::COND_GE: return M680x0::COND_LT;
+  case M680x0::COND_LT: return M680x0::COND_GE;
+  case M680x0::COND_GT: return M680x0::COND_LE;
+  case M680x0::COND_LE: return M680x0::COND_GT;
+  }
+}
+
+static inline unsigned IsCMP(unsigned Op) {
+  switch (Op) {
+  default: return false;
+  case M680x0::CMP8dd:
+  case M680x0::CMP8df:
+  case M680x0::CMP8di:
+  case M680x0::CMP8dj:
+  case M680x0::CMP8dp:
+  case M680x0::CMP16dd:
+  case M680x0::CMP16df:
+  case M680x0::CMP16di:
+  case M680x0::CMP16dj:
+  case M680x0::CMP16dp:
+    return true;
+  }
+}
+
+static inline bool IsSETCC(unsigned SETCC) {
+  switch (SETCC) {
+  default: return false;
+  case M680x0::SETeq:
+  case M680x0::SETne:
+  case M680x0::SETlt:
+  case M680x0::SETge:
+  case M680x0::SETle:
+  case M680x0::SETgt:
+  case M680x0::SETcs:
+  case M680x0::SETcc:
+  case M680x0::SETls:
+  case M680x0::SEThi:
+  case M680x0::SETpl:
+  case M680x0::SETmi:
+  case M680x0::SETvc:
+  case M680x0::SETvs:
+     return true;
+  }
+}
+  
+} /* M680x0  */ 
+
 /// isGlobalStubReference - Return true if the specified TargetFlag operand is
 /// a reference to a stub for a global, not the global itself.
 inline static bool isGlobalStubReference(unsigned char TargetFlag) {

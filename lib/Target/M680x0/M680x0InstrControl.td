@@ -51,7 +51,7 @@ let hasSideEffects = 0 in {
 // Conditions
 //===----------------------------------------------------------------------===//
 
-/// cc—Carry clear      GE—Greater than or equal
+/// CC—Carry clear      GE—Greater than or equal
 /// LS—Lower or same    PL—Plus
 /// CS—Carry set        GT—Greater than
 /// LT—Less than        T—Always true*
@@ -89,7 +89,7 @@ class MxScc<string cc>
     : MxInst<0x0, (outs MxDRD8:$dst), (ins CCRC:$ccr), "s"#cc#"\t$dst">;
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "f", "ne", "ge",
-               "pl", "gt", "t", "hi", "vc", "le", "vs"] in
+               "cs", "pl", "gt", "t", "hi", "vc", "le", "vs"] in
   def SET#cc : MxScc<cc>;
 
 multiclass MMxSETCCPatterns<MxType TYPE, PatFrag FRAG, Instruction SET> {
@@ -176,7 +176,7 @@ class MxBcc<string cc, Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
     : MxIIII<(outs), (ins CCRC:$ccr, TARGET:$dst), "b"#cc#"."#TYPE.Prefix#"\t$dst", [], ENC>;
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
-               "pl", "gt", "hi", "vc", "le", "vs"] in {
+               "cs", "pl", "gt", "hi", "vc", "le", "vs"] in {
 def B#cc#"8"
   : MxBcc<cc, MxBrTarget8, MxType8,
     MxEncoding<MxBead8Disp<1>, !cast<MxBead4Bits>("MxCC"#cc), MxBead4Bits<0x6>>>;
@@ -207,7 +207,7 @@ def : Pat<(brcc SETGE, i32:$lhs, i32:$rhs, bb:$target), (Bge8 (CMP32dd $lhs, $rh
 def : Pat<(brcc SETLT, i32:$lhs, i32:$rhs, bb:$target), (Blt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
 def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
 
-def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8di 1, $value), MxBrTarget8:$target)>;
+// def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8di 1, $value), MxBrTarget8:$target)>;
 
 
 /// -------------------------------------------------
