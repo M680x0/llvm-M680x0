@@ -78,68 +78,22 @@ def MxCClt : MxBead4Bits<0b1101>;
 def MxCCgt : MxBead4Bits<0b1110>;
 def MxCCle : MxBead4Bits<0b1111>;
 
-/* def MxCONDeq : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOEQ; }]>; */
-/* def MxCONDne : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETONE; }]>; */
-/* def MxCONDgt : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOGT; }]>; */
-/* def MxCONDge : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOGE; }]>; */
-/* def MxCONDlt : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOLT; }]>; */
-/* def MxCONDle : PatLeaf <(i8 imm), [{ return N->getZExtValue() == ISD::SETOLE; }]>; */
+let Uses = [CCR] in {
+class MxSccR<string CC, PatLeaf OPNODE>
+    : MxIIII<(outs MxDRD8:$dst), (ins), "s"#CC#"\t$dst",
+      [(set i8:$dst, (MxSetCC OPNODE, CCR))]>;
 
-class MxScc<string cc>
-    : MxInst<0x0, (outs MxDRD8:$dst), (ins CCRC:$ccr), "s"#cc#"\t$dst">;
+class MxSccM<string CC, PatLeaf OPNODE, MxOperand MEMOpd, ComplexPattern MEMPat>
+    : MxIIII<(outs), (ins MEMOpd:$dst), "s"#CC#"\t$dst",
+      [(store (MxSetCC OPNODE, CCR), MEMPat:$dst)]>;
+}
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "f", "ne", "ge",
-               "cs", "pl", "gt", "t", "hi", "vc", "le", "vs"] in
-  def SET#cc : MxScc<cc>;
-
-multiclass MMxSETCCPatterns<MxType TYPE, PatFrag FRAG, Instruction SET> {
-  // R cc R
-  def : Pat<(FRAG TYPE.VT:$lhs, TYPE.VT:$rhs),
-            (SET (!cast<Instruction>("CMP"#TYPE.Size#"dd") $lhs, TYPE.ROp:$rhs))>;
-
-  // (An) cc R
-  def : Pat<(FRAG (load TYPE.JPat:$lhs), TYPE.VT:$rhs),
-            (SET (!cast<Instruction>("CMP"#TYPE.Size#"dj") TYPE.JOp:$lhs, TYPE.ROp:$rhs))>;
-
-  // (i,An) cc R
-  def : Pat<(FRAG (load TYPE.PPat:$lhs), TYPE.VT:$rhs),
-            (SET (!cast<Instruction>("CMP"#TYPE.Size#"dp") TYPE.POp:$lhs, TYPE.ROp:$rhs))>;
-
-  // (i,An,Xn) cc R
-  def : Pat<(FRAG (load TYPE.FPat:$lhs), TYPE.VT:$rhs),
-            (SET (!cast<Instruction>("CMP"#TYPE.Size#"df") TYPE.FOp:$lhs, TYPE.ROp:$rhs))>;
+               "cs", "pl", "gt", "t", "hi", "vc", "le", "vs"] in {
+def SET#"d8"#cc : MxSccR<cc, !cast<PatLeaf>("MxCOND"#cc)>;
+def SET#"j8"#cc : MxSccM<cc, !cast<PatLeaf>("MxCOND"#cc), MxType8.JOp, MxType8.JPat>;
+def SET#"p8"#cc : MxSccM<cc, !cast<PatLeaf>("MxCOND"#cc), MxType8.POp, MxType8.PPat>;
 }
-
-multiclass MMxSETPatterns<MxType TYPE> {
-  // TODO onece float is available...
-  // NOTE reread the spec there are some caviats with it like not clearing cc
-  /* defm : MMxSETCCPatterns<TYPE, setoeq, SEToeq>; */
-  /* defm : MMxSETCCPatterns<TYPE, setogt, SETogt>; */
-  /* defm : MMxSETCCPatterns<TYPE, setoge, SEToge>; */
-  /* defm : MMxSETCCPatterns<TYPE, setolt, SETolt>; */
-  /* defm : MMxSETCCPatterns<TYPE, setole, SETole>; */
-  /* defm : MMxSETCCPatterns<TYPE, setone, SETone>; */
-  /* defm : MMxSETCCPatterns<TYPE, seto  , SETo>; */
-  /* defm : MMxSETCCPatterns<TYPE, setuo , SETuo>; */
-  // TODO M680x0 unsinged compare?
-  /* defm : MMxSETCCPatterns<TYPE, setueq, SETueq>; */
-  /* defm : MMxSETCCPatterns<TYPE, setugt, SETugt>; */
-  /* defm : MMxSETCCPatterns<TYPE, setuge, SETuge>; */
-  /* defm : MMxSETCCPatterns<TYPE, setult, SETult>; */
-  /* defm : MMxSETCCPatterns<TYPE, setule, SETule>; */
-  /* defm : MMxSETCCPatterns<TYPE, setune, SETune>; */
-  defm : MMxSETCCPatterns<TYPE, seteq, SETeq>;
-  defm : MMxSETCCPatterns<TYPE, setne, SETne>;
-  defm : MMxSETCCPatterns<TYPE, setgt, SETgt>;
-  defm : MMxSETCCPatterns<TYPE, setge, SETge>;
-  defm : MMxSETCCPatterns<TYPE, setlt, SETlt>;
-  defm : MMxSETCCPatterns<TYPE, setle, SETle>;
-}
-
-defm : MMxSETPatterns<MxType8d>;
-defm : MMxSETPatterns<MxType16d>;
-defm : MMxSETPatterns<MxType32d>;
-
 
 //===----------------------------------------------------------------------===//
 // Jumps
@@ -171,9 +125,9 @@ def JMP32j
 /// --------------------------------------------------
 ///  32-BIT DISPLACEMENT IF 8-BIT DISPLACEMENT = $FF
 /// --------------------------------------------------
-let isBranch = 1, isTerminator = 1 in
+let isBranch = 1, isTerminator = 1, Uses = [CCR] in
 class MxBcc<string cc, Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
-    : MxIIII<(outs), (ins CCRC:$ccr, TARGET:$dst), "b"#cc#"."#TYPE.Prefix#"\t$dst", [], ENC>;
+    : MxIIII<(outs), (ins TARGET:$dst), "b"#cc#"\t$dst", [], ENC>;
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
                "cs", "pl", "gt", "hi", "vc", "le", "vs"] in {
@@ -186,29 +140,34 @@ def B#cc#"16"
                MxBead4Bits<0x6>, MxBead16Imm<1>>>;
 }
 
-def : Pat<(brcc SETEQ, i8:$lhs, i8:$rhs, bb:$target), (Beq8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETNE, i8:$lhs, i8:$rhs, bb:$target), (Bne8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETGT, i8:$lhs, i8:$rhs, bb:$target), (Bgt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETGE, i8:$lhs, i8:$rhs, bb:$target), (Bge8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETLT, i8:$lhs, i8:$rhs, bb:$target), (Blt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETLE, i8:$lhs, i8:$rhs, bb:$target), (Ble8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
+               "cs", "pl", "gt", "hi", "vc", "le", "vs"] in {
+def : Pat<(MxBrCond bb:$target, !cast<PatLeaf>("MxCOND"#cc), CCR),
+          (!cast<Instruction>("B"#cc#"8") MxBrTarget8:$target)>;
+}
 
-def : Pat<(brcc SETEQ, i16:$lhs, i16:$rhs, bb:$target), (Beq8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETNE, i16:$lhs, i16:$rhs, bb:$target), (Bne8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETGT, i16:$lhs, i16:$rhs, bb:$target), (Bgt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETGE, i16:$lhs, i16:$rhs, bb:$target), (Bge8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETLT, i16:$lhs, i16:$rhs, bb:$target), (Blt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETLE, i16:$lhs, i16:$rhs, bb:$target), (Ble8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-
-def : Pat<(brcc SETEQ, i32:$lhs, i32:$rhs, bb:$target), (Beq8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETNE, i32:$lhs, i32:$rhs, bb:$target), (Bne8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETGT, i32:$lhs, i32:$rhs, bb:$target), (Bgt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETGE, i32:$lhs, i32:$rhs, bb:$target), (Bge8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETLT, i32:$lhs, i32:$rhs, bb:$target), (Blt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETEQ, i8:$lhs, i8:$rhs, bb:$target), (Beq8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETNE, i8:$lhs, i8:$rhs, bb:$target), (Bne8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETGT, i8:$lhs, i8:$rhs, bb:$target), (Bgt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETGE, i8:$lhs, i8:$rhs, bb:$target), (Bge8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETLT, i8:$lhs, i8:$rhs, bb:$target), (Blt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETLE, i8:$lhs, i8:$rhs, bb:$target), (Ble8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
+//
+// def : Pat<(brcc SETEQ, i16:$lhs, i16:$rhs, bb:$target), (Beq8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETNE, i16:$lhs, i16:$rhs, bb:$target), (Bne8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETGT, i16:$lhs, i16:$rhs, bb:$target), (Bgt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETGE, i16:$lhs, i16:$rhs, bb:$target), (Bge8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETLT, i16:$lhs, i16:$rhs, bb:$target), (Blt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETLE, i16:$lhs, i16:$rhs, bb:$target), (Ble8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
+//
+// def : Pat<(brcc SETEQ, i32:$lhs, i32:$rhs, bb:$target), (Beq8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETNE, i32:$lhs, i32:$rhs, bb:$target), (Bne8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETGT, i32:$lhs, i32:$rhs, bb:$target), (Bgt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETGE, i32:$lhs, i32:$rhs, bb:$target), (Bge8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETLT, i32:$lhs, i32:$rhs, bb:$target), (Blt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
+// def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
 
 // def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8di 1, $value), MxBrTarget8:$target)>;
-
 
 /// -------------------------------------------------
 ///  F  E  D  C  B  A  9  8 | 7  6  5  4  3  2  1  0
@@ -221,7 +180,7 @@ def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rh
 /// -------------------------------------------------
 let isBranch = 1, isTerminator = 1 in
 class MxBra<Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
-    : MxIIII<(outs), (ins TARGET:$dst), "bra."#TYPE.Prefix#"\t$dst", [], ENC>;
+    : MxIIII<(outs), (ins TARGET:$dst), "bra\t$dst", [], ENC>;
 
 def BRA8  : MxBra<MxBrTarget8, MxType8,
             MxEncoding<MxBead8Disp<0>, MxBead4Bits<0x0>, MxBead4Bits<0x6>>>;

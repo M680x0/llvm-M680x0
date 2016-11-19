@@ -74,6 +74,8 @@ GetOppositeBranchCondition(M680x0::CondCode CC) {
   }
 }
 
+// FIXME would be nice tablegen to generate these predicates, mb tag based
+
 static inline unsigned IsCMP(unsigned Op) {
   switch (Op) {
   default: return false;
@@ -94,20 +96,48 @@ static inline unsigned IsCMP(unsigned Op) {
 static inline bool IsSETCC(unsigned SETCC) {
   switch (SETCC) {
   default: return false;
-  case M680x0::SETeq:
-  case M680x0::SETne:
-  case M680x0::SETlt:
-  case M680x0::SETge:
-  case M680x0::SETle:
-  case M680x0::SETgt:
-  case M680x0::SETcs:
-  case M680x0::SETcc:
-  case M680x0::SETls:
-  case M680x0::SEThi:
-  case M680x0::SETpl:
-  case M680x0::SETmi:
-  case M680x0::SETvc:
-  case M680x0::SETvs:
+  case M680x0::SETd8eq:
+  case M680x0::SETd8ne:
+  case M680x0::SETd8lt:
+  case M680x0::SETd8ge:
+  case M680x0::SETd8le:
+  case M680x0::SETd8gt:
+  case M680x0::SETd8cs:
+  case M680x0::SETd8cc:
+  case M680x0::SETd8ls:
+  case M680x0::SETd8hi:
+  case M680x0::SETd8pl:
+  case M680x0::SETd8mi:
+  case M680x0::SETd8vc:
+  case M680x0::SETd8vs:
+  case M680x0::SETj8eq:
+  case M680x0::SETj8ne:
+  case M680x0::SETj8lt:
+  case M680x0::SETj8ge:
+  case M680x0::SETj8le:
+  case M680x0::SETj8gt:
+  case M680x0::SETj8cs:
+  case M680x0::SETj8cc:
+  case M680x0::SETj8ls:
+  case M680x0::SETj8hi:
+  case M680x0::SETj8pl:
+  case M680x0::SETj8mi:
+  case M680x0::SETj8vc:
+  case M680x0::SETj8vs:
+  case M680x0::SETp8eq:
+  case M680x0::SETp8ne:
+  case M680x0::SETp8lt:
+  case M680x0::SETp8ge:
+  case M680x0::SETp8le:
+  case M680x0::SETp8gt:
+  case M680x0::SETp8cs:
+  case M680x0::SETp8cc:
+  case M680x0::SETp8ls:
+  case M680x0::SETp8hi:
+  case M680x0::SETp8pl:
+  case M680x0::SETp8mi:
+  case M680x0::SETp8vc:
+  case M680x0::SETp8vs:
      return true;
   }
 }
@@ -193,6 +223,9 @@ public:
   // Push/Pop to/from stack
   bool ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc, 
                       bool isPush) const;
+
+  // Moves to/from CCR
+  bool ExpandCCR(MachineInstrBuilder &MIB, bool isToCCR) const;
 };
 
 } // namespace llvm

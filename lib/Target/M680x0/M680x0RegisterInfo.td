@@ -111,16 +111,18 @@ def AR16 : MxRegClass<[i16], 16, (sequence "WA%u", 0, 6)>;
 def AR32 : MxRegClass<[i32], 32, (add (sequence "A%u", 0, 6), SP)>;
 
 // Index Register Classes
+// FIXME try order D0, D1, A0, A1, ...
 def XR16 : MxRegClass<[i16], 16, (add DR16, AR16)>;
 def XR32 : MxRegClass<[i32], 32, (add DR32, AR32)>;
 
+def SPC  : MxRegClass<[i32], 32, (add A7)>;
+
 // Control Registers
-/* let CopyCost = -1, isAllocatable = 0 in { */
+let CopyCost = -1, isAllocatable = 0 in {
   def CCRC : MxRegClass<[i8],  16, (add CCR)>;
   def SRC  : MxRegClass<[i16], 16, (add SR)>;
   def PCC  : MxRegClass<[i32], 32, (add PC)>;
-  def SPC  : MxRegClass<[i32], 32, (add A7)>;
-/* } */
+}
 
 // Register used with tail call
 def DR16_TC : MxRegClass<[i16], 16, (add D0, D1)>;

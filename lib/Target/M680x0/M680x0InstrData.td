@@ -336,7 +336,6 @@ defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat,
 ///                               | EFFECTIVE ADDRESS
 ///  0  1  0  0  0  1  0  0  1  1 |   MODE  |   REG
 /// --------------------------------------------------
-let mayStore = 1 in {
 class MxMoveToCCR<dag INS, MxEncEA EA, MxEncExt EXT>
     : MxIIII<(outs CCRC:$dst), INS, "move.w\t$src, $dst", [],
       MxEncoding<EA.Reg, EA.DA, EA.Mode,
@@ -344,13 +343,14 @@ class MxMoveToCCR<dag INS, MxEncEA EA, MxEncExt EXT>
                  EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
 
 class MxMoveToCCRPseudo<dag INS> : MxPseudo<(outs CCRC:$dst), INS>;
+
+let mayLoad = 1 in {
+def MOV16cp : MxMoveToCCR<(ins MxType16d.POp:$src), MxEncEAp_1, MxExtI16_1>;
+def  MOV8cp : MxMoveToCCRPseudo<(ins MxType8d.POp:$src)>;
 } // let mayLoad = 1
 
-def MOV16cp : MxMoveToCCR<(ins MxType16d.POp:$src), MxEncEAp_1, MxExtI16_1>;
 def MOV16cd : MxMoveToCCR<(ins MxType16d.ROp:$src), MxEncEAd_1, MxExtEmpty>;
-
-def MOV8cp : MxMoveToCCRPseudo<(ins MxType8d.POp:$src)>;
-def MOV8cd : MxMoveToCCRPseudo<(ins MxType8d.ROp:$src)>;
+def  MOV8cd : MxMoveToCCRPseudo<(ins MxType8d.ROp:$src)>;
 
 /// Move from CCR
 /// --------------------------------------------------
@@ -359,7 +359,6 @@ def MOV8cd : MxMoveToCCRPseudo<(ins MxType8d.ROp:$src)>;
 ///                               | EFFECTIVE ADDRESS
 ///  0  1  0  0  0  0  1  0  1  1 |   MODE  |   REG
 /// --------------------------------------------------
-let mayLoad = 1 in {
 class MxMoveFromCCR<dag INS, MxEncEA EA, MxEncExt EXT>
     : MxIIII<(outs), INS, "move.w\t$src, $dst", [],
       MxEncoding<EA.Reg, EA.DA, EA.Mode,
@@ -368,14 +367,16 @@ class MxMoveFromCCR<dag INS, MxEncEA EA, MxEncExt EXT>
       Requires<[ IsM68010 ]>;
 
 class MxMoveFromCCRPseudo<dag INS> : MxPseudo<(outs), INS>;
-} // let mayLoad = 1
 
+let mayStore = 1 in {
 def MOV16pc
   : MxMoveFromCCR<(ins MxType16d.POp:$dst, CCRC:$src), MxEncEAp_0, MxExtI16_0>;
+def MOV8pc : MxMoveFromCCRPseudo<(ins MxType8d.POp:$dst, CCRC:$src)>;
+} // let mayLoad = 1
+
 def MOV16dc
   : MxMoveFromCCR<(ins MxType16d.ROp:$dst, CCRC:$src), MxEncEAd_0, MxExtEmpty>;
 
-def MOV8pc : MxMoveFromCCRPseudo<(ins MxType8d.POp:$dst, CCRC:$src)>;
 def MOV8dc : MxMoveFromCCRPseudo<(ins MxType8d.ROp:$dst, CCRC:$src)>;
 
 

@@ -123,9 +123,9 @@ def MxUMul : SDNode<"M680x0ISD::UMUL", MxSDT_2BiArithCCROut, [SDNPCommutative]>;
 def MxCmp     : SDNode<"M680x0ISD::CMP", MxSDT_CmpTest>;
 def MxBt      : SDNode<"M680x0ISD::BT",  MxSDT_CmpTest>;
 
-def MxBrcond  : SDNode<"M680x0ISD::BRCOND", MxSDT_BrCond, [SDNPHasChain]>;
-def MxSetcc   : SDNode<"M680x0ISD::SETCC",  MxSDT_SetCC>;
-def MxSetcc_c : SDNode<"M680x0ISD::SETCC_CARRY", MxSDT_SetCC_C>;
+def MxBrCond  : SDNode<"M680x0ISD::BRCOND", MxSDT_BrCond, [SDNPHasChain]>;
+def MxSetCC   : SDNode<"M680x0ISD::SETCC",  MxSDT_SetCC>;
+def MxSetCC_C : SDNode<"M680x0ISD::SETCC_CARRY", MxSDT_SetCC_C>;
 
 
 //===----------------------------------------------------------------------===//
@@ -363,22 +363,22 @@ def IsM68040     : Predicate<"!Subtarget.IsM68040()">;
 // These MUST be kept in sync with codes enum in M680x0InstrInfo.h
 //===----------------------------------------------------------------------===//
 
-def MxCOND_T   : PatLeaf<(i8 0)>;  // True
-def MxCOND_F   : PatLeaf<(i8 1)>;  // False
-def MxCOND_HI  : PatLeaf<(i8 2)>;  // High
-def MxCOND_LS  : PatLeaf<(i8 3)>;  // Less or Same
-def MxCOND_CC  : PatLeaf<(i8 4)>;  // Carry Clear
-def MxCOND_CS  : PatLeaf<(i8 5)>;  // Carry Set
-def MxCOND_NE  : PatLeaf<(i8 6)>;  // Not Equal
-def MxCOND_EQ  : PatLeaf<(i8 7)>;  // Equal
-def MxCOND_VC  : PatLeaf<(i8 8)>;  // Overflow Clear
-def MxCOND_VS  : PatLeaf<(i8 9)>;  // Overflow Set
-def MxCOND_PL  : PatLeaf<(i8 10)>; // Plus
-def MxCOND_MI  : PatLeaf<(i8 11)>; // Minus
-def MxCOND_GE  : PatLeaf<(i8 12)>; // Greater or Equal
-def MxCOND_LT  : PatLeaf<(i8 13)>; // Less Than
-def MxCOND_GT  : PatLeaf<(i8 14)>; // Greater Than
-def MxCOND_LE  : PatLeaf<(i8 15)>; // Less or Equal
+def MxCONDt   : PatLeaf<(i8 0)>;  // True
+def MxCONDf   : PatLeaf<(i8 1)>;  // False
+def MxCONDhi  : PatLeaf<(i8 2)>;  // High
+def MxCONDls  : PatLeaf<(i8 3)>;  // Less or Same
+def MxCONDcc  : PatLeaf<(i8 4)>;  // Carry Clear
+def MxCONDcs  : PatLeaf<(i8 5)>;  // Carry Set
+def MxCONDne  : PatLeaf<(i8 6)>;  // Not Equal
+def MxCONDeq  : PatLeaf<(i8 7)>;  // Equal
+def MxCONDvc  : PatLeaf<(i8 8)>;  // Overflow Clear
+def MxCONDvs  : PatLeaf<(i8 9)>;  // Overflow Set
+def MxCONDpl  : PatLeaf<(i8 10)>; // Plus
+def MxCONDmi  : PatLeaf<(i8 11)>; // Minus
+def MxCONDge  : PatLeaf<(i8 12)>; // Greater or Equal
+def MxCONDlt  : PatLeaf<(i8 13)>; // Less Than
+def MxCONDgt  : PatLeaf<(i8 14)>; // Greater Than
+def MxCONDle  : PatLeaf<(i8 15)>; // Less or Equal
 
 
 //===----------------------------------------------------------------------===//

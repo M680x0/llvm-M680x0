@@ -68,6 +68,12 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
 
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);
 
+  for (auto VT : { MVT::i8, MVT::i16, MVT::i32, MVT::i64 }) {
+    setOperationAction(ISD::SELECT, VT, Custom);
+    setOperationAction(ISD::SETCC,  VT, Custom);
+    setOperationAction(ISD::SETCCE, VT, Custom);
+  }
+
   // SADDO and friends are legal with this setup, i hope
   for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
     setOperationAction(ISD::SADDO, VT, Custom);
@@ -1856,7 +1862,7 @@ LowerToBT(SDValue Op, ISD::CondCode CC,
 SDValue M680x0TargetLowering::
 LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   MVT VT = Op.getSimpleValueType();
-  assert(VT == MVT::i1 && "SetCC type must be 1-bit integer");
+  assert(VT == MVT::i8 && "SetCC type must be 8-bit integer");
 
   SDValue Op0 = Op.getOperand(0);
   SDValue Op1 = Op.getOperand(1);

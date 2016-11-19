@@ -211,6 +211,17 @@ ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
 }
 
 bool M680x0InstrInfo::
+ExpandCCR(MachineInstrBuilder &MIB, bool isToCCR) const {
+  if (isToCCR) {
+    MIB->setDesc(get(M680x0::MOV16cd));
+  } else {
+    // FIXME M68010 or better is required
+    MIB->setDesc(get(M680x0::MOV16dc));
+  }
+  return true;
+}
+
+bool M680x0InstrInfo::
 expandPostRAPseudo(MachineInstr &MI) const {
   MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
   switch (MI.getOpcode()) {
@@ -251,8 +262,6 @@ copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
       .addReg(SrcReg, getKillRegState(KillSrc));
     return;
   }
-
-  // FIXME since these are pseudos they will be resolved on the next pseudo hook
 
   // Now deal with asymmetrically sized copies. The cases that follow are upcast
   // moves.

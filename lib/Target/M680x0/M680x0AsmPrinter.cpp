@@ -57,8 +57,13 @@ runOnMachineFunction(MachineFunction &MF) {
 
 void M680x0AsmPrinter::
 EmitInstruction(const MachineInstr *MI) {
-  if (MI->isPseudo())
-    llvm_unreachable("Pseudo opcode found in EmitInstruction()");
+  if (MI->isPseudo()) {
+    DEBUG(dbgs()
+        << "Pseudo opcode("
+        << MI->getOpcode()
+        << ") found in EmitInstruction()\n");
+    llvm_unreachable("Cannot proceed");
+  }
 
   MCInst TmpInst0;
   MCInstLowering->Lower(MI, TmpInst0);
