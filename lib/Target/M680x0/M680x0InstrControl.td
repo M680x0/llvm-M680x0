@@ -43,7 +43,7 @@
 //===----------------------------------------------------------------------===//
 
 let hasSideEffects = 0 in {
-  def NOP : MxIIII<(outs), (ins), "nop", [], MxEncFixed<0x4E71>>;
+  def NOP : MxInst<(outs), (ins), "nop", [], MxEncFixed<0x4E71>>;
 }
 
 
@@ -80,11 +80,11 @@ def MxCCle : MxBead4Bits<0b1111>;
 
 let Uses = [CCR] in {
 class MxSccR<string CC, PatLeaf OPNODE>
-    : MxIIII<(outs MxDRD8:$dst), (ins), "s"#CC#"\t$dst",
+    : MxInst<(outs MxDRD8:$dst), (ins), "s"#CC#"\t$dst",
       [(set i8:$dst, (MxSetCC OPNODE, CCR))]>;
 
 class MxSccM<string CC, PatLeaf OPNODE, MxOperand MEMOpd, ComplexPattern MEMPat>
-    : MxIIII<(outs), (ins MEMOpd:$dst), "s"#CC#"\t$dst",
+    : MxInst<(outs), (ins MEMOpd:$dst), "s"#CC#"\t$dst",
       [(store (MxSetCC OPNODE, CCR), MEMPat:$dst)]>;
 }
 
@@ -101,13 +101,13 @@ def SET#"p8"#cc : MxSccM<cc, !cast<PatLeaf>("MxCOND"#cc), MxType8.POp, MxType8.P
 
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
 // FIXME M680x0 does not allow 16 bit indirect jumps use sext operands
-/* def JMP16r     : MxInst<0x0 (outs), (ins M680x0_ARI16:$dst), */
+/* def JMP16r     : MxInst<(outs), (ins M680x0_ARI16:$dst), */
 /*                             "jmp\t$dst", */
 /*                             [(brind AR16:$dst)]>; */
 
 // jmp (An)
 def JMP32j
-  : MxInst<0x0, (outs), (ins MxARI32:$dst), "jmp\t$dst", [(brind iPTR:$dst)]>;
+  : MxInst<(outs), (ins MxARI32:$dst), "jmp\t$dst", [(brind iPTR:$dst)]>;
 
 }
 
@@ -127,7 +127,7 @@ def JMP32j
 /// --------------------------------------------------
 let isBranch = 1, isTerminator = 1, Uses = [CCR] in
 class MxBcc<string cc, Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
-    : MxIIII<(outs), (ins TARGET:$dst), "b"#cc#"\t$dst", [], ENC>;
+    : MxInst<(outs), (ins TARGET:$dst), "b"#cc#"\t$dst", [], ENC>;
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
                "cs", "pl", "gt", "hi", "vc", "le", "vs"] in {
@@ -180,7 +180,7 @@ def : Pat<(MxBrCond bb:$target, !cast<PatLeaf>("MxCOND"#cc), CCR),
 /// -------------------------------------------------
 let isBranch = 1, isTerminator = 1 in
 class MxBra<Operand TARGET, MxType TYPE, MxEncoding ENC = MxEncEmpty>
-    : MxIIII<(outs), (ins TARGET:$dst), "bra\t$dst", [], ENC>;
+    : MxInst<(outs), (ins TARGET:$dst), "bra\t$dst", [], ENC>;
 
 def BRA8  : MxBra<MxBrTarget8, MxType8,
             MxEncoding<MxBead8Disp<0>, MxBead4Bits<0x0>, MxBead4Bits<0x6>>>;
@@ -207,9 +207,9 @@ let isCall = 1 in
 // registers are added manually.
 let Uses = [SP] in {
 
-def CALLB : MxIIII<(outs), (ins Mxi32imm:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
-def CALLq : MxIIII<(outs), (ins MxPCD32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
-def CALLj : MxIIII<(outs), (ins MxARI32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
+def CALLB : MxInst<(outs), (ins Mxi32imm:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
+def CALLq : MxInst<(outs), (ins MxPCD32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
+def CALLj : MxInst<(outs), (ins MxARI32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
 
 } // let Uses = [SP]
 
@@ -252,7 +252,7 @@ def TAILJMPj  : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
 
 let isTerminator = 1, isReturn = 1, isBarrier = 1, hasCtrlDep = 1 in {
 
-def RTS : MxIIII<(outs), (ins), "rts", [], MxEncFixed<0x4E75>>;
+def RTS : MxInst<(outs), (ins), "rts", [], MxEncFixed<0x4E75>>;
 
 let isCodeGenOnly = 1 in {
 def RET : MxPseudo<(outs), (ins i32imm:$adj, variable_ops), "",

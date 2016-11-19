@@ -26,13 +26,13 @@
 
 // $reg <- $reg op $reg
 class MxSROp_DD<string mnemonic, MxOperand DST, SDNode node>
-    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, DST:$opd),
+    : MxInst<(outs DST:$dst), (ins DST:$src, DST:$opd),
            mnemonic#"."#DST.Size.Id#"\t$opd, $dst",
            [(set DST.VT:$dst, (node DST.VT:$src, DST.VT:$opd))]>;
 
 // $reg <- $reg op $imm
 class MxSROp_DI<string mnemonic, MxOperand DST, SDNode node>
-    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, Mxi32imm:$opd),
+    : MxInst<(outs DST:$dst), (ins DST:$src, Mxi32imm:$opd),
            mnemonic#"."#DST.Size.Id#"\t$opd, $dst",
            [(set DST.VT:$dst, (node DST.VT:$src, Mximm1to8:$opd))]>;
 

@@ -57,7 +57,7 @@ def MxMoveSize16 : MxMoveSize<0b11>;
 def MxMoveSize32 : MxMoveSize<0b10>;
 
 class MxMove<string size, dag outs, dag ins, list<dag> pattern, MxEncoding enc>
-    : MxIIII<outs, ins, "move."#size#"\t$src, $dst", pattern, enc>;
+    : MxInst<outs, ins, "move."#size#"\t$src, $dst", pattern, enc>;
 
 class MxMove_RR<MxType DST, MxType SRC, MxMoveEncoding ENC>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins SRC.ROp:$src),
@@ -337,7 +337,7 @@ defm MOV32f : MMxMove_MM<MxType32, MxType32.FOp, MxType32.FPat,
 ///  0  1  0  0  0  1  0  0  1  1 |   MODE  |   REG
 /// --------------------------------------------------
 class MxMoveToCCR<dag INS, MxEncEA EA, MxEncExt EXT>
-    : MxIIII<(outs CCRC:$dst), INS, "move.w\t$src, $dst", [],
+    : MxInst<(outs CCRC:$dst), INS, "move.w\t$src, $dst", [],
       MxEncoding<EA.Reg, EA.DA, EA.Mode,
                  MxBead4Bits<0b0011>, MxBead4Bits<0b0001>, MxBead2Bits<0b01>,
                  EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
@@ -360,7 +360,7 @@ def  MOV8cd : MxMoveToCCRPseudo<(ins MxType8d.ROp:$src)>;
 ///  0  1  0  0  0  0  1  0  1  1 |   MODE  |   REG
 /// --------------------------------------------------
 class MxMoveFromCCR<dag INS, MxEncEA EA, MxEncExt EXT>
-    : MxIIII<(outs), INS, "move.w\t$src, $dst", [],
+    : MxInst<(outs), INS, "move.w\t$src, $dst", [],
       MxEncoding<EA.Reg, EA.DA, EA.Mode,
                  MxBead4Bits<0b1011>, MxBead4Bits<0b0000>, MxBead2Bits<0b01>,
                  EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>,
@@ -390,7 +390,7 @@ def MOV8dc : MxMoveFromCCRPseudo<(ins MxType8d.ROp:$dst, CCRC:$src)>;
 ///  0  1  0  0 | DST REG | 1  1  1 |   MODE  |   REG
 /// ----------------------------------------------------
 class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat, MxEncEA EA, MxEncExt EXT>
-    : MxIIII<(outs MxARD32:$dst), (ins SRCOpd:$src),
+    : MxInst<(outs MxARD32:$dst), (ins SRCOpd:$src),
              "lea\t$src, $dst", [(set i32:$dst, SRCPat:$src)],
              MxEncoding<EA.Reg, EA.DA, EA.Mode,
                         MxBead3Bits<0b111>, MxBeadReg<0>, MxBead4Bits<0x4>,

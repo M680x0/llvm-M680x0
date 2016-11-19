@@ -337,30 +337,7 @@ def MxEncSize64 : MxEncSize<0b11>;
 // following word or words and is considered part of the instruction. The
 // effective address modes are grouped into three categories: register direct,
 // memory addressing, and special.
-// FIXME remove this class
-class MxInst<bits<16> opcode,
-             dag outs, dag ins,
-             string asmStr = "",
-             list<dag> pattern = [],
-             InstrItinClass itin = NoItinerary>
-    : Instruction {
-  let Namespace      = "M680x0";
-  let OutOperandList = outs;
-  let InOperandList  = ins;
-  let AsmString      = asmStr;
-  let Pattern        = pattern;
-  let Itinerary      = itin;
-
-  // NOTE Opcode is no really applicable for the most instructions since they are
-  // composed based on the actual register used and EA mode
-  bits<16> Opcode = opcode;
-
-  field bits<192> Beads = MxEncEmpty.Value;
-}
-
-
-// FIXME rename to MxInst
-class MxIIII<dag outs, dag ins,
+class MxInst<dag outs, dag ins,
              string asmStr = "",
              list<dag> pattern = [],
              MxEncoding beads = MxEncEmpty,
@@ -382,6 +359,6 @@ class MxIIII<dag outs, dag ins,
 
 // M680x0 PSEUDO INSTRUCTION
 class MxPseudo<dag outs, dag ins, string asmStr = "", list<dag> pattern = []>
-    : MxInst<0x0, outs, ins, asmStr, pattern> {
+    : MxInst<outs, ins, asmStr, pattern> {
   let isPseudo = 1;
 }

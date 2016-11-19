@@ -84,7 +84,7 @@ class MxArithImmEncoding<MxBead4Bits CMD, MxEncSize SIZE,
 
 // $reg, $ccr <- $reg op $reg
 class MxBiArOp_RFRR_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
-    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
            MN#"."#TYPE.Prefix#"\t$opd, $dst",
            [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd))],
            MxArithEncoding<MxBead4Bits<CMD>,
@@ -98,7 +98,7 @@ class MxBiArOp_RFRR_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
 /// but some opcodes support address register and some do not which creates this
 /// mess.
 class MxBiArOp_RFRR_EAd<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
-    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
            MN#"."#TYPE.Prefix#"\t$opd, $dst",
            [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd))],
            MxArithEncoding<MxBead4Bits<CMD>,
@@ -107,7 +107,7 @@ class MxBiArOp_RFRR_EAd<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
 
 // $reg <- $reg op $imm
 class MxBiArOp_RFRI_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
-    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
               MN#"."#TYPE.Prefix#"\t$opd, $dst",
               [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.IPat:$opd))],
               MxArithEncoding<MxBead4Bits<CMD>,
@@ -119,7 +119,7 @@ class MxBiArOp_RFRI_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
 // opmode or using *I encoding, and again some instrucitons also support address
 // registers some do not.
 class MxBiArOp_RFRI<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
-    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
               MN#"i."#TYPE.Prefix#"\t$opd, $dst",
               [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.IPat:$opd))],
               MxArithImmEncoding<MxBead4Bits<CMD>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
@@ -131,7 +131,7 @@ let mayStore = 1 in
 class MxBiArOp_RFMI<string MN, SDNode NODE, MxType TYPE,
                     MxOperand MEMOpd, ComplexPattern MEMPat,
                     bits<4> CMD, MxEncEA MEMEA, MxEncExt MEMExt>
-    : MxIIII<(outs), (ins MEMOpd:$dst, TYPE.IOp:$opd),
+    : MxInst<(outs), (ins MEMOpd:$dst, TYPE.IOp:$opd),
               MN#"."#TYPE.Prefix#"\t$opd, $dst",
               [(store (NODE (load MEMPat:$dst), TYPE.IPat:$opd), MEMPat:$dst)],
               MxArithImmEncoding<MxBead4Bits<CMD>,
@@ -141,7 +141,7 @@ class MxBiArOp_RFMI<string MN, SDNode NODE, MxType TYPE,
 
 class MxBiArOp_RFRM<string MN, SDNode NODE, MxType TYPE, MxOperand OPD, ComplexPattern PAT,
                     bits<4> CMD, MxEncEA EA, MxEncExt EXT>
-    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, OPD:$opd),
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, OPD:$opd),
            MN#"."#TYPE.Prefix#"\t$opd, $dst",
            [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, (TYPE.Load PAT:$opd)))],
            MxArithEncoding<MxBead4Bits<CMD>,
@@ -194,7 +194,7 @@ defm SUB : MxBiArOp_RF<"sub", MxSub, 0, 0x9, 0x4>;
 
 // $reg, $ccr <- $reg op $reg op $ccr
 class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
-    : MxIIII<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd, CCRC:$ccr),
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd, CCRC:$ccr),
              MN#"."#TYPE.Prefix#"\t$opd, $dst",
              [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.VT:$opd, i8:$ccr))],
              MxArithXEncoding<MxBead4Bits<CMD>,
@@ -280,7 +280,7 @@ defm XOR : MxBiArOp_DF_EAd<"eor", MxXor, 0xB, 0xA>;
 //===----------------------------------------------------------------------===//
 
 class MxCmp<dag INS, MxType TYPE, MxEncoding ENC = MxEncEmpty, string MN = "cmp">
-    : MxIIII<(outs CCRC:$ccr), INS, MN#"."#TYPE.Prefix#"\t$lhs, $rhs", [], ENC>;
+    : MxInst<(outs CCRC:$ccr), INS, MN#"."#TYPE.Prefix#"\t$lhs, $rhs", [], ENC>;
 
 foreach S = [8, 16, 32] in {
 
@@ -329,8 +329,8 @@ def CMP#S#di
 //===----------------------------------------------------------------------===//
 
 let Constraints = "$src = $dst" in {
-  def EXT16 : MxInst<0x0, (outs MxDRD16:$dst), (ins MxDRD16:$src), "ext.w\t$src">;
-  def EXT32 : MxInst<0x0, (outs MxDRD32:$dst), (ins MxDRD32:$src), "ext.l\t$src">;
+  def EXT16 : MxInst<(outs MxDRD16:$dst), (ins MxDRD16:$src), "ext.w\t$src">;
+  def EXT32 : MxInst<(outs MxDRD32:$dst), (ins MxDRD32:$src), "ext.l\t$src">;
 } // $src = $dst
 
 def : Pat<(sext_inreg i16:$src, i8),  (EXT16 $src)>;
@@ -343,12 +343,12 @@ def : Pat<(sext_inreg i32:$src, i16), (EXT32 $src)>;
 
 // $reg <- $reg op $reg
 class MxDiMuOp_DD<string MN, MxOperand DST, MxOperand OPD>
-    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
+    : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd),
            MN#"\t$opd, $dst", []>;
 
 // $reg <- $reg op $imm
 class MxDiMuOp_DI<string MN, MxOperand DST, MxOperand OPD>
-    : MxInst<0x0, (outs DST:$dst), (ins DST:$src, OPD:$opd),
+    : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd),
            MN#"\t$opd, $dst", []>;
 
 multiclass MxDiMuOp<string MN> {
