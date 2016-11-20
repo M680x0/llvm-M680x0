@@ -55,12 +55,13 @@ inline bool CC_M680x0_Any_AssignToReg(unsigned &ValNo, MVT &ValVT,
   // SHIT rewrite this
   // NOTE This is probably wrong
   auto I = CCInfo.F.arg_begin();
-  auto No = ValNo;
-  while (No--) {
+  int No = ValNo;
+  while (No >= 0) {
+    No -= I->getType()->isIntegerTy(64) ? 2 : 1;
     I++;
   }
 
-  bool isPtr = I->getType()->isPointerTy();
+  bool isPtr = I != CCInfo.F.arg_end() && I->getType()->isPointerTy();
 
   unsigned Reg = isPtr ?
     State.AllocateReg(AddrRegList)
