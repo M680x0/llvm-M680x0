@@ -78,6 +78,7 @@ class MxArithImmEncoding<MxBead4Bits CMD, MxEncSize SIZE,
 /* class MxImmEncoding<MxEncEA EA, MxOpMode OPMODE, bits<4> CMD, MxEncExt EXT> */
 /*     : MxEncoding<EA, OPMODE, MxBeadReg<>>; */
 
+
 //===----------------------------------------------------------------------===//
 // Add/Sub
 //===----------------------------------------------------------------------===//
@@ -222,6 +223,7 @@ def NAME#"32dd" : MxBiArOp_RFRRF<MN, NODE, MxType32d, CMD>;
 defm ADDX : MxBiArOp_RFF<"addx", MxAddX, 1, 0xD>;
 defm SUBX : MxBiArOp_RFF<"subx", MxSubX, 0, 0x9>;
 
+
 //===----------------------------------------------------------------------===//
 // And/Xor/Or
 //===----------------------------------------------------------------------===//
@@ -279,50 +281,72 @@ defm XOR : MxBiArOp_DF_EAd<"eor", MxXor, 0xB, 0xA>;
 // Cmp
 //===----------------------------------------------------------------------===//
 
-class MxCmp<dag INS, MxType TYPE, MxEncoding ENC = MxEncEmpty, string MN = "cmp">
-    : MxInst<(outs CCRC:$ccr), INS, MN#"."#TYPE.Prefix#"\t$lhs, $rhs", [], ENC>;
+// TODO TEST ENCODING
+
+let Defs = [CCR] in {
+class MxCmp_RR<MxType TYPE>
+    : MxInst<(outs), (ins TYPE.ROp:$lhs, TYPE.ROp:$rhs),
+      "cmp."#TYPE.Size#"\t$lhs, $rhs",
+     [(set CCR, (MxCmp TYPE.VT:$lhs, TYPE.VT:$rhs))],
+     MxArithEncoding<MxBead4Bits<0xB>,
+                    !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#"dEA"),
+                    MxBeadReg<1>, MxEncEAd_0, MxExtEmpty>>;
+
+class MxCmp_RI<MxType TYPE>
+    : MxInst<(outs), (ins TYPE.ROp:$reg, TYPE.IOp:$imm),
+      "cmpi."#TYPE.Prefix#"\t$imm, $reg",
+      [(set CCR, (MxCmp TYPE.VT:$reg, TYPE.IPat:$imm))],
+      MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
+                       MxEncEAd_1, MxExtEmpty,
+                       !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
+
+let mayLoad = 1 in
+class MxCmp_MI<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
+               MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins MEMOpd:$mem, TYPE.IOp:$imm),
+      "cmpi."#TYPE.Prefix#"\t$imm, $mem",
+      [(set CCR, (MxCmp (load MEMPat:$mem), TYPE.IPat:$imm))],
+      MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
+                       EA, EXT, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
+
+let mayLoad = 1 in
+class MxCmp_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
+               MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins MEMOpd:$mem, TYPE.ROp:$reg),
+      "cmp."#TYPE.Prefix#"\t$mem, $reg",
+      [(set CCR, (MxCmp (load MEMPat:$mem), TYPE.ROp:$reg))],
+      MxArithEncoding<MxBead4Bits<0xB>,
+                    !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#"dEA"),
+                    MxBeadReg<1>, EA, EXT>>;
+} // let Defs = [CCR]
+
+multiclass MMxCmp_MR<MxType TYPE> {
+def NAME#TYPE.JOp.Letter : MxCmp_MR<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_0, MxExtEmpty>;
+def NAME#TYPE.POp.Letter : MxCmp_MR<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_0, MxExtI16_0>;
+def NAME#TYPE.FOp.Letter : MxCmp_MR<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_0, MxExtBrief_0>;
+}
+
+multiclass MMxCmp_MI<MxType TYPE> {
+def NAME#TYPE.JOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_0, MxExtEmpty>;
+def NAME#TYPE.POp.Letter#"i" : MxCmp_MI<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_0, MxExtI16_0>;
+def NAME#TYPE.FOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_0, MxExtBrief_0>;
+}
 
 foreach S = [8, 16, 32] in {
-
-// cmp EA, Dn
-def CMP#S#dd
-  : MxCmp<(ins !cast<MxRegOp>("MxDRD"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
-    !cast<MxType>("MxType"#S#"d"),
-    MxArithEncoding<MxBead4Bits<0xB>,
-                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
-                    MxBeadReg<2>, MxEncEAd_1, MxExtEmpty>>;
-
-let mayLoad = 1 in {
-def CMP#S#dj
-  : MxCmp<(ins !cast<MxRegOp>("MxARI"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
-    !cast<MxType>("MxType"#S#"d"),
-    MxArithEncoding<MxBead4Bits<0xB>,
-                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
-                    MxBeadReg<2>, MxEncEAj_1, MxExtEmpty>>;
-
-def CMP#S#dp
-  : MxCmp<(ins !cast<MxRegOp>("MxARID"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
-    !cast<MxType>("MxType"#S#"d"),
-    MxArithEncoding<MxBead4Bits<0xB>,
-                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
-                    MxBeadReg<2>, MxEncEAp_1, MxExtI16_0>>;
-
-def CMP#S#df
-  : MxCmp<(ins !cast<MxRegOp>("MxARII"#S):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
-    !cast<MxType>("MxType"#S#"d"),
-    MxArithEncoding<MxBead4Bits<0xB>,
-                    !cast<MxEncOpMode>("MxOpMode"#S#"dEA"),
-                    MxBeadReg<2>, MxEncEAf_1, MxExtBrief_0>>;
-} // let mayLoad = 1
-
-def CMP#S#di
-  : MxCmp<(ins !cast<MxOp>("Mxi"#S#"imm"):$lhs, !cast<MxRegOp>("MxDRD"#S):$rhs),
-    !cast<MxType>("MxType"#S#"d"),
-    MxArithImmEncoding<MxBead4Bits<0xB>, !cast<MxEncSize>("MxEncSize"#S),
-                       MxEncEAd_2, MxExtEmpty,
-                       !cast<MxEncExt>("MxExtI"#S#"_1")>, "cmpi">;
-
+def CMP#S#dd : MxCmp_RR<!cast<MxType>("MxType"#S#"d")>;
+def CMP#S#di : MxCmp_RI<!cast<MxType>("MxType"#S#"d")>;
 } // foreach
+
+// cmp mem, Dn
+defm CMP8d  : MMxCmp_MR<MxType8d>;
+defm CMP16d : MMxCmp_MR<MxType16d>;
+defm CMP32d : MMxCmp_MR<MxType32d>;
+
+// cmp #imm, mem
+defm CMP8  : MMxCmp_MI<MxType8d>;
+defm CMP16 : MMxCmp_MI<MxType16d>;
+defm CMP32 : MMxCmp_MI<MxType32d>;
+
 
 //===----------------------------------------------------------------------===//
 // Ext
@@ -336,6 +360,7 @@ let Constraints = "$src = $dst" in {
 def : Pat<(sext_inreg i16:$src, i8),  (EXT16 $src)>;
 def : Pat<(sext_inreg i32:$src, i16), (EXT32 $src)>;
 /* def : Pat<(sext_inreg i32:$src, i8),  (EXT32 (EXT16 $src))>; */
+
 
 //===----------------------------------------------------------------------===//
 // Div/Mul
@@ -405,6 +430,7 @@ def : Pat<(mulhu i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (LSR32di (LSR32di (UMULd32d16 (MOVXd32d16 $dst), $opd), 8), 8),
             MxSubRegIndex16Lo)>;
+
 
 //===----------------------------------------------------------------------===//
 // no-CCR Patterns

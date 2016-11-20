@@ -273,15 +273,12 @@ copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
   if (M680x0::DR8RegClass.contains(SrcReg)) {
     if (M680x0::XR16RegClass.contains(DstReg)) {
       Opc = M680x0::MOVXd16d8;
-      return;
     } else if (M680x0::XR32RegClass.contains(DstReg)) {
       Opc = M680x0::MOVXd32d8;
-      return;
     }
   } else if (M680x0::XR16RegClass.contains(SrcReg)) {
     if (M680x0::XR32RegClass.contains(DstReg)) {
       Opc = M680x0::MOVXd32d16;
-      return;
     }
   }
 

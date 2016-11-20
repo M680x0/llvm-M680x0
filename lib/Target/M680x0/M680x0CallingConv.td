@@ -28,8 +28,8 @@ def RetCC_M680x0Common : CallingConv<[
 // M680x0 C return convention.
 def RetCC_M680x0_C : CallingConv<[
   CCIfType<[i1],   CCPromoteToType<i8>>,
-  CCIfType<[i8],   CCAssignToReg<[D0, D1]>>,
-  CCIfType<[i16],  CCAssignToReg<[D0, D1]>>,
+  CCIfType<[i8],   CCAssignToReg<[BD0, BD1]>>,
+  CCIfType<[i16],  CCAssignToReg<[WD0, WD1]>>,
   CCIfType<[i32],  CCAssignToReg<[D0, D1]>>,
   CCDelegateTo<RetCC_M680x0Common>
 ]>;
@@ -40,8 +40,8 @@ def RetCC_M680x0_C : CallingConv<[
 // split among 16 1-byte values or used for a single 16-byte value.
 def RetCC_M680x0_Fast : CallingConv<[
   CCIfType<[i1],   CCPromoteToType<i8>>,
-  CCIfType<[i8],   CCAssignToReg<[D0, D1, A0, A1]>>,
-  CCIfType<[i16],  CCAssignToReg<[D0, D1, A0, A1]>>,
+  CCIfType<[i8],   CCAssignToReg<[BD0, BD1]>>,
+  CCIfType<[i16],  CCAssignToReg<[WD0, WD1, WA0, WA1]>>,
   CCIfType<[i32],  CCAssignToReg<[D0, D1, A0, A1]>>,
   CCDelegateTo<RetCC_M680x0Common>
 ]>;

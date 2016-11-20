@@ -24,7 +24,10 @@ def MxSDT_CallSeqEnd   : SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 
 def MxSDT_Call    : SDTypeProfile<0, -1, [SDTCisVT<0, iPTR>]>;
 
-def MxSDT_Ret     : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
+def MxSDT_Ret     : SDTypeProfile<0, -1, [
+  /* ADJ */ SDTCisVT<0, i32>
+]>;
+
 def MxSDT_TCRet   : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
 
 def MxSDT_Wrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;

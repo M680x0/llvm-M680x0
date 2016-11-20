@@ -32,8 +32,8 @@ namespace llvm {
 
       CALL, RET, TAIL_CALL, TC_RETURN,
 
-      /// M680x0 compare and logical compare instructions.
-      CMP, COMI, UCOMI,
+      /// M680x0 compare and logical compare instructions
+      CMP,
 
       /// M680x0 bit-test instructions.
       BT,
@@ -113,6 +113,11 @@ namespace llvm {
 
     /// Provide custom lowering hooks for some operations.
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+
+    /// Replace the results of node with an illegal result type with new values
+    /// built out of custom code.
+    // void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
+    //                         SelectionDAG &DAG) const override;
 
   private:
     unsigned GetAlignedArgumentStackSize(unsigned StackSize,

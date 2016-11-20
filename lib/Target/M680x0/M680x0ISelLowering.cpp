@@ -68,7 +68,7 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
 
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);
 
-  for (auto VT : { MVT::i8, MVT::i16, MVT::i32, MVT::i64 }) {
+  for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
     setOperationAction(ISD::SELECT, VT, Custom);
     setOperationAction(ISD::SETCC,  VT, Custom);
     setOperationAction(ISD::SETCCE, VT, Custom);
@@ -1323,6 +1323,26 @@ IsEligibleForTailCallOptimization(SDValue Callee, CallingConv::ID CalleeCC,
 // Custom Lower
 //===----------------------------------------------------------------------===//
 
+/// Replace a node with an illegal result type with a new node built out of
+/// custom code.
+// void M680x0TargetLowering::
+// ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
+//                    SelectionDAG &DAG) const {
+//   SDLoc dl(N);
+//   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+//   switch (N->getOpcode()) {
+//   default:
+//     llvm_unreachable("Do not know how to custom type legalize this operation!");
+//   case ISD::SIGN_EXTEND_INREG:
+//   case ISD::ADDC:
+//   case ISD::ADDE:
+//   case ISD::SUBC:
+//   case ISD::SUBE:
+//     // We don't want to expand or promote these.
+//     return;
+//   }
+// }
+
 SDValue M680x0TargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
@@ -2439,8 +2459,6 @@ const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case M680x0ISD::AND:         return "M680x0ISD::AND";
   case M680x0ISD::BT:          return "M680x0ISD::BT";
   case M680x0ISD::CMP:         return "M680x0ISD::CMP";
-  case M680x0ISD::COMI:        return "M680x0ISD::COMI";
-  case M680x0ISD::UCOMI:       return "M680x0ISD::UCOMI";
   case M680x0ISD::BRCOND:      return "M680x0ISD::BRCOND";
   case M680x0ISD::SETCC:       return "M680x0ISD::SETCC";
   case M680x0ISD::SETCC_CARRY: return "M680x0ISD::SETCC_CARRY";
