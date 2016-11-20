@@ -69,7 +69,7 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);
 
   for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
-    setOperationAction(ISD::SELECT, VT, Custom);
+    setOperationAction(ISD::SELECT, VT, Expand);
     setOperationAction(ISD::SETCC,  VT, Custom);
     setOperationAction(ISD::SETCCE, VT, Custom);
   }
@@ -1354,6 +1354,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::SMULO:
   case ISD::UMULO:              return LowerXALUO(Op, DAG);
   case ISD::SETCC:              return LowerSETCC(Op, DAG);
+  case ISD::SETCCE:             return LowerSETCCE(Op, DAG);
   case ISD::BRCOND:             return LowerBRCOND(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
@@ -1945,6 +1946,27 @@ LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   // CCR = ConvertCmpIfNecessary(CCR, DAG);
   return DAG.getNode(M680x0ISD::SETCC, DL, MVT::i8,
                      DAG.getConstant(M680x0CC, DL, MVT::i8), CCR);
+}
+
+SDValue M680x0TargetLowering::
+LowerSETCCE(SDValue Op, SelectionDAG &DAG) const {
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  SDValue Carry = Op.getOperand(2);
+  SDValue Cond = Op.getOperand(3);
+  SDLoc DL(Op);
+
+  assert(LHS.getSimpleValueType().isInteger() && "SETCCE is integer only.");
+  M680x0::CondCode CC = TranslateIntegerM680x0CC(cast<CondCodeSDNode>(Cond)->get());
+
+  assert(Carry.getOpcode() != ISD::CARRY_FALSE);
+  SDVTList VTs = DAG.getVTList(LHS.getValueType(), MVT::i32);
+  SDValue Cmp = DAG.getNode(M680x0ISD::SUBX, DL, VTs, LHS, RHS, Carry);
+  SDValue SetCC = DAG.getNode(M680x0ISD::SETCC, DL, MVT::i8,
+                              DAG.getConstant(CC, DL, MVT::i8), Cmp.getValue(1));
+  if (Op.getSimpleValueType() == MVT::i1)
+      return DAG.getNode(ISD::TRUNCATE, DL, MVT::i1, SetCC);
+  return SetCC;
 }
 
 /// Return true if node is an ISD::AND or ISD::OR of two M680x0::SETcc nodes
