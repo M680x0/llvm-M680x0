@@ -51,6 +51,27 @@ AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
   }
 }
 
+void M680x0InstrInfo::
+AddZExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
+        unsigned Reg, MVT From, MVT To) const {
+
+  unsigned Mask, And;
+  if (From == MVT::i8) {
+    Mask = 0xFF;
+  } else {
+    Mask = 0xFFFF;
+  }
+
+  if (To == MVT::i16) {
+    And = M680x0::AND16di;
+  } else { // i32
+    And = M680x0::AND32di;
+  }
+
+  // TODO use xor r,r to decrease size
+  BuildMI(MBB, I, DL, get(And), Reg).addReg(Reg).addImm(Mask);
+}
+
 /// Expand SExt MOVE pseudos into a MOV and a EXT if the operands are two
 /// different registers or just EXT if it is the same register
 bool M680x0InstrInfo::
@@ -58,20 +79,12 @@ ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                MVT MVTDst, MVT MVTSrc) const {
   DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to ");
 
-  unsigned Move, Mask, And;
-
-  if (MVTSrc == MVT::i8) {
-    Mask = 0xFF;
-  } else {
-    Mask = 0xFFFF;
-  }
+  unsigned Move;
 
   if (MVTDst == MVT::i16) {
     Move = M680x0::MOV16rr;
-    And = M680x0::AND16di;
   } else { // i32
     Move = M680x0::MOV32rr;
-    And = M680x0::AND32di;
   }
 
   unsigned Dst = MIB->getOperand(0).getReg();
@@ -104,7 +117,7 @@ ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
     AddSExt(MBB, MIB.getInstr(), DL, Dst, MVTSrc, MVTDst);
   } else {
     DEBUG(dbgs() << "Zero Extend" << '\n');
-    BuildMI(MBB, MIB.getInstr(), DL, get(And), Dst).addReg(Dst).addImm(Mask);
+    AddZExt(MBB, MIB.getInstr(), DL, Dst, MVTSrc, MVTDst);
   }
 
   MIB->eraseFromParent();
@@ -117,20 +130,6 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
               const MCInstrDesc &Desc,
               MVT MVTDst, MVT MVTSrc) const {
   DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV and ");
-
-  unsigned Mask, And;
-
-  if (MVTSrc == MVT::i8) {
-    Mask = 0xFF;
-  } else {
-    Mask = 0xFFFF;
-  }
-
-  if (MVTDst == MVT::i16) {
-    And = M680x0::AND16di;
-  } else { // i32
-    And = M680x0::AND16di;
-  }
 
   // Make this a plain move
   MIB->setDesc(Desc);
@@ -146,7 +145,7 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
     AddSExt(MBB, I, DL, Dst, MVTSrc, MVTDst);
   } else {
     DEBUG(dbgs() << "Zero Extend" << '\n');
-    BuildMI(MBB, I, DL, get(And), Dst).addImm(Mask);
+    AddZExt(MBB, I, DL, Dst, MVTSrc, MVTDst);
   }
 
   return true;

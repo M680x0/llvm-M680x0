@@ -207,6 +207,10 @@ public:
   void AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
                unsigned Reg, MVT From, MVT To) const;
 
+  // Add appropriate ZExt nodes
+  void AddZExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
+               unsigned Reg, MVT From, MVT To) const;
+
   // Move from register and extend
   bool ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                       MVT MVTDst, MVT MVTSrc) const;

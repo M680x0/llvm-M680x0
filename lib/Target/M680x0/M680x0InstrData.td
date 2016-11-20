@@ -471,7 +471,7 @@ def MOVXd32d8  : MxPseudoMove_RR<MxType32d,  MxType8d>;
 def MOVXd32d16 : MxPseudoMove_RR<MxType32r, MxType16r>;
 
 //===----------------------------------------------------------------------===//
-// Extensions
+// Extend/Truncate Patterns
 //===----------------------------------------------------------------------===//
 
 // i16 <- i8
@@ -487,17 +487,29 @@ def: Pat<(MxSExtLoadi16i8 MxCP_ARI:$src),
 def: Pat<(MxZExtLoadi16i8 MxCP_ARI:$src),
           (EXTRACT_SUBREG (MOVZXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
 
-// i32 <- i8
+// i32 <- sext i8
 def: Pat<(i32 (sext i8:$src)), (MOVSXd32d8 MxDRD8:$src)>;
-def: Pat<(i32 (zext i8:$src)), (MOVZXd32d8 MxDRD8:$src)>;
-def: Pat<(MxSExtLoadi32i8 MxCP_ARI:$src), (MOVSXd32j8 MxARI8:$src)>;
-def: Pat<(MxZExtLoadi32i8 MxCP_ARI:$src), (MOVZXd32j8 MxARI8:$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARI :$src), (MOVSXd32j8 MxARI8 :$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARID:$src), (MOVSXd32p8 MxARID8:$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARII:$src), (MOVSXd32f8 MxARII8:$src)>;
 
-// i32 <- i16
+// i32 <- zext i8
+def: Pat<(i32 (zext i8:$src)), (MOVZXd32d8 MxDRD8:$src)>;
+def: Pat<(MxZExtLoadi32i8 MxCP_ARI :$src), (MOVZXd32j8 MxARI8 :$src)>;
+def: Pat<(MxZExtLoadi32i8 MxCP_ARID:$src), (MOVZXd32p8 MxARID8:$src)>;
+def: Pat<(MxZExtLoadi32i8 MxCP_ARII:$src), (MOVZXd32f8 MxARII8:$src)>;
+
+// i32 <- sext i16
 def: Pat<(i32 (sext i16:$src)), (MOVSXd32d16 MxDRD16:$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARI :$src), (MOVSXd32j16 MxARI16 :$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARID:$src), (MOVSXd32p16 MxARID16:$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARII:$src), (MOVSXd32f16 MxARII16:$src)>;
+
+// i32 <- zext i16
 def: Pat<(i32 (zext i16:$src)), (MOVZXd32d16 MxDRD16:$src)>;
-def: Pat<(MxSExtLoadi32i16 MxCP_ARI:$src), (MOVSXd32j16 MxARI16:$src)>;
-def: Pat<(MxZExtLoadi32i16 MxCP_ARI:$src), (MOVZXd32j16 MxARI16:$src)>;
+def: Pat<(MxZExtLoadi32i16 MxCP_ARI :$src), (MOVZXd32j16 MxARI16 :$src)>;
+def: Pat<(MxZExtLoadi32i16 MxCP_ARID:$src), (MOVZXd32p16 MxARID16:$src)>;
+def: Pat<(MxZExtLoadi32i16 MxCP_ARII:$src), (MOVZXd32f16 MxARII16:$src)>;
 
 // trunc patterns
 def : Pat<(i16 (trunc i32:$src)),
