@@ -518,3 +518,16 @@ def : Pat<(i8  (trunc i32:$src)),
           (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex8Lo)>;
 def : Pat<(i8  (trunc i16:$src)),
           (EXTRACT_SUBREG MxXRD16:$src, MxSubRegIndex8Lo)>;
+
+
+// anyext. Define these to do an explicit zero-extend to
+// avoid partial-register updates.
+def : Pat<(i16 (anyext MxDRD8 :$src)),
+          (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
+
+def : Pat<(i32 (anyext MxDRD8 :$src)),
+          (MOVZXd32d8  MxDRD8 :$src)>;
+
+// Except for i16 -> i32 since isel expect i16 ops to be promoted to i32.
+def : Pat<(i32 (anyext MxXRD16:$src)),
+          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), MxXRD16:$src, MxSubRegIndex16Lo)>;
