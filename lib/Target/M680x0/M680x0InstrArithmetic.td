@@ -12,11 +12,11 @@
 //
 //  Machine:
 //
-//    ADD       [~]   ADDA      [ ]   ADDI        [ ]   ADDQ [ ]   ADDX [~]
-//    CLR       [ ]   CMP       [ ]   CMPA        [ ]   CMPI [ ]   CMPM [ ]
+//    ADD       [~]   ADDA      [~]   ADDI        [~]   ADDQ [ ]   ADDX [~]
+//    CLR       [ ]   CMP       [~]   CMPA        [~]   CMPI [~]   CMPM [ ]
 //    CMP2      [ ]   DIVS/DIVU [x]   DIVSL/DIVUL [ ]   EXT  [x]   EXTB [ ]
-//    MULS/MULU [ ]   NEG       [ ]   NEGX        [ ]   SUB  [ ]   SUBA [ ]
-//    SUBI      [ ]   SUBQ      [ ]   SUBX        [ ]
+//    MULS/MULU [~]   NEG       [ ]   NEGX        [ ]   SUB  [ ]   SUBA [ ]
+//    SUBI      [ ]   SUBQ      [ ]   SUBX        [~]
 //
 //  Map:
 //
@@ -202,6 +202,16 @@ class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
                               !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                               MxBead1Bit<0>, MxBeadReg<2>, MxBeadReg<0>>>;
 
+// $reg <- $reg op $imm
+class MxBiArOp_RFRIF_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd, CCRC:$ccr),
+              MN#"."#TYPE.Prefix#"\t$opd, $dst",
+              [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.IPat:$opd, i8:$ccr))],
+              MxArithEncoding<MxBead4Bits<CMD>,
+                              !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#TYPE.RLet#"EA"),
+                              MxBeadReg<0>, MxEncEAi,
+                              !cast<MxEncExt>("MxExtI"#TYPE.Size#"_2")>>;
+
 multiclass MxBiArOp_RFF<string MN, SDNode NODE, bit isComm, bits<4> CMD> {
 
 let Defs = [CCR], Uses = [CCR] in {
@@ -215,6 +225,11 @@ def NAME#"32dd" : MxBiArOp_RFRRF<MN, NODE, MxType32d, CMD>;
 } // isCommutable = ?
 
 } // $src = $dst
+
+def NAME#"8di"  : MxBiArOp_RFRIF_xEA<MN, NODE, MxType8d,  CMD>;
+def NAME#"16di" : MxBiArOp_RFRIF_xEA<MN, NODE, MxType16d, CMD>;
+def NAME#"32ri" : MxBiArOp_RFRIF_xEA<MN, NODE, MxType32r, CMD>;
+
 } // Defs = [CCR]
 
 } // MxBiArOp_RFF
