@@ -194,7 +194,7 @@ ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
 }
 
 bool M680x0InstrInfo::
-ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc, 
+ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
                bool isPush) const {
   MachineBasicBlock::iterator I = MIB.getInstr(); I++;
   MachineBasicBlock &MBB = *MIB->getParent();
@@ -220,6 +220,28 @@ ExpandCCR(MachineInstrBuilder &MIB, bool isToCCR) const {
   return true;
 }
 
+/// Expand a single-def pseudo instruction to a two-addr
+/// instruction with two undef reads of the register being defined.
+/// This is used for mapping:
+///   %d0 = SETCS_C32d
+/// to:
+///   %d0 = SUBX32dd %d0<undef>, %d0<undef>
+///
+static bool Expand2AddrUndef(MachineInstrBuilder &MIB,
+                             const MCInstrDesc &Desc) {
+  assert(Desc.getNumOperands() == 3 && "Expected two-addr instruction.");
+  unsigned Reg = MIB->getOperand(0).getReg();
+  MIB->setDesc(Desc);
+
+  // MachineInstr::addOperand() will insert explicit operands before any
+  // implicit operands.
+  MIB.addReg(Reg, RegState::Undef).addReg(Reg, RegState::Undef);
+  // But we don't trust that.
+  assert(MIB->getOperand(1).getReg() == Reg &&
+         MIB->getOperand(2).getReg() == Reg && "Misplaced operand");
+  return true;
+}
+
 bool M680x0InstrInfo::
 expandPostRAPseudo(MachineInstr &MI) const {
   MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
@@ -237,6 +259,13 @@ expandPostRAPseudo(MachineInstr &MI) const {
       return ExpandPUSH_POP(MIB, get(M680x0::MOV16ro), false);
     case M680x0::POP32r:
       return ExpandPUSH_POP(MIB, get(M680x0::MOV32ro), false);
+
+    case M680x0::SETCS_C8d:
+      return Expand2AddrUndef(MIB, get(M680x0::SUBX8dd));
+    case M680x0::SETCS_C16d:
+      return Expand2AddrUndef(MIB, get(M680x0::SUBX16dd));
+    case M680x0::SETCS_C32d:
+      return Expand2AddrUndef(MIB, get(M680x0::SUBX32dd));
   }
   return false;
 }

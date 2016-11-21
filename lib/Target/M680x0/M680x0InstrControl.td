@@ -146,29 +146,6 @@ def : Pat<(MxBrCond bb:$target, !cast<PatLeaf>("MxCOND"#cc), CCR),
           (!cast<Instruction>("B"#cc#"8") MxBrTarget8:$target)>;
 }
 
-// def : Pat<(brcc SETEQ, i8:$lhs, i8:$rhs, bb:$target), (Beq8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETNE, i8:$lhs, i8:$rhs, bb:$target), (Bne8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETGT, i8:$lhs, i8:$rhs, bb:$target), (Bgt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETGE, i8:$lhs, i8:$rhs, bb:$target), (Bge8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETLT, i8:$lhs, i8:$rhs, bb:$target), (Blt8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETLE, i8:$lhs, i8:$rhs, bb:$target), (Ble8 (CMP8dd $lhs, $rhs), MxBrTarget8:$target)>;
-//
-// def : Pat<(brcc SETEQ, i16:$lhs, i16:$rhs, bb:$target), (Beq8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETNE, i16:$lhs, i16:$rhs, bb:$target), (Bne8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETGT, i16:$lhs, i16:$rhs, bb:$target), (Bgt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETGE, i16:$lhs, i16:$rhs, bb:$target), (Bge8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETLT, i16:$lhs, i16:$rhs, bb:$target), (Blt8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETLE, i16:$lhs, i16:$rhs, bb:$target), (Ble8 (CMP16dd $lhs, $rhs), MxBrTarget8:$target)>;
-//
-// def : Pat<(brcc SETEQ, i32:$lhs, i32:$rhs, bb:$target), (Beq8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETNE, i32:$lhs, i32:$rhs, bb:$target), (Bne8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETGT, i32:$lhs, i32:$rhs, bb:$target), (Bgt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETGE, i32:$lhs, i32:$rhs, bb:$target), (Bge8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETLT, i32:$lhs, i32:$rhs, bb:$target), (Blt8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-// def : Pat<(brcc SETLE, i32:$lhs, i32:$rhs, bb:$target), (Ble8 (CMP32dd $lhs, $rhs), MxBrTarget8:$target)>;
-
-// def : Pat<(brcond i8:$value, bb:$target), (Beq8 (CMP8di 1, $value), MxBrTarget8:$target)>;
-
 /// -------------------------------------------------
 ///  F  E  D  C  B  A  9  8 | 7  6  5  4  3  2  1  0
 /// -------------------------------------------------
@@ -260,3 +237,52 @@ def RET : MxPseudo<(outs), (ins i32imm:$adj, variable_ops), "",
 } // let isCodeGenOnly = 1
 
 }
+
+
+//===----------------------------------------------------------------------===//
+// SETCC_C Patterns
+//===----------------------------------------------------------------------===//
+
+// Use subx to materialize carry bit.
+let Uses = [CCR], Defs = [CCR], isPseudo = 1 in {
+// FIXME: These are pseudo ops that should be replaced with Pat<> patterns.
+// However, Pat<> can't replicate the destination reg into the inputs of the
+// result.
+def SETCS_C8d : MxPseudo<(outs MxDRD8:$dst), (ins), "",
+                 [(set MxDRD8:$dst, (MxSetCC_C MxCONDcs, CCR))]>;
+def SETCS_C16d : MxPseudo<(outs MxDRD16:$dst), (ins), "",
+                 [(set MxDRD16:$dst, (MxSetCC_C MxCONDcs, CCR))]>;
+def SETCS_C32d : MxPseudo<(outs MxXRD32:$dst), (ins), "",
+                 [(set MxXRD32:$dst, (MxSetCC_C MxCONDcs, CCR))]>;
+} // isCodeGenOnly
+
+
+def : Pat<(i16 (anyext (i8 (MxSetCC_C MxCONDcs, CCR)))), (SETCS_C16d)>;
+def : Pat<(i32 (anyext (i8 (MxSetCC_C MxCONDcs, CCR)))), (SETCS_C32d)>;
+
+def : Pat<(i16 (sext (i8 (MxSetCC_C MxCONDcs, CCR)))), (SETCS_C16d)>;
+def : Pat<(i32 (sext (i8 (MxSetCC_C MxCONDcs, CCR)))), (SETCS_C32d)>;
+
+// We canonicalize 'scs' to "(and (subx reg,reg), 1)" on the hope that the and
+// will be eliminated and that the subx can be extended up to a wider type.  When
+// this happens, it is great.  However, if we are left with an 8-bit subx and an
+// and, we might as well just match it as a setb.
+def : Pat<(and (i8 (MxSetCC_C MxCONDcs, CCR)), 1), (SETd8cs)>;
+
+// (add OP, SETB) -> (addx OP, 0)
+def : Pat<(add (and (i8 (MxSetCC_C MxCONDcs, CCR)), 1), MxDRD8:$op),
+          (ADDX8di MxDRD8:$op, 0)>;
+def : Pat<(add (and (i32 (MxSetCC_C MxCONDcs, CCR)), 1), MxXRD32:$op),
+          (ADDX32ri MxXRD32:$op, 0)>;
+
+// (sub OP, SETB) -> (subx OP, 0)
+def : Pat<(sub MxDRD8:$op, (and (i8 (MxSetCC_C MxCONDcs, CCR)), 1)),
+          (SUBX8di MxDRD8:$op, 0)>;
+def : Pat<(sub MxXRD32:$op, (and (i32 (MxSetCC_C MxCONDcs, CCR)), 1)),
+          (SUBX32ri MxXRD32:$op, 0)>;
+
+// (sub OP, SETCC_CARRY) -> (addx OP, 0)
+def : Pat<(sub MxDRD8:$op, (i8 (MxSetCC_C MxCONDcs, CCR))),
+          (ADDX8di MxDRD8:$op, 0)>;
+def : Pat<(sub MxXRD32:$op, (i32 (MxSetCC_C MxCONDcs, CCR))),
+          (ADDX32ri MxXRD32:$op, 0)>;
