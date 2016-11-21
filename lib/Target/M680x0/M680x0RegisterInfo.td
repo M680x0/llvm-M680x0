@@ -115,7 +115,7 @@ def AR32 : MxRegClass<[i32], 32, (add (sequence "A%u", 0, 6), SP)>;
 def XR16 : MxRegClass<[i16], 16, (add DR16, AR16)>;
 def XR32 : MxRegClass<[i32], 32, (add DR32, AR32)>;
 
-def SPC  : MxRegClass<[i32], 32, (add A7)>;
+def SPC  : MxRegClass<[i32], 32, (add SP)>;
 
 // Control Registers
 let CopyCost = -1, isAllocatable = 0 in {

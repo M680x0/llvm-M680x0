@@ -162,7 +162,7 @@ isAddressRegister(unsigned RegNo) {
     case M680x0::A4:
     case M680x0::A5:
     case M680x0::A6:
-    case M680x0::A7:
+    // case M680x0::A7:
     case M680x0::SP:
       return true;
     case M680x0::BD0:
