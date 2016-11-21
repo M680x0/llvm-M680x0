@@ -69,9 +69,11 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);
 
   for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
-    setOperationAction(ISD::SELECT, VT, Expand);
-    setOperationAction(ISD::SETCC,  VT, Custom);
-    setOperationAction(ISD::SETCCE, VT, Custom);
+    setOperationAction(ISD::BR_CC,     VT, Expand);
+    setOperationAction(ISD::SELECT,    VT, Custom);
+    setOperationAction(ISD::SELECT_CC, VT, Expand);
+    setOperationAction(ISD::SETCC,     VT, Custom);
+    setOperationAction(ISD::SETCCE,    VT, Custom);
   }
 
   // SADDO and friends are legal with this setup, i hope
@@ -102,6 +104,11 @@ EVT M680x0TargetLowering::
 getSetCCResultType(const DataLayout &DL, LLVMContext& Context, EVT VT) const {
   // M680x0 SETcc producess either 0x00 or 0xFF
   return MVT::i8;
+}
+
+MVT M680x0TargetLowering::
+getScalarShiftAmountTy(const DataLayout &DL, EVT Ty) const {
+  return Ty.getSimpleVT();
 }
 
 #include "M680x0GenCallingConv.inc"
@@ -1355,6 +1362,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::UMULO:              return LowerXALUO(Op, DAG);
   case ISD::SETCC:              return LowerSETCC(Op, DAG);
   case ISD::SETCCE:             return LowerSETCCE(Op, DAG);
+  case ISD::SELECT:             return LowerSELECT(Op, DAG);
   case ISD::BRCOND:             return LowerBRCOND(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
@@ -1969,6 +1977,225 @@ LowerSETCCE(SDValue Op, SelectionDAG &DAG) const {
   return SetCC;
 }
 
+/// Return true if opcode is a M680x0 logical comparison.
+static bool
+isM680x0LogicalCmp(SDValue Op) {
+  unsigned Opc = Op.getNode()->getOpcode();
+  if (Opc == M680x0ISD::CMP)
+    return true;
+  if (Op.getResNo() == 1 &&
+      (Opc == M680x0ISD::ADD ||
+       Opc == M680x0ISD::SUB ||
+       Opc == M680x0ISD::ADDX ||
+       Opc == M680x0ISD::SUBX ||
+       Opc == M680x0ISD::SMUL ||
+       Opc == M680x0ISD::UMUL ||
+       Opc == M680x0ISD::OR ||
+       Opc == M680x0ISD::XOR ||
+       Opc == M680x0ISD::AND))
+    return true;
+
+  if (Op.getResNo() == 2 && Opc == M680x0ISD::UMUL)
+    return true;
+
+  return false;
+}
+
+static bool
+isTruncWithZeroHighBitsInput(SDValue V, SelectionDAG &DAG) {
+  if (V.getOpcode() != ISD::TRUNCATE)
+    return false;
+
+  SDValue VOp0 = V.getOperand(0);
+  unsigned InBits = VOp0.getValueSizeInBits();
+  unsigned Bits = V.getValueSizeInBits();
+  return DAG.MaskedValueIsZero(VOp0, APInt::getHighBitsSet(InBits,InBits-Bits));
+}
+
+SDValue M680x0TargetLowering::
+LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
+  bool addTest = true;
+  SDValue Cond  = Op.getOperand(0);
+  SDValue Op1 = Op.getOperand(1);
+  SDValue Op2 = Op.getOperand(2);
+  SDLoc DL(Op);
+  MVT VT = Op1.getSimpleValueType();
+  SDValue CC;
+
+  if (Cond.getOpcode() == ISD::SETCC) {
+    if (SDValue NewCond = LowerSETCC(Cond, DAG))
+      Cond = NewCond;
+  }
+
+  // (select (x == 0), -1, y) -> (sign_bit (x - 1)) | y
+  // (select (x == 0), y, -1) -> ~(sign_bit (x - 1)) | y
+  // (select (x != 0), y, -1) -> (sign_bit (x - 1)) | y
+  // (select (x != 0), -1, y) -> ~(sign_bit (x - 1)) | y
+  if (Cond.getOpcode() == M680x0ISD::SETCC &&
+      Cond.getOperand(1).getOpcode() == M680x0ISD::CMP &&
+      isNullConstant(Cond.getOperand(1).getOperand(1))) {
+    SDValue Cmp = Cond.getOperand(1);
+
+    unsigned CondCode =cast<ConstantSDNode>(Cond.getOperand(0))->getZExtValue();
+
+    if ((isAllOnesConstant(Op1) || isAllOnesConstant(Op2)) &&
+        (CondCode == M680x0::COND_EQ || CondCode == M680x0::COND_NE)) {
+      SDValue Y = isAllOnesConstant(Op2) ? Op1 : Op2;
+
+      SDValue CmpOp0 = Cmp.getOperand(0);
+      // Apply further optimizations for special cases
+      // (select (x != 0), -1, 0) -> neg & sbb
+      // (select (x == 0), 0, -1) -> neg & sbb
+      if (isNullConstant(Y) &&
+            (isAllOnesConstant(Op1) == (CondCode == M680x0::COND_NE))) {
+          SDVTList VTs = DAG.getVTList(CmpOp0.getValueType(), MVT::i32);
+          SDValue Neg = DAG.getNode(M680x0ISD::SUB, DL, VTs,
+                                    DAG.getConstant(0, DL,
+                                                    CmpOp0.getValueType()),
+                                    CmpOp0);
+          SDValue Res = DAG.getNode(M680x0ISD::SETCC_CARRY, DL, Op.getValueType(),
+                                    DAG.getConstant(M680x0::COND_CS, DL, MVT::i8),
+                                    SDValue(Neg.getNode(), 1));
+          return Res;
+        }
+
+      Cmp = DAG.getNode(M680x0ISD::CMP, DL, MVT::i32,
+                        CmpOp0, DAG.getConstant(1, DL, CmpOp0.getValueType()));
+      // Cmp = ConvertCmpIfNecessary(Cmp, DAG);
+
+      SDValue Res =   // Res = 0 or -1.
+        DAG.getNode(M680x0ISD::SETCC_CARRY, DL, Op.getValueType(),
+                    DAG.getConstant(M680x0::COND_CS, DL, MVT::i8), Cmp);
+
+      if (isAllOnesConstant(Op1) != (CondCode == M680x0::COND_EQ))
+        Res = DAG.getNOT(DL, Res, Res.getValueType());
+
+      if (!isNullConstant(Op2))
+        Res = DAG.getNode(ISD::OR, DL, Res.getValueType(), Res, Y);
+      return Res;
+    }
+  }
+
+  // Look past (and (setcc_carry (cmp ...)), 1).
+  if (Cond.getOpcode() == ISD::AND &&
+      Cond.getOperand(0).getOpcode() == M680x0ISD::SETCC_CARRY &&
+      isOneConstant(Cond.getOperand(1)))
+    Cond = Cond.getOperand(0);
+
+  // If condition flag is set by a M680x0ISD::CMP, then use it as the condition
+  // setting operand in place of the M680x0ISD::SETCC.
+  unsigned CondOpcode = Cond.getOpcode();
+  if (CondOpcode == M680x0ISD::SETCC ||
+      CondOpcode == M680x0ISD::SETCC_CARRY) {
+    CC = Cond.getOperand(0);
+
+    SDValue Cmp = Cond.getOperand(1);
+    unsigned Opc = Cmp.getOpcode();
+
+    bool IllegalFPCMov = false;
+
+    if ((isM680x0LogicalCmp(Cmp) && !IllegalFPCMov) || Opc == M680x0ISD::BT) { // FIXME
+      Cond = Cmp;
+      addTest = false;
+    }
+  } else if (CondOpcode == ISD::USUBO || CondOpcode == ISD::SSUBO ||
+             CondOpcode == ISD::UADDO || CondOpcode == ISD::SADDO ||
+             ((CondOpcode == ISD::UMULO || CondOpcode == ISD::SMULO) &&
+              Cond.getOperand(0).getValueType() != MVT::i8)) {
+    SDValue LHS = Cond.getOperand(0);
+    SDValue RHS = Cond.getOperand(1);
+    unsigned M680x0Opcode;
+    unsigned M680x0Cond;
+    SDVTList VTs;
+    switch (CondOpcode) {
+    case ISD::UADDO: M680x0Opcode = M680x0ISD::ADD;  M680x0Cond = M680x0::COND_CS; break;
+    case ISD::SADDO: M680x0Opcode = M680x0ISD::ADD;  M680x0Cond = M680x0::COND_VS; break;
+    case ISD::USUBO: M680x0Opcode = M680x0ISD::SUB;  M680x0Cond = M680x0::COND_CS; break;
+    case ISD::SSUBO: M680x0Opcode = M680x0ISD::SUB;  M680x0Cond = M680x0::COND_VS; break;
+    case ISD::UMULO: M680x0Opcode = M680x0ISD::UMUL; M680x0Cond = M680x0::COND_VS; break;
+    case ISD::SMULO: M680x0Opcode = M680x0ISD::SMUL; M680x0Cond = M680x0::COND_VS; break;
+    default: llvm_unreachable("unexpected overflowing operator");
+    }
+    if (CondOpcode == ISD::UMULO)
+      VTs = DAG.getVTList(LHS.getValueType(), LHS.getValueType(),
+                          MVT::i32);
+    else
+      VTs = DAG.getVTList(LHS.getValueType(), MVT::i32);
+
+    SDValue M680x0Op = DAG.getNode(M680x0Opcode, DL, VTs, LHS, RHS);
+
+    if (CondOpcode == ISD::UMULO)
+      Cond = M680x0Op.getValue(2);
+    else
+      Cond = M680x0Op.getValue(1);
+
+    CC = DAG.getConstant(M680x0Cond, DL, MVT::i8);
+    addTest = false;
+  }
+
+  if (addTest) {
+    // Look past the truncate if the high bits are known zero.
+    if (isTruncWithZeroHighBitsInput(Cond, DAG))
+      Cond = Cond.getOperand(0);
+
+    // We know the result of AND is compared against zero. Try to match
+    // it to BT.
+    if (Cond.getOpcode() == ISD::AND && Cond.hasOneUse()) {
+      if (SDValue NewSetCC = LowerToBT(Cond, ISD::SETNE, DL, DAG)) {
+        CC = NewSetCC.getOperand(0);
+        Cond = NewSetCC.getOperand(1);
+        addTest = false;
+      }
+    }
+  }
+
+  if (addTest) {
+    CC = DAG.getConstant(M680x0::COND_NE, DL, MVT::i8);
+    Cond = EmitTest(Cond, M680x0::COND_NE, DL, DAG);
+  }
+
+  // a <  b ? -1 :  0 -> RES = ~setcc_carry
+  // a <  b ?  0 : -1 -> RES = setcc_carry
+  // a >= b ? -1 :  0 -> RES = setcc_carry
+  // a >= b ?  0 : -1 -> RES = ~setcc_carry
+  if (Cond.getOpcode() == M680x0ISD::SUB) {
+    // Cond = ConvertCmpIfNecessary(Cond, DAG);
+    unsigned CondCode = cast<ConstantSDNode>(CC)->getZExtValue();
+
+    if ((CondCode == M680x0::COND_CC || CondCode == M680x0::COND_CS) &&
+        (isAllOnesConstant(Op1) || isAllOnesConstant(Op2)) &&
+        (isNullConstant(Op1) || isNullConstant(Op2))) {
+      SDValue Res = DAG.getNode(M680x0ISD::SETCC_CARRY, DL, Op.getValueType(),
+                                DAG.getConstant(M680x0::COND_CS, DL, MVT::i8),
+                                Cond);
+      if (isAllOnesConstant(Op1) != (CondCode == M680x0::COND_CS))
+        return DAG.getNOT(DL, Res, Res.getValueType());
+      return Res;
+    }
+  }
+
+  // M680x0 doesn't have an i8 cmov. If both operands are the result of a truncate
+  // widen the cmov and push the truncate through. This avoids introducing a new
+  // branch during isel and doesn't add any extensions.
+  if (Op.getValueType() == MVT::i8 &&
+      Op1.getOpcode() == ISD::TRUNCATE && Op2.getOpcode() == ISD::TRUNCATE) {
+    SDValue T1 = Op1.getOperand(0), T2 = Op2.getOperand(0);
+    if (T1.getValueType() == T2.getValueType() &&
+        // Blacklist CopyFromReg to avoid partial register stalls.
+        T1.getOpcode() != ISD::CopyFromReg && T2.getOpcode()!=ISD::CopyFromReg){
+      SDVTList VTs = DAG.getVTList(T1.getValueType(), MVT::Glue);
+      SDValue Cmov = DAG.getNode(M680x0ISD::CMOV, DL, VTs, T2, T1, CC, Cond);
+      return DAG.getNode(ISD::TRUNCATE, DL, Op.getValueType(), Cmov);
+    }
+  }
+
+  // M680x0ISD::CMOV means set the result (which is operand 1) to the RHS if
+  // condition is true.
+  SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Glue);
+  SDValue Ops[] = { Op2, Op1, CC, Cond };
+  return DAG.getNode(M680x0ISD::CMOV, DL, VTs, Ops);
+}
+
 /// Return true if node is an ISD::AND or ISD::OR of two M680x0::SETcc nodes
 /// each of which has no other use apart from the AND / OR.
 static bool isAndOrOfSetCCs(SDValue Op, unsigned &Opc) {
@@ -1979,41 +2206,6 @@ static bool isAndOrOfSetCCs(SDValue Op, unsigned &Opc) {
           Op.getOperand(0).hasOneUse() &&
           M680x0::IsSETCC(Op.getOperand(1).getOpcode()) &&
           Op.getOperand(1).hasOneUse());
-}
-
-/// Return true if opcode is a M680x0 logical comparison.
-static bool isM680x0LogicalCmp(SDValue Op) {
-  unsigned Opc = Op.getNode()->getOpcode();
-
-  if (M680x0::IsCMP(Opc))
-    return true;
-
-  if (Op.getResNo() == 1 &&
-      (Opc == M680x0ISD::ADD ||
-       Opc == M680x0ISD::SUB ||
-       Opc == M680x0ISD::ADDX ||
-       Opc == M680x0ISD::SUBX ||
-       // Opc == M680x0ISD::SMUL ||
-       // Opc == M680x0ISD::UMUL ||
-       Opc == M680x0ISD::OR ||
-       Opc == M680x0ISD::XOR ||
-       Opc == M680x0ISD::AND))
-    return true;
-
-  // if (Op.getResNo() == 2 && Opc == M680x0ISD::UMUL)
-  //   return true;
-
-  return false;
-}
-
-static bool isTruncWithZeroHighBitsInput(SDValue V, SelectionDAG &DAG) {
-  if (V.getOpcode() != ISD::TRUNCATE)
-    return false;
-
-  SDValue VOp0 = V.getOperand(0);
-  unsigned InBits = VOp0.getValueSizeInBits();
-  unsigned Bits = V.getValueSizeInBits();
-  return DAG.MaskedValueIsZero(VOp0, APInt::getHighBitsSet(InBits,InBits-Bits));
 }
 
 /// Return true if node is an ISD::XOR of a M680x0ISD::SETCC and 1 and that the
@@ -2544,4 +2736,346 @@ isCalleePop(CallingConv::ID CallingConv, bool IsVarArg, bool GuaranteeTCO) {
   // case CallingConv::M680x0_VectorCall:
   //   return !is64Bit;
   // }
+}
+
+// Return true if it is OK for this CMOV pseudo-opcode to be cascaded
+// together with other CMOV pseudo-opcodes into a single basic-block with
+// conditional jump around it.
+static bool
+isCMOVPseudo(MachineInstr &MI) {
+  switch (MI.getOpcode()) {
+  case M680x0::CMOV8d:
+  case M680x0::CMOV16d:
+  case M680x0::CMOV32d:
+    return true;
+
+  default:
+    return false;
+  }
+}
+
+// The CCR operand of SelectItr might be missing a kill marker
+// because there were multiple uses of CCR, and ISel didn't know
+// which to mark. Figure out whether SelectItr should have had a
+// kill marker, and set it if it should. Returns the correct kill
+// marker value.
+static bool
+checkAndUpdateCCRKill(MachineBasicBlock::iterator SelectItr,
+                         MachineBasicBlock* BB,
+                         const TargetRegisterInfo* TRI) {
+  // Scan forward through BB for a use/def of CCR.
+  MachineBasicBlock::iterator miI(std::next(SelectItr));
+  for (MachineBasicBlock::iterator miE = BB->end(); miI != miE; ++miI) {
+    const MachineInstr& mi = *miI;
+    if (mi.readsRegister(M680x0::CCR))
+      return false;
+    if (mi.definesRegister(M680x0::CCR))
+      break; // Should have kill-flag - update below.
+  }
+
+  // If we hit the end of the block, check whether CCR is live into a
+  // successor.
+  if (miI == BB->end()) {
+    for (MachineBasicBlock::succ_iterator sItr = BB->succ_begin(),
+                                          sEnd = BB->succ_end();
+         sItr != sEnd; ++sItr) {
+      MachineBasicBlock* succ = *sItr;
+      if (succ->isLiveIn(M680x0::CCR))
+        return false;
+    }
+  }
+
+  // We found a def, or hit the end of the basic block and CCR wasn't live
+  // out. SelectMI should have a kill flag on CCR.
+  SelectItr->addRegisterKilled(M680x0::CCR, TRI);
+  return true;
+}
+
+MachineBasicBlock * M680x0TargetLowering::
+EmitLoweredSelect(MachineInstr &MI, MachineBasicBlock *BB) const {
+  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
+  DebugLoc DL = MI.getDebugLoc();
+
+  // To "insert" a SELECT_CC instruction, we actually have to insert the
+  // diamond control-flow pattern.  The incoming instruction knows the
+  // destination vreg to set, the condition code register to branch on, the
+  // true/false values to select between, and a branch opcode to use.
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+  MachineFunction::iterator It = ++BB->getIterator();
+
+  //  thisMBB:
+  //  ...
+  //   TrueVal = ...
+  //   cmpTY ccX, r1, r2
+  //   bCC copy1MBB
+  //   fallthrough --> copy0MBB
+  MachineBasicBlock *thisMBB = BB;
+  MachineFunction *F = BB->getParent();
+
+  // This code lowers all pseudo-CMOV instructions. Generally it lowers these
+  // as described above, by inserting a BB, and then making a PHI at the join
+  // point to select the true and false operands of the CMOV in the PHI.
+  //
+  // The code also handles two different cases of multiple CMOV opcodes
+  // in a row.
+  //
+  // Case 1:
+  // In this case, there are multiple CMOVs in a row, all which are based on
+  // the same condition setting (or the exact opposite condition setting).
+  // In this case we can lower all the CMOVs using a single inserted BB, and
+  // then make a number of PHIs at the join point to model the CMOVs. The only
+  // trickiness here, is that in a case like:
+  //
+  // t2 = CMOV cond1 t1, f1
+  // t3 = CMOV cond1 t2, f2
+  //
+  // when rewriting this into PHIs, we have to perform some renaming on the
+  // temps since you cannot have a PHI operand refer to a PHI result earlier
+  // in the same block.  The "simple" but wrong lowering would be:
+  //
+  // t2 = PHI t1(BB1), f1(BB2)
+  // t3 = PHI t2(BB1), f2(BB2)
+  //
+  // but clearly t2 is not defined in BB1, so that is incorrect. The proper
+  // renaming is to note that on the path through BB1, t2 is really just a
+  // copy of t1, and do that renaming, properly generating:
+  //
+  // t2 = PHI t1(BB1), f1(BB2)
+  // t3 = PHI t1(BB1), f2(BB2)
+  //
+  // Case 2, we lower cascaded CMOVs such as
+  //
+  //   (CMOV (CMOV F, T, cc1), T, cc2)
+  //
+  // to two successives branches.  For that, we look for another CMOV as the
+  // following instruction.
+  //
+  // Without this, we would add a PHI between the two jumps, which ends up
+  // creating a few copies all around. For instance, for
+  //
+  //    (sitofp (zext (fcmp une)))
+  //
+  // we would generate:
+  //
+  //         ucomiss %xmm1, %xmm0
+  //         movss  <1.0f>, %xmm0
+  //         movaps  %xmm0, %xmm1
+  //         jne     .LBB5_2
+  //         xorps   %xmm1, %xmm1
+  // .LBB5_2:
+  //         jp      .LBB5_4
+  //         movaps  %xmm1, %xmm0
+  // .LBB5_4:
+  //         retq
+  //
+  // because this custom-inserter would have generated:
+  //
+  //   A
+  //   | \
+  //   |  B
+  //   | /
+  //   C
+  //   | \
+  //   |  D
+  //   | /
+  //   E
+  //
+  // A: X = ...; Y = ...
+  // B: empty
+  // C: Z = PHI [X, A], [Y, B]
+  // D: empty
+  // E: PHI [X, C], [Z, D]
+  //
+  // If we lower both CMOVs in a single step, we can instead generate:
+  //
+  //   A
+  //   | \
+  //   |  C
+  //   | /|
+  //   |/ |
+  //   |  |
+  //   |  D
+  //   | /
+  //   E
+  //
+  // A: X = ...; Y = ...
+  // D: empty
+  // E: PHI [X, A], [X, C], [Y, D]
+  //
+  // Which, in our sitofp/fcmp example, gives us something like:
+  //
+  //         ucomiss %xmm1, %xmm0
+  //         movss  <1.0f>, %xmm0
+  //         jne     .LBB5_4
+  //         jp      .LBB5_4
+  //         xorps   %xmm0, %xmm0
+  // .LBB5_4:
+  //         retq
+  //
+  MachineInstr *CascadedCMOV = nullptr;
+  MachineInstr *LastCMOV = &MI;
+  M680x0::CondCode CC = M680x0::CondCode(MI.getOperand(3).getImm());
+  M680x0::CondCode OppCC = M680x0::GetOppositeBranchCondition(CC);
+  MachineBasicBlock::iterator NextMIIt =
+      std::next(MachineBasicBlock::iterator(MI));
+
+  // Check for case 1, where there are multiple CMOVs with the same condition
+  // first.  Of the two cases of multiple CMOV lowerings, case 1 reduces the
+  // number of jumps the most.
+
+  if (isCMOVPseudo(MI)) {
+    // See if we have a string of CMOVS with the same condition.
+    while (NextMIIt != BB->end() && isCMOVPseudo(*NextMIIt) &&
+           (NextMIIt->getOperand(3).getImm() == CC ||
+            NextMIIt->getOperand(3).getImm() == OppCC)) {
+      LastCMOV = &*NextMIIt;
+      ++NextMIIt;
+    }
+  }
+
+  // This checks for case 2, but only do this if we didn't already find
+  // case 1, as indicated by LastCMOV == MI.
+  if (LastCMOV == &MI && NextMIIt != BB->end() &&
+      NextMIIt->getOpcode() == MI.getOpcode() &&
+      NextMIIt->getOperand(2).getReg() == MI.getOperand(2).getReg() &&
+      NextMIIt->getOperand(1).getReg() == MI.getOperand(0).getReg() &&
+      NextMIIt->getOperand(1).isKill()) {
+    CascadedCMOV = &*NextMIIt;
+  }
+
+  MachineBasicBlock *jcc1MBB = nullptr;
+
+  // If we have a cascaded CMOV, we lower it to two successive branches to
+  // the same block.  CCR is used by both, so mark it as live in the second.
+  if (CascadedCMOV) {
+    jcc1MBB = F->CreateMachineBasicBlock(LLVM_BB);
+    F->insert(It, jcc1MBB);
+    jcc1MBB->addLiveIn(M680x0::CCR);
+  }
+
+  MachineBasicBlock *copy0MBB = F->CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *sinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+  F->insert(It, copy0MBB);
+  F->insert(It, sinkMBB);
+
+  // If the CCR register isn't dead in the terminator, then claim that it's
+  // live into the sink and copy blocks.
+  const TargetRegisterInfo *TRI = Subtarget.getRegisterInfo();
+
+  MachineInstr *LastEFLAGSUser = CascadedCMOV ? CascadedCMOV : LastCMOV;
+  if (!LastEFLAGSUser->killsRegister(M680x0::CCR) &&
+      !checkAndUpdateCCRKill(LastEFLAGSUser, BB, TRI)) {
+    copy0MBB->addLiveIn(M680x0::CCR);
+    sinkMBB->addLiveIn(M680x0::CCR);
+  }
+
+  // Transfer the remainder of BB and its successor edges to sinkMBB.
+  sinkMBB->splice(sinkMBB->begin(), BB,
+                  std::next(MachineBasicBlock::iterator(LastCMOV)), BB->end());
+  sinkMBB->transferSuccessorsAndUpdatePHIs(BB);
+
+  // Add the true and fallthrough blocks as its successors.
+  if (CascadedCMOV) {
+    // The fallthrough block may be jcc1MBB, if we have a cascaded CMOV.
+    BB->addSuccessor(jcc1MBB);
+
+    // In that case, jcc1MBB will itself fallthrough the copy0MBB, and
+    // jump to the sinkMBB.
+    jcc1MBB->addSuccessor(copy0MBB);
+    jcc1MBB->addSuccessor(sinkMBB);
+  } else {
+    BB->addSuccessor(copy0MBB);
+  }
+
+  // The true block target of the first (or only) branch is always sinkMBB.
+  BB->addSuccessor(sinkMBB);
+
+  // Create the conditional branch instruction.
+  unsigned Opc = M680x0::GetCondBranchFromCond(CC);
+  BuildMI(BB, DL, TII->get(Opc)).addMBB(sinkMBB);
+
+  if (CascadedCMOV) {
+    unsigned Opc2 = M680x0::GetCondBranchFromCond(
+        (M680x0::CondCode)CascadedCMOV->getOperand(3).getImm());
+    BuildMI(jcc1MBB, DL, TII->get(Opc2)).addMBB(sinkMBB);
+  }
+
+  //  copy0MBB:
+  //   %FalseValue = ...
+  //   # fallthrough to sinkMBB
+  copy0MBB->addSuccessor(sinkMBB);
+
+  //  sinkMBB:
+  //   %Result = phi [ %FalseValue, copy0MBB ], [ %TrueValue, thisMBB ]
+  //  ...
+  MachineBasicBlock::iterator MIItBegin = MachineBasicBlock::iterator(MI);
+  MachineBasicBlock::iterator MIItEnd =
+    std::next(MachineBasicBlock::iterator(LastCMOV));
+  MachineBasicBlock::iterator SinkInsertionPoint = sinkMBB->begin();
+  DenseMap<unsigned, std::pair<unsigned, unsigned>> RegRewriteTable;
+  MachineInstrBuilder MIB;
+
+  // As we are creating the PHIs, we have to be careful if there is more than
+  // one.  Later CMOVs may reference the results of earlier CMOVs, but later
+  // PHIs have to reference the individual true/false inputs from earlier PHIs.
+  // That also means that PHI construction must work forward from earlier to
+  // later, and that the code must maintain a mapping from earlier PHI's
+  // destination registers, and the registers that went into the PHI.
+
+  for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd; ++MIIt) {
+    unsigned DestReg = MIIt->getOperand(0).getReg();
+    unsigned Op1Reg = MIIt->getOperand(1).getReg();
+    unsigned Op2Reg = MIIt->getOperand(2).getReg();
+
+    // If this CMOV we are generating is the opposite condition from
+    // the jump we generated, then we have to swap the operands for the
+    // PHI that is going to be generated.
+    if (MIIt->getOperand(3).getImm() == OppCC)
+        std::swap(Op1Reg, Op2Reg);
+
+    if (RegRewriteTable.find(Op1Reg) != RegRewriteTable.end())
+      Op1Reg = RegRewriteTable[Op1Reg].first;
+
+    if (RegRewriteTable.find(Op2Reg) != RegRewriteTable.end())
+      Op2Reg = RegRewriteTable[Op2Reg].second;
+
+    MIB = BuildMI(*sinkMBB, SinkInsertionPoint, DL,
+                  TII->get(M680x0::PHI), DestReg)
+          .addReg(Op1Reg).addMBB(copy0MBB)
+          .addReg(Op2Reg).addMBB(thisMBB);
+
+    // Add this PHI to the rewrite table.
+    RegRewriteTable[DestReg] = std::make_pair(Op1Reg, Op2Reg);
+  }
+
+  // If we have a cascaded CMOV, the second Jcc provides the same incoming
+  // value as the first Jcc (the True operand of the SELECT_CC/CMOV nodes).
+  if (CascadedCMOV) {
+    MIB.addReg(MI.getOperand(2).getReg()).addMBB(jcc1MBB);
+    // Copy the PHI result to the register defined by the second CMOV.
+    BuildMI(*sinkMBB, std::next(MachineBasicBlock::iterator(MIB.getInstr())),
+            DL, TII->get(TargetOpcode::COPY),
+            CascadedCMOV->getOperand(0).getReg())
+        .addReg(MI.getOperand(0).getReg());
+    CascadedCMOV->eraseFromParent();
+  }
+
+  // Now remove the CMOV(s).
+  for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd; )
+    (MIIt++)->eraseFromParent();
+
+  return sinkMBB;
+}
+
+MachineBasicBlock * M680x0TargetLowering::
+EmitInstrWithCustomInserter(MachineInstr &MI,
+                                               MachineBasicBlock *BB) const {
+  switch (MI.getOpcode()) {
+  default: llvm_unreachable("Unexpected instr type to insert");
+  case M680x0::CMOV8d:
+  case M680x0::CMOV16d:
+  case M680x0::CMOV32d:
+    return EmitLoweredSelect(MI, BB);
+
+  }
 }

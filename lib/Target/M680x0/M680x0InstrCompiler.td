@@ -41,6 +41,22 @@ def : Pat<(store (i32 (MxWrapper texternalsym:$src)), iPTR:$dst),
 def : Pat<(store (i32 (MxWrapper tblockaddress:$src)), iPTR:$dst),
           (MOV32ji MxARI32:$dst, tblockaddress:$src)>;
 
+//===----------------------------------------------------------------------===//
+// Conditional Move Pseudo Instructions
+//
+// CMOV* - Used to implement the SELECT DAG operation. Expanded after
+// instruction selection into a branch sequence.
+//===----------------------------------------------------------------------===//
+
+let usesCustomInserter = 1, Uses = [CCR] in
+class MxCMove<MxType TYPE>
+    : MxPseudo<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$t, TYPE.ROp:$f, i8imm:$cond), "",
+      [(set TYPE.VT:$dst, (TYPE.VT (MxCmov TYPE.VT:$t, TYPE.VT:$f, imm:$cond, CCR)))]>;
+
+def CMOV8d  : MxCMove<MxType8d>;
+def CMOV16d : MxCMove<MxType16d>;
+def CMOV32d : MxCMove<MxType32d>;
+
 
 //===----------------------------------------------------------------------===//
 // Calls

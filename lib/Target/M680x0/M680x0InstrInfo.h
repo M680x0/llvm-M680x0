@@ -74,6 +74,27 @@ GetOppositeBranchCondition(M680x0::CondCode CC) {
   }
 }
 
+static inline unsigned
+GetCondBranchFromCond(M680x0::CondCode CC) {
+  switch (CC) {
+  default: llvm_unreachable("Illegal condition code!");
+  case M680x0::COND_EQ: return M680x0::Beq8;
+  case M680x0::COND_NE: return M680x0::Bne8;
+  case M680x0::COND_LT: return M680x0::Blt8;
+  case M680x0::COND_LE: return M680x0::Ble8;
+  case M680x0::COND_GT: return M680x0::Bgt8;
+  case M680x0::COND_GE: return M680x0::Bge8;
+  case M680x0::COND_CS: return M680x0::Bcs8;
+  case M680x0::COND_LS: return M680x0::Bls8;
+  case M680x0::COND_HI: return M680x0::Bhi8;
+  case M680x0::COND_CC: return M680x0::Bcc8;
+  case M680x0::COND_MI: return M680x0::Bmi8;
+  case M680x0::COND_PL: return M680x0::Bpl8;
+  case M680x0::COND_VS: return M680x0::Bvs8;
+  case M680x0::COND_VC: return M680x0::Bvc8;
+  }
+}
+
 // FIXME would be nice tablegen to generate these predicates, mb tag based
 
 static inline unsigned IsCMP(unsigned Op) {
