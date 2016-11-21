@@ -92,6 +92,7 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   case M680x0::MOVZXd32d16:
     return TII->ExpandMOVSZX_RR(MIB, false, MVT::i32, MVT::i16);
 
+
   case M680x0::MOVSXd16j8:
     return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dj), MVT::i16, MVT::i8);
   case M680x0::MOVSXd32j8:
@@ -105,6 +106,7 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dj), MVT::i32, MVT::i8);
   case M680x0::MOVZXd32j16:
     return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rj), MVT::i32, MVT::i16);
+
 
   case M680x0::MOVSXd16p8:
     return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dp), MVT::i16, MVT::i8);
@@ -135,6 +137,7 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   case M680x0::MOVZXd32f16:
     return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rf), MVT::i32, MVT::i16);
 
+
   case M680x0::MOVXd16d8:
     return TII->ExpandMOVX_RR(MIB, TII->get(M680x0::MOV8dd), MVT::i16, MVT::i8);
   case M680x0::MOVXd32d8:
@@ -142,10 +145,12 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   case M680x0::MOVXd32d16:
     return TII->ExpandMOVX_RR(MIB, TII->get(M680x0::MOV16rr), MVT::i32, MVT::i16);
 
+
   case M680x0::MOV8cd:
     return TII->ExpandCCR(MIB, /* isToCCR */ true);
   case M680x0::MOV8dc:
     return TII->ExpandCCR(MIB, /* isToCCR */ false);
+
 
   case M680x0::TCRETURNq:
   case M680x0::TCRETURNj: {
