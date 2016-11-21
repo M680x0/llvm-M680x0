@@ -284,9 +284,9 @@ def MxARII32_TC  : MxMemOp<(ops i8imm, AR32_TC, XR32_TC), MxSize32, "f", "printA
 // The address of the operand is the extension word. The 16-bit address is sign
 // extended before it is used.  The reference is classified as a data reference
 // with the exception of the jump and jump-tosubroutine instructions.
-def MxAS8      : MxMemOp<(ops i16imm), MxSize8,  "b", "printAS8Mem">;
-def MxAS16     : MxMemOp<(ops i16imm), MxSize16, "b", "printAS16Mem">;
-def MxAS32     : MxMemOp<(ops i16imm), MxSize32, "b", "printAS32Mem">;
+def MxAS8      : MxMemOp<(ops OtherVT), MxSize8,  "B", "printAS8Mem">;
+def MxAS16     : MxMemOp<(ops OtherVT), MxSize16, "B", "printAS16Mem">;
+def MxAS32     : MxMemOp<(ops OtherVT), MxSize32, "B", "printAS32Mem">;
 
 // ABSOLUTE LONG ADDRESS. This addressing mode requires two words of extension.
 // The address of the operand is developed by the concatenation of the extension
@@ -294,9 +294,9 @@ def MxAS32     : MxMemOp<(ops i16imm), MxSize32, "b", "printAS32Mem">;
 // order part of the address is the second extension word. The reference is
 // classified as a data reference with the exception of the jump and jump
 // to-subroutine instructions.
-def MxAL8      : MxMemOp<(ops i32imm), MxSize8,  "b", "printAL8Mem">;
-def MxAL16     : MxMemOp<(ops i32imm), MxSize16, "b", "printAL16Mem">;
-def MxAL32     : MxMemOp<(ops i32imm), MxSize32, "b", "printAL32Mem">;
+def MxAL8      : MxMemOp<(ops OtherVT), MxSize8,  "b", "printAL8Mem">;
+def MxAL16     : MxMemOp<(ops OtherVT), MxSize16, "b", "printAL16Mem">;
+def MxAL32     : MxMemOp<(ops OtherVT), MxSize32, "b", "printAL32Mem">;
 
 let OperandType = "OPERAND_PCREL" in {
 // PROGRAM COUNTER WITH DISPLACEMENT. This addressing mode requires one word of

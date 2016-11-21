@@ -120,7 +120,14 @@ printARIIMem(const MCInst *MI, int opNum, raw_ostream &O) {
 // NOTE forcing (W,L) size available since M68020 only
 void M680x0InstPrinter::
 printAbsMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print $<absolute>
+  const MCOperand &MO = MI->getOperand(opNum);
+  if (MO.isImm()) {
+    // ??? Print it in hex?
+    O << (unsigned short int)MO.getImm();
+  }
+  else {
+    printOperand(MI, opNum, O);
+  }
 }
 
 void M680x0InstPrinter::

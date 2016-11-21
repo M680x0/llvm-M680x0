@@ -13,10 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// DAG Pattern Matching Rules
+// ConstantPool, GlobalAddress, ExternalSymbol, and JumpTable
 //===----------------------------------------------------------------------===//
 
-// ConstantPool GlobalAddress, ExternalSymbol, and JumpTable
 def : Pat<(i32 (MxWrapper tconstpool    :$dst)), (MOV32ri tconstpool    :$dst)>;
 def : Pat<(i32 (MxWrapper tglobaladdr   :$dst)), (MOV32ri tglobaladdr   :$dst)>;
 def : Pat<(i32 (MxWrapper texternalsym  :$dst)), (MOV32ri texternalsym  :$dst)>;
@@ -40,6 +39,7 @@ def : Pat<(store (i32 (MxWrapper texternalsym:$src)), iPTR:$dst),
           (MOV32ji MxARI32:$dst, texternalsym:$src)>;
 def : Pat<(store (i32 (MxWrapper tblockaddress:$src)), iPTR:$dst),
           (MOV32ji MxARI32:$dst, tblockaddress:$src)>;
+
 
 //===----------------------------------------------------------------------===//
 // Conditional Move Pseudo Instructions

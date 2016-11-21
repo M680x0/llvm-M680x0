@@ -283,6 +283,9 @@ class MxEncExt<MxBead imm   = MxBeadIgnore,   MxBead b8 = MxBeadIgnore,
 
 def MxExtEmpty : MxEncExt;
 
+// These handle encoding of displacement fields, absolute addresses and
+// immediate values, since encoding for these categories is mainly the same,
+// with exception of some weird immediates.
 def  MxExtI8_0 : MxEncExt<MxBead8Imm<0>>;
 def MxExtI16_0 : MxEncExt<MxBead16Imm<0>>;
 def MxExtI32_0 : MxEncExt<MxBead32Imm<0>>;
