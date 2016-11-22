@@ -66,6 +66,14 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
     setOperationAction(OP, MVT::i32, LibCall);
   }
 
+  // Add/Sub overflow ops with MVT::Glues are lowered to CCR dependences.
+  for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
+    setOperationAction(ISD::ADDC, VT, Custom);
+    setOperationAction(ISD::ADDE, VT, Custom);
+    setOperationAction(ISD::SUBC, VT, Custom);
+    setOperationAction(ISD::SUBE, VT, Custom);
+  }
+
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);
 
   for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
@@ -1364,6 +1372,10 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::SETCCE:             return LowerSETCCE(Op, DAG);
   case ISD::SELECT:             return LowerSELECT(Op, DAG);
   case ISD::BRCOND:             return LowerBRCOND(Op, DAG);
+  case ISD::ADDC:
+  case ISD::ADDE:
+  case ISD::SUBC:
+  case ISD::SUBE:               return LowerADDC_ADDE_SUBC_SUBE(Op, DAG);
   case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
   case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
   case ISD::ExternalSymbol:     return LowerExternalSymbol(Op, DAG);
@@ -2478,6 +2490,33 @@ LowerBRCOND(SDValue Op, SelectionDAG &DAG) const {
   // Cond = ConvertCmpIfNecessary(Cond, DAG);
   return DAG.getNode(M680x0ISD::BRCOND, DL, Op.getValueType(),
                      Chain, Dest, CC, Cond);
+}
+
+SDValue M680x0TargetLowering::
+LowerADDC_ADDE_SUBC_SUBE(SDValue Op, SelectionDAG &DAG) const {
+  MVT VT = Op.getNode()->getSimpleValueType(0);
+
+  // Let legalize expand this if it isn't a legal type yet.
+  if (!DAG.getTargetLoweringInfo().isTypeLegal(VT))
+    return SDValue();
+
+  SDVTList VTs = DAG.getVTList(VT, MVT::i32);
+
+  unsigned Opc;
+  bool ExtraOp = false;
+  switch (Op.getOpcode()) {
+  default: llvm_unreachable("Invalid code");
+  case ISD::ADDC: Opc = M680x0ISD::ADD;  break;
+  case ISD::ADDE: Opc = M680x0ISD::ADDX; ExtraOp = true; break;
+  case ISD::SUBC: Opc = M680x0ISD::SUB;  break;
+  case ISD::SUBE: Opc = M680x0ISD::SUBX; ExtraOp = true; break;
+  }
+
+  if (!ExtraOp)
+    return DAG.getNode(Opc, SDLoc(Op), VTs, Op.getOperand(0),
+                       Op.getOperand(1));
+  return DAG.getNode(Opc, SDLoc(Op), VTs, Op.getOperand(0),
+                     Op.getOperand(1), Op.getOperand(2));
 }
 
 // ConstantPool, JumpTable, GlobalAddress, and ExternalSymbol are lowered as
