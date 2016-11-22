@@ -14,16 +14,16 @@
 //
 //    ADD       [~]   ADDA      [~]   ADDI        [~]   ADDQ [ ]   ADDX [~]
 //    CLR       [ ]   CMP       [~]   CMPA        [~]   CMPI [~]   CMPM [ ]
-//    CMP2      [ ]   DIVS/DIVU [x]   DIVSL/DIVUL [ ]   EXT  [x]   EXTB [ ]
-//    MULS/MULU [~]   NEG       [ ]   NEGX        [ ]   SUB  [ ]   SUBA [ ]
-//    SUBI      [ ]   SUBQ      [ ]   SUBX        [~]
+//    CMP2      [ ]   DIVS/DIVU [~]   DIVSL/DIVUL [ ]   EXT  [~]   EXTB [ ]
+//    MULS/MULU [~]   NEG       [ ]   NEGX        [ ]   SUB  [~]   SUBA [~]
+//    SUBI      [~]   SUBQ      [ ]   SUBX        [~]
 //
 //  Map:
 //
 //   [ ] - was not touched at all
 //   [!] - requires extarnal stuff implemented
-//   [~] - partially implemented
-//   [x] - done
+//   [~] - functional implementation
+//   [X] - complete implementation
 //
 //===----------------------------------------------------------------------===//
 
@@ -456,6 +456,24 @@ def : Pat<(mulhu i16:$dst, i16:$opd),
             (LSR32di (LSR32di (UMULd32d16 (MOVXd32d16 $dst), $opd), 8), 8),
             MxSubRegIndex16Lo)>;
 
+
+//===----------------------------------------------------------------------===//
+// NEG/NEGX
+//===----------------------------------------------------------------------===//
+
+// TODO encoding here
+
+let Defs = [CCR] in {
+let Constraints = "$src = $dst" in {
+class MxNeg_R<MxType TYPE>
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src), "neg\t$dst",
+    [(set TYPE.VT:$dst, (ineg TYPE.VT:$src))]>;
+} // let Constraints
+} // let Defs = [CCR]
+
+foreach S = [8, 16, 32] in {
+  def NEG#S#d : MxNeg_R<!cast<MxType>("MxType"#S#"d")>;
+}
 
 //===----------------------------------------------------------------------===//
 // no-CCR Patterns
