@@ -59,11 +59,13 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
 
   for (auto OP : { ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM,
-                   ISD::MUL, ISD::MULHS, ISD::MULHU }) {
+                   ISD::MUL, ISD::MULHS, ISD::MULHU,
+                   ISD::UMUL_LOHI, ISD::SMUL_LOHI }) {
     setOperationAction(OP, MVT::i8,  Promote);
     setOperationAction(OP, MVT::i16, Legal);
     // TODO this becames legal with newer CPUs
     setOperationAction(OP, MVT::i32, LibCall);
+    setOperationAction(OP, MVT::i64, LibCall);
   }
 
   // Add/Sub overflow ops with MVT::Glues are lowered to CCR dependences.
