@@ -475,6 +475,10 @@ foreach S = [8, 16, 32] in {
   def NEG#S#d : MxNeg_R<!cast<MxType>("MxType"#S#"d")>;
 }
 
+def : Pat<(MxSub 0, i8 :$src), (NEG8d  MxDRD8 :$src)>;
+def : Pat<(MxSub 0, i16:$src), (NEG16d MxDRD16:$src)>;
+def : Pat<(MxSub 0, i32:$src), (NEG32d MxDRD32:$src)>;
+
 //===----------------------------------------------------------------------===//
 // no-CCR Patterns
 //===----------------------------------------------------------------------===//
