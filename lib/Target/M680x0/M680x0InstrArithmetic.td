@@ -465,14 +465,23 @@ def : Pat<(mulhu i16:$dst, i16:$opd),
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
+
 class MxNeg_R<MxType TYPE>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src), "neg."#TYPE.Prefix#"\t$dst",
     [(set TYPE.VT:$dst, (ineg TYPE.VT:$src))]>;
+
+let Uses = [CCR] in {
+class MxNegX_R<MxType TYPE>
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src), "negx."#TYPE.Prefix#"\t$dst",
+    [(set TYPE.VT:$dst, (MxSubX 0, TYPE.VT:$src, CCR))]>;
+}
+
 } // let Constraints
 } // let Defs = [CCR]
 
 foreach S = [8, 16, 32] in {
-  def NEG#S#d : MxNeg_R<!cast<MxType>("MxType"#S#"d")>;
+  def NEG#S#d  : MxNeg_R<!cast<MxType>("MxType"#S#"d")>;
+  def NEGX#S#d : MxNegX_R<!cast<MxType>("MxType"#S#"d")>;
 }
 
 def : Pat<(MxSub 0, i8 :$src), (NEG8d  MxDRD8 :$src)>;
