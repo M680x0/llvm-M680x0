@@ -104,19 +104,12 @@ ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
   unsigned SSrc = RI.getMatchingMegaReg( Src, RCDst);
   assert (SSrc && "No viable MEGA register available");
 
-  // We need the subreg of Dst to make instruction verifier happy because the
-  // real machine instruction consumes and produces values of the same size and
-  // the registers the will be used here fall into different classes and this
-  // makes IV cry
-  unsigned SubDst = RI.getSubReg(Dst,
-      MVTSrc == MVT::i8 ? M680x0::MxSubRegIndex8Lo : M680x0::MxSubRegIndex16Lo);
-
   MachineBasicBlock &MBB = *MIB->getParent();
   DebugLoc DL = MIB->getDebugLoc();
 
   if (Dst != SSrc) {
     DEBUG(dbgs() << "Move and " << '\n');
-    BuildMI(MBB, MIB.getInstr(), DL, get(Move), SubDst).addReg(SSrc);
+    BuildMI(MBB, MIB.getInstr(), DL, get(Move), Dst).addReg(SSrc);
   }
 
   if (isSigned) {
@@ -143,7 +136,8 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
   // We need the subreg of Dst to make instruction verifier happy because the
   // real machine instruction consumes and produces values of the same size and
   // the registers the will be used here fall into different classes and this
-  // makes IV cry
+  // makes IV cry. We could of course use bigger operation but this will put some
+  // pressure on cache and memory so no.
   unsigned SubDst = RI.getSubReg(Dst,
       MVTSrc == MVT::i8 ? M680x0::MxSubRegIndex8Lo : M680x0::MxSubRegIndex16Lo);
 
