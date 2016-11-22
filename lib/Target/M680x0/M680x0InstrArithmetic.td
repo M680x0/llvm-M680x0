@@ -15,7 +15,7 @@
 //    ADD       [~]   ADDA      [~]   ADDI        [~]   ADDQ [ ]   ADDX [~]
 //    CLR       [ ]   CMP       [~]   CMPA        [~]   CMPI [~]   CMPM [ ]
 //    CMP2      [ ]   DIVS/DIVU [~]   DIVSL/DIVUL [ ]   EXT  [~]   EXTB [ ]
-//    MULS/MULU [~]   NEG       [ ]   NEGX        [ ]   SUB  [~]   SUBA [~]
+//    MULS/MULU [~]   NEG       [~]   NEGX        [ ]   SUB  [~]   SUBA [~]
 //    SUBI      [~]   SUBQ      [ ]   SUBX        [~]
 //
 //  Map:
@@ -466,7 +466,7 @@ def : Pat<(mulhu i16:$dst, i16:$opd),
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 class MxNeg_R<MxType TYPE>
-    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src), "neg\t$dst",
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src), "neg."#TYPE.Prefix#"\t$dst",
     [(set TYPE.VT:$dst, (ineg TYPE.VT:$src))]>;
 } // let Constraints
 } // let Defs = [CCR]
