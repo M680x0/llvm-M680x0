@@ -488,7 +488,7 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
-  M680x0CCState CCInfo(*CLI.CS->getCalledFunction(), CallConv,
+  M680x0CCState CCInfo(*MF.getFunction(), CallConv,
                        isVarArg, MF, ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeCallOperands(Outs, CC_M680x0);
 
@@ -2500,7 +2500,7 @@ LowerADDC_ADDE_SUBC_SUBE(SDValue Op, SelectionDAG &DAG) const {
   if (!DAG.getTargetLoweringInfo().isTypeLegal(VT))
     return SDValue();
 
-  SDVTList VTs = DAG.getVTList(VT, MVT::i32);
+  SDVTList VTs = DAG.getVTList(VT, MVT::i8);
 
   unsigned Opc;
   bool ExtraOp = false;
