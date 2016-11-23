@@ -3438,11 +3438,11 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
       // part.
       unsigned LoSize = VT.getSizeInBits();
       SDValue HiLHS =
-          DAG.getNode(ISD::SRA, dl, VT, RHS,
+          DAG.getNode(ISD::SRA, dl, VT, LHS,
                       DAG.getConstant(LoSize - 1, dl,
                                       TLI.getPointerTy(DAG.getDataLayout())));
       SDValue HiRHS =
-          DAG.getNode(ISD::SRA, dl, VT, LHS,
+          DAG.getNode(ISD::SRA, dl, VT, RHS,
                       DAG.getConstant(LoSize - 1, dl,
                                       TLI.getPointerTy(DAG.getDataLayout())));
 
@@ -3450,7 +3450,14 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
       // pre-lowered to the correct types. This all depends upon WideVT not
       // being a legal type for the architecture and thus has to be split to
       // two arguments.
-      SDValue Args[] = { LHS, HiLHS, RHS, HiRHS };
+      SDValue Args[4];
+      if (DAG.getDataLayout().isLittleEndian()) {
+        Args[0] = LHS; Args[1] = HiLHS;
+        Args[2] = RHS; Args[3] = HiRHS;
+      } else {
+        Args[0] = HiLHS; Args[1] = LHS;
+        Args[2] = HiRHS; Args[3] = RHS;
+      }
       SDValue Ret = ExpandLibCall(LC, WideVT, Args, 4, isSigned, dl);
       BottomHalf = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VT, Ret,
                                DAG.getIntPtrConstant(0, dl));
