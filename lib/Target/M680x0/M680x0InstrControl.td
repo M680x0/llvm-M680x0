@@ -184,9 +184,9 @@ let isCall = 1 in
 // registers are added manually.
 let Uses = [SP] in {
 
-def CALLB : MxInst<(outs), (ins Mxi32imm:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
-def CALLq : MxInst<(outs), (ins MxPCD32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
-def CALLj : MxInst<(outs), (ins MxARI32:$dst),  "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
+def CALLB : MxInst<(outs), (ins MxAL32 :$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
+def CALLq : MxInst<(outs), (ins MxPCD32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
+def CALLj : MxInst<(outs), (ins MxARI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
 
 } // let Uses = [SP]
 
