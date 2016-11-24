@@ -323,7 +323,8 @@ class MxOp<ValueType vt, MxSize size, string letter>
     : Operand<vt>,
       MxOperand<vt, size, letter, ?>;
 
-let OperandType = "OPERAND_IMMEDIATE" in {
+let OperandType = "OPERAND_IMMEDIATE",
+    PrintMethod = "printImmediate" in {
 // IMMEDIATE DATA. This addressing mode requires either one or two words of
 // extension depending on the size of the operation.
 //     Byte Operation - operand is low order byte of extension word
@@ -408,10 +409,15 @@ def MxCP_ARIPD : ComplexPattern<iPTR, 1, "SelectARIPD",
                                 [], [SDNPWantParent]>;
 
 def MxCP_ARID  : ComplexPattern<iPTR, 2, "SelectARID",
-                                [add, sub, mul, or, shl, frameindex], [SDNPWantParent]>;
+                                [add, sub, mul, or, shl, frameindex],
+                                [SDNPWantParent]>;
 
 def MxCP_ARII  : ComplexPattern<iPTR, 3, "SelectARII",
                                 [add, sub, mul, or, shl, frameindex],
+                                [SDNPWantParent]>;
+
+def MxCP_AL    : ComplexPattern<iPTR, 1, "SelectAL",
+                                [add, sub, mul, or, shl],
                                 [SDNPWantParent]>;
 
 def MxCP_PCD   : ComplexPattern<iPTR, 1, "SelectPCD",
@@ -504,6 +510,8 @@ class MxType<ValueType vt,  /// Type of data this fixture refers to
       ComplexPattern pPat,  /// What ARID pattern is used
             MxOperand fOp,  /// Supported ARII operand
       ComplexPattern fPat,  /// What ARII pattern is used
+            MxOperand bOp,  /// Supported absolute operand
+      ComplexPattern bPat,  /// What absolute pattern is used
             MxOperand iOp,  /// Supported immediate operand
              PatFrag iPat,  /// What immediate pattern is used
              PatFrag load   /// What load operation is used with MEM
@@ -514,18 +522,13 @@ class MxType<ValueType vt,  /// Type of data this fixture refers to
   string Postfix = postfix;
   string RLet = rLet;
   MxOperand ROp = rOp;
-  MxOperand JOp = jOp;
-  ComplexPattern JPat = jPat;
-  MxOperand OOp = oOp;
-  ComplexPattern OPat = oPat;
-  MxOperand EOp = eOp;
-  ComplexPattern EPat = ePat;
-  MxOperand POp = pOp;
-  ComplexPattern PPat = pPat;
-  MxOperand FOp = fOp;
-  ComplexPattern FPat = fPat;
-  MxOperand IOp = iOp;
-  PatFrag IPat = iPat;
+  MxOperand JOp = jOp; ComplexPattern JPat = jPat;
+  MxOperand OOp = oOp; ComplexPattern OPat = oPat;
+  MxOperand EOp = eOp; ComplexPattern EPat = ePat;
+  MxOperand POp = pOp; ComplexPattern PPat = pPat;
+  MxOperand FOp = fOp; ComplexPattern FPat = fPat;
+  MxOperand BOp = bOp; ComplexPattern BPat = bPat;
+  MxOperand IOp = iOp; PatFrag IPat = iPat;
   PatFrag Load = load;
 }
 
@@ -536,6 +539,7 @@ class MxType8Class<string rLet, MxOperand reg>
              MxARIPD8, MxCP_ARIPD,
              MxARID8,  MxCP_ARID,
              MxARII8,  MxCP_ARII,
+             MxAL8,    MxCP_AL,
              Mxi8imm,  MximmSExt8,
              Mxloadi8>;
 
@@ -548,6 +552,7 @@ class MxType16Class<string rLet, MxOperand reg>
              MxARIPD16, MxCP_ARIPD,
              MxARID16,  MxCP_ARID,
              MxARII16,  MxCP_ARII,
+             MxAL16,    MxCP_AL,
              Mxi16imm,  MximmSExt16,
              Mxloadi16>;
 
@@ -560,6 +565,7 @@ class MxType32Class<string rLet, MxOperand reg>
              MxARIPD32, MxCP_ARIPD,
              MxARID32,  MxCP_ARID,
              MxARII32,  MxCP_ARII,
+             MxAL32,    MxCP_AL,
              Mxi32imm,  MximmSExt32,
              Mxloadi32>;
 

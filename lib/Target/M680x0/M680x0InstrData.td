@@ -63,7 +63,7 @@ class MxMove_RR<MxType DST, MxType SRC, MxMoveEncoding ENC>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins SRC.ROp:$src),
              [(null_frag)], ENC>;
 
-let mayStore = 1 in
+let mayStore = 1 in {
 class MxMove_MR<MxOperand MEMOpd, ComplexPattern MEMPat, MxType REG,
                 MxMoveEncoding ENC>
     : MxMove<REG.Prefix, (outs), (ins MEMOpd:$dst, REG.ROp:$src),
@@ -73,6 +73,7 @@ class MxMove_MI<MxOperand MEMOpd, ComplexPattern MEMPat, MxType TYPE,
                 MxMoveEncoding ENC>
     : MxMove<TYPE.Prefix, (outs), (ins MEMOpd:$dst, TYPE.IOp:$src),
              [(store TYPE.IPat:$src, MEMPat:$dst)], ENC>;
+} // let mayStore = 1
 
 class MxMove_RI<MxType DST, MxMoveEncoding ENC>
     : MxMove<DST.Prefix, (outs DST.ROp:$dst), (ins DST.IOp:$src),
@@ -114,8 +115,7 @@ def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat,
     SIZE, MxEncEAp_1, MxExtBrief_1, EA_0, MxExtEmpty>;
 }
 
-let mayLoad = 1 in
-let mayStore = 1 in
+let mayLoad = 1, mayStore = 1 in {
 class MxMove_MM<string SIZE, PatFrag LOAD,
                 MxOperand DSTOpd, ComplexPattern DSTPat,
                 MxOperand SRCOpd, ComplexPattern SRCPat,
@@ -125,6 +125,7 @@ class MxMove_MM<string SIZE, PatFrag LOAD,
     : MxMove<SIZE, (outs), (ins DSTOpd:$dst, SRCOpd:$src),
              [(store (LOAD SRCPat:$src), DSTPat:$dst)],
              MxMoveEncoding<ESIZE, SRCEA, SRCEXT, DSTEA, DSTEXT>>;
+} // let mayLoad = 1, mayStore = 1
 
 multiclass MMxMove_MM<MxType TYPE, MxOperand DSTOpd, ComplexPattern DSTPat,
                       MxMoveSize SIZE, MxEncEA EA_0, MxEncExt EXT_0> {
@@ -152,6 +153,10 @@ def NAME#TYPE.FOp.Letter#TYPE.Postfix
   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.FOp, TYPE.FPat,
               SIZE, MxEncEAf_1, MxExtBrief_1, EA_0, EXT_0>;
 
+// MEM <- (ABS)
+def NAME#TYPE.BOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.BOp, TYPE.BPat,
+              SIZE, MxEncEAb, MxExtI32_1, EA_0, EXT_0>;
 }
 
 def MOV8dd
@@ -276,6 +281,14 @@ foreach S = [8, 16, 32] in {
                    MxEncEAi, MxExtI32_1,
                    MxEncEAp_0, MxExtI16_0>>;
 }
+
+// Store ABS(basically pointer) as Immdiate to Mem
+def : Pat<(store   MxType32.BPat :$src, MxType32.JPat :$dst),
+          (MOV32ji MxType32.JOp  :$dst, MxType32.IOp  :$src)>;
+def : Pat<(store   MxType32.BPat :$src, MxType32.PPat :$dst),
+          (MOV32pi MxType32.POp  :$dst, MxType32.IOp  :$src)>;
+def : Pat<(store   MxType32.BPat :$src, MxType32.FPat :$dst),
+          (MOV32fi MxType32.FOp  :$dst, MxType32.IOp  :$src)>;
 
 // FIXME Tablegen needs to parse complex defm names inside the loop FFS
 

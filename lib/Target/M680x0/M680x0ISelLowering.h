@@ -83,11 +83,6 @@ namespace llvm {
   /// Define some predicates that are used for node matching.
   namespace M680x0 {
 
-    /// Returns true of the given offset can be
-    /// fit into displacement field of the instruction.
-    bool isOffsetSuitableForCodeModel(int64_t Offset, CodeModel::Model M,
-                                      bool hasSymbolicDisplacement = true);
-
     /// Determines whether the callee is required to pop its
     /// own arguments. Callee pop is necessary to support tail calls.
     bool isCalleePop(CallingConv::ID CallingConv,

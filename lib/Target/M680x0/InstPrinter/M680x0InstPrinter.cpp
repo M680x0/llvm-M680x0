@@ -46,28 +46,32 @@ printInst(const MCInst *MI, raw_ostream &O, StringRef Annot,
 
 void M680x0InstPrinter::
 printOperand(const MCInst *MI, unsigned OpNo, raw_ostream &O) {
-  const MCOperand &Op = MI->getOperand(OpNo);
-  if (Op.isReg()) {
-    printRegName(O, Op.getReg());
+  const MCOperand &MO = MI->getOperand(OpNo);
+  if (MO.isReg()) {
+    printRegName(O, MO.getReg());
     return;
   }
 
-  if (Op.isImm()) {
-    O << '#' << Op.getImm();
+  if (MO.isImm()) {
+    printImmediate(MI, OpNo, O);
     return;
   }
 
-  assert(Op.isExpr() && "unknown operand kind in printOperand");
-  Op.getExpr()->print(O, &MAI);
+  assert(MO.isExpr() && "Unknown operand kind in printOperand");
+  MO.getExpr()->print(O, &MAI);
 }
 
 void M680x0InstPrinter::
-printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O) {
+printImmediate(const MCInst *MI, int opNum, raw_ostream &O) {
   const MCOperand &MO = MI->getOperand(opNum);
-  if (MO.isImm())
-    O << '#' << (unsigned short int)MO.getImm();
-  else
-    printOperand(MI, opNum, O);
+  if (MO.isImm()) {
+    O << '#' << MO.getImm();
+  } else if (MO.isExpr()) {
+    O << '#';
+    MO.getExpr()->print(O, &MAI);
+  } else {
+    llvm_unreachable("Unknown immediate kind");
+  }
 }
 
 void M680x0InstPrinter::
@@ -77,7 +81,7 @@ printDisp(const MCInst *MI, int opNum, raw_ostream &O) {
     O << Op.getImm();
       return;
   }
-  assert(Op.isExpr() && "unknown operand kind in printOperand");
+  assert(Op.isExpr() && "Unknown operand kind in printOperand");
   Op.getExpr()->print(O, &MAI);
 }
 

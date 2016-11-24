@@ -39,6 +39,80 @@ M680x0InstrInfo(const M680x0Subtarget &STI)
                          0, M680x0::RET),
     Subtarget(STI), RI(STI) {}
 
+static M680x0::CondCode getCondFromBranchOpc(unsigned BrOpc) {
+  switch (BrOpc) {
+  default: return M680x0::COND_INVALID;
+  case M680x0::Beq8: return M680x0::COND_EQ;
+  case M680x0::Bne8: return M680x0::COND_NE;
+  case M680x0::Blt8: return M680x0::COND_LT;
+  case M680x0::Ble8: return M680x0::COND_LE;
+  case M680x0::Bgt8: return M680x0::COND_GT;
+  case M680x0::Bge8: return M680x0::COND_GE;
+  case M680x0::Bcs8: return M680x0::COND_CS;
+  case M680x0::Bls8: return M680x0::COND_LS;
+  case M680x0::Bhi8: return M680x0::COND_HI;
+  case M680x0::Bcc8: return M680x0::COND_CC;
+  case M680x0::Bmi8: return M680x0::COND_MI;
+  case M680x0::Bpl8: return M680x0::COND_PL;
+  case M680x0::Bvs8: return M680x0::COND_VS;
+  case M680x0::Bvc8: return M680x0::COND_VC;
+  }
+}
+
+unsigned M680x0InstrInfo::
+RemoveBranch(MachineBasicBlock &MBB) const {
+  MachineBasicBlock::iterator I = MBB.end();
+  unsigned Count = 0;
+
+  while (I != MBB.begin()) {
+    --I;
+    if (I->isDebugValue())
+      continue;
+    if (I->getOpcode() != M680x0::BRA8 &&
+        getCondFromBranchOpc(I->getOpcode()) == M680x0::COND_INVALID)
+      break;
+    // Remove the branch.
+    I->eraseFromParent();
+    I = MBB.end();
+    ++Count;
+  }
+
+  return Count;
+}
+
+unsigned M680x0InstrInfo::
+InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+             MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
+             const DebugLoc &DL) const {
+  // Shouldn't be a fall through.
+  assert(TBB && "InsertBranch must not be told to insert a fallthrough");
+  assert((Cond.size() == 1 || Cond.size() == 0) &&
+         "M680x0 branch conditions have one component!");
+
+  if (Cond.empty()) {
+    // Unconditional branch?
+    assert(!FBB && "Unconditional branch with multiple successors!");
+    BuildMI(&MBB, DL, get(M680x0::BRA8)).addMBB(TBB);
+    return 1;
+  }
+
+  // If FBB is null, it is implied to be a fall-through block.
+  bool FallThru = FBB == nullptr;
+
+  // Conditional branch.
+  unsigned Count = 0;
+  M680x0::CondCode CC = (M680x0::CondCode)Cond[0].getImm();
+  unsigned Opc = GetCondBranchFromCond(CC);
+  BuildMI(&MBB, DL, get(Opc)).addMBB(TBB);
+  ++Count;
+  if (!FallThru) {
+    // Two-way Conditional branch. Insert the second branch.
+    BuildMI(&MBB, DL, get(M680x0::BRA8)).addMBB(FBB);
+    ++Count;
+  }
+  return Count;
+}
+
 void M680x0InstrInfo::
 AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
         unsigned Reg, MVT From, MVT To) const {
