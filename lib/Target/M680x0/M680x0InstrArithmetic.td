@@ -403,7 +403,7 @@ class MxDiMuOp_DD<string MN, MxOperand DST, MxOperand OPD>
 
 // $reg <- $reg op $imm
 class MxDiMuOp_DI<string MN, MxOperand DST, MxOperand OPD>
-    : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd),
+    : MxInst<(outs DST:$dst), (ins DST:$src, unknown:$opd),
            MN#"\t$opd, $dst", []>;
 } // let Constraints
 } // Defs = [CCR]
@@ -420,6 +420,28 @@ def "U"#NAME#"d32i16" : MxDiMuOp_DI<MN#"u", MxDRD32, Mxi16imm>;
 
 defm DIV : MxDiMuOp<"div">;
 
+// RR i8
+def : Pat<(sdiv i8:$dst, i8:$opd),
+          (EXTRACT_SUBREG
+            (SDIVd32d16 (MOVSXd32d8 $dst), (MOVSXd16d8 $opd)),
+             MxSubRegIndex8Lo)>;
+
+def : Pat<(udiv i8:$dst, i8:$opd),
+          (EXTRACT_SUBREG
+            (UDIVd32d16 (MOVZXd32d8 $dst), (MOVZXd16d8 $opd)),
+             MxSubRegIndex8Lo)>;
+
+def : Pat<(srem i8:$dst, i8:$opd),
+          (EXTRACT_SUBREG
+            (ASR32di (ASR32di (SDIVd32d16 (MOVSXd32d8 $dst), (MOVSXd16d8 $opd)), 8), 8),
+             MxSubRegIndex8Lo)>;
+
+def : Pat<(urem i8:$dst, i8:$opd),
+          (EXTRACT_SUBREG
+            (LSR32di (LSR32di (UDIVd32d16 (MOVZXd32d8 $dst), (MOVZXd16d8 $opd)), 8), 8),
+             MxSubRegIndex8Lo)>;
+
+// RR i16
 def : Pat<(sdiv i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (SDIVd32d16 (MOVSXd32d16 $dst), $opd),
@@ -441,30 +463,53 @@ def : Pat<(urem i16:$dst, i16:$opd),
              MxSubRegIndex16Lo)>;
 
 
+// RI i8
+def : Pat<(sdiv i8:$dst, MximmSExt8:$opd),
+          (EXTRACT_SUBREG
+            (SDIVd32i16 (MOVSXd32d8 $dst), imm:$opd),
+             MxSubRegIndex8Lo)>;
+
+def : Pat<(udiv i8:$dst, MximmSExt8:$opd),
+          (EXTRACT_SUBREG
+            (UDIVd32i16 (MOVZXd32d8 $dst), imm:$opd),
+             MxSubRegIndex8Lo)>;
+
+def : Pat<(srem i8:$dst, MximmSExt8:$opd),
+          (EXTRACT_SUBREG
+            (ASR32di (ASR32di (SDIVd32i16 (MOVSXd32d8 $dst), imm:$opd), 8), 8),
+             MxSubRegIndex8Lo)>;
+
+def : Pat<(urem i8:$dst, MximmSExt8:$opd),
+          (EXTRACT_SUBREG
+            (LSR32di (LSR32di (UDIVd32i16 (MOVZXd32d8 $dst), imm:$opd), 8), 8),
+             MxSubRegIndex8Lo)>;
+
+// RI i16
 def : Pat<(sdiv i16:$dst, MximmSExt16:$opd),
           (EXTRACT_SUBREG
-            (SDIVd32d16 (MOVSXd32d16 $dst), imm:$opd),
+            (SDIVd32i16 (MOVSXd32d16 $dst), imm:$opd),
              MxSubRegIndex16Lo)>;
 
 def : Pat<(udiv i16:$dst, MximmSExt16:$opd),
           (EXTRACT_SUBREG
-            (UDIVd32d16 (MOVZXd32d16 $dst), imm:$opd),
+            (UDIVd32i16 (MOVZXd32d16 $dst), imm:$opd),
              MxSubRegIndex16Lo)>;
 
 def : Pat<(srem i16:$dst, MximmSExt16:$opd),
           (EXTRACT_SUBREG
-            (ASR32di (ASR32di (SDIVd32d16 (MOVSXd32d16 $dst), imm:$opd), 8), 8),
+            (ASR32di (ASR32di (SDIVd32i16 (MOVSXd32d16 $dst), imm:$opd), 8), 8),
              MxSubRegIndex16Lo)>;
 
 def : Pat<(urem i16:$dst, MximmSExt16:$opd),
           (EXTRACT_SUBREG
-            (LSR32di (LSR32di (UDIVd32d16 (MOVZXd32d16 $dst), imm:$opd), 8), 8),
+            (LSR32di (LSR32di (UDIVd32i16 (MOVZXd32d16 $dst), imm:$opd), 8), 8),
              MxSubRegIndex16Lo)>;
 
 
 let isCommutable = 1 in
 defm MUL : MxDiMuOp<"mul">;
 
+// RR
 def : Pat<(mul i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (SMULd32d16 (MOVXd32d16 $dst), $opd),
@@ -481,6 +526,7 @@ def : Pat<(mulhu i16:$dst, i16:$opd),
              MxSubRegIndex16Lo)>;
 
 
+// RI
 def : Pat<(mul i16:$dst, MximmSExt16:$opd),
           (EXTRACT_SUBREG
             (SMULd32i16 (MOVXd32d16 $dst), imm:$opd),
