@@ -64,14 +64,14 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
                    ISD::SREM, ISD::UREM,
                    ISD::MUL, ISD::MULHS, ISD::MULHU,
                    ISD::UMUL_LOHI, ISD::SMUL_LOHI }) {
-    setOperationAction(OP, MVT::i8,  Promote);
+    setOperationAction(OP, MVT::i8,  Legal);
     setOperationAction(OP, MVT::i16, Legal);
     setOperationAction(OP, MVT::i32, LibCall);
     setOperationAction(OP, MVT::i64, LibCall);
   }
 
   for (auto OP : { ISD::SMULO, ISD::UMULO }) {
-    setOperationAction(OP, MVT::i8,  Promote);
+    setOperationAction(OP, MVT::i8,  Expand);
     setOperationAction(OP, MVT::i16, Expand); //FIXME something wrong with custom lowering here
     setOperationAction(OP, MVT::i32, Expand);
     setOperationAction(OP, MVT::i64, Expand);
