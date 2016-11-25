@@ -388,9 +388,14 @@ def : Pat<(sext_inreg i32:$src, i16), (EXT32 $src)>;
 
 
 //===----------------------------------------------------------------------===//
-// Div/Mul
+// DIV/MUL
+//
+// TODO encoding
 //===----------------------------------------------------------------------===//
 
+
+let Defs = [CCR] in {
+let Constraints = "$src = $dst" in {
 // $reg <- $reg op $reg
 class MxDiMuOp_DD<string MN, MxOperand DST, MxOperand OPD>
     : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd),
@@ -400,42 +405,61 @@ class MxDiMuOp_DD<string MN, MxOperand DST, MxOperand OPD>
 class MxDiMuOp_DI<string MN, MxOperand DST, MxOperand OPD>
     : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd),
            MN#"\t$opd, $dst", []>;
+} // let Constraints
+} // Defs = [CCR]
 
 multiclass MxDiMuOp<string MN> {
 
-let Defs = [CCR] in {
-  def "S"#NAME#"d32d16" : MxDiMuOp_DD<MN#"s", MxDRD32, MxDRD16>;
-  def "U"#NAME#"d32d16" : MxDiMuOp_DD<MN#"u", MxDRD32, MxDRD16>;
+def "S"#NAME#"d32d16" : MxDiMuOp_DD<MN#"s", MxDRD32, MxDRD16>;
+def "U"#NAME#"d32d16" : MxDiMuOp_DD<MN#"u", MxDRD32, MxDRD16>;
 
-  def "S"#NAME#"d32i16" : MxDiMuOp_DI<MN#"s", MxDRD32, Mxi16imm>;
-  def "U"#NAME#"d32i16" : MxDiMuOp_DI<MN#"u", MxDRD32, Mxi16imm>;
-} // Defs = [CCR]
+def "S"#NAME#"d32i16" : MxDiMuOp_DI<MN#"s", MxDRD32, Mxi16imm>;
+def "U"#NAME#"d32i16" : MxDiMuOp_DI<MN#"u", MxDRD32, Mxi16imm>;
 
 }
 
-// TODO immediates
-let Constraints = "$src = $dst" in
 defm DIV : MxDiMuOp<"div">;
 
 def : Pat<(sdiv i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (SDIVd32d16 (MOVSXd32d16 $dst), $opd),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
 
 def : Pat<(udiv i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (UDIVd32d16 (MOVZXd32d16 $dst), $opd),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
 
 def : Pat<(srem i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (ASR32di (ASR32di (SDIVd32d16 (MOVSXd32d16 $dst), $opd), 8), 8),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
 
 def : Pat<(urem i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (LSR32di (LSR32di (UDIVd32d16 (MOVZXd32d16 $dst), $opd), 8), 8),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
+
+
+def : Pat<(sdiv i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (SDIVd32d16 (MOVSXd32d16 $dst), imm:$opd),
+             MxSubRegIndex16Lo)>;
+
+def : Pat<(udiv i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (UDIVd32d16 (MOVZXd32d16 $dst), imm:$opd),
+             MxSubRegIndex16Lo)>;
+
+def : Pat<(srem i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (ASR32di (ASR32di (SDIVd32d16 (MOVSXd32d16 $dst), imm:$opd), 8), 8),
+             MxSubRegIndex16Lo)>;
+
+def : Pat<(urem i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (LSR32di (LSR32di (UDIVd32d16 (MOVZXd32d16 $dst), imm:$opd), 8), 8),
+             MxSubRegIndex16Lo)>;
 
 
 let isCommutable = 1 in
@@ -444,17 +468,33 @@ defm MUL : MxDiMuOp<"mul">;
 def : Pat<(mul i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (SMULd32d16 (MOVXd32d16 $dst), $opd),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
 
 def : Pat<(mulhs i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (ASR32di (ASR32di (SMULd32d16 (MOVXd32d16 $dst), $opd), 8), 8),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
 
 def : Pat<(mulhu i16:$dst, i16:$opd),
           (EXTRACT_SUBREG
             (LSR32di (LSR32di (UMULd32d16 (MOVXd32d16 $dst), $opd), 8), 8),
-            MxSubRegIndex16Lo)>;
+             MxSubRegIndex16Lo)>;
+
+
+def : Pat<(mul i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (SMULd32i16 (MOVXd32d16 $dst), imm:$opd),
+             MxSubRegIndex16Lo)>;
+
+def : Pat<(mulhs i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (ASR32di (ASR32di (SMULd32i16 (MOVXd32d16 $dst), imm:$opd), 8), 8),
+             MxSubRegIndex16Lo)>;
+
+def : Pat<(mulhu i16:$dst, MximmSExt16:$opd),
+          (EXTRACT_SUBREG
+            (LSR32di (LSR32di (UMULd32i16 (MOVXd32d16 $dst), imm:$opd), 8), 8),
+             MxSubRegIndex16Lo)>;
 
 
 //===----------------------------------------------------------------------===//

@@ -127,7 +127,7 @@ printAbsMem(const MCInst *MI, int opNum, raw_ostream &O) {
   const MCOperand &MO = MI->getOperand(opNum);
   if (MO.isImm()) {
     // ??? Print it in hex?
-    O << (unsigned short int)MO.getImm();
+    O << (unsigned int)MO.getImm();
   }
   else {
     printOperand(MI, opNum, O);
