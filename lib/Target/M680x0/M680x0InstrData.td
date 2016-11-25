@@ -487,18 +487,25 @@ def MOVXd32d16 : MxPseudoMove_RR<MxType32r, MxType16r>;
 // Extend/Truncate Patterns
 //===----------------------------------------------------------------------===//
 
-// i16 <- i8
+// i16 <- sext i8
 def: Pat<(i16 (sext i8:$src)),
           (EXTRACT_SUBREG (MOVSXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
-
-def: Pat<(i16 (zext i8:$src)),
-          (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
-
 def: Pat<(MxSExtLoadi16i8 MxCP_ARI:$src),
           (EXTRACT_SUBREG (MOVSXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxSExtLoadi16i8 MxCP_ARID:$src),
+          (EXTRACT_SUBREG (MOVSXd32p8 MxARID8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxSExtLoadi16i8 MxCP_ARII:$src),
+          (EXTRACT_SUBREG (MOVSXd32f8 MxARII8:$src), MxSubRegIndex16Lo)>;
 
+// i16 <- zext i8
+def: Pat<(i16 (zext i8:$src)),
+          (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
 def: Pat<(MxZExtLoadi16i8 MxCP_ARI:$src),
           (EXTRACT_SUBREG (MOVZXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxZExtLoadi16i8 MxCP_ARID:$src),
+          (EXTRACT_SUBREG (MOVZXd32p8 MxARID8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxZExtLoadi16i8 MxCP_ARII:$src),
+          (EXTRACT_SUBREG (MOVZXd32f8 MxARII8:$src), MxSubRegIndex16Lo)>;
 
 // i32 <- sext i8
 def: Pat<(i32 (sext i8:$src)), (MOVSXd32d8 MxDRD8:$src)>;
