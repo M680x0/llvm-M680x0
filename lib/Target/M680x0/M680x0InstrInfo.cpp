@@ -146,6 +146,51 @@ AddZExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
   BuildMI(MBB, I, DL, get(And), Reg).addReg(Reg).addImm(Mask);
 }
 
+bool M680x0InstrInfo::
+ExpandMOVX_RR(MachineInstrBuilder &MIB, MVT MVTDst, MVT MVTSrc) const {
+  unsigned SubIdx;
+
+  unsigned Move = MVTDst == MVT::i16 ? M680x0::MOV16rr : M680x0::MOV32rr;
+
+  if (MVTSrc == MVT::i8) {
+    SubIdx = M680x0::MxSubRegIndex8Lo;
+  } else { // i16
+    SubIdx = M680x0::MxSubRegIndex16Lo;
+  }
+
+  unsigned Dst = MIB->getOperand(0).getReg();
+  unsigned Src = MIB->getOperand(1).getReg();
+
+  assert (Dst != Src && "You cannot use the same Regs with MOVX_RR");
+
+  auto TRI = getRegisterInfo();
+
+  auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
+  auto RCSrc = TRI.getMinimalPhysRegClass(Src, MVTSrc);
+
+  assert (RCDst && RCSrc && "Wrong use of MOVX_RR");
+  assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVX_RR");
+
+  // We need to find the super source register that matches the size of Dst
+  unsigned SSrc = RI.getMatchingMegaReg( Src, RCDst);
+  assert (SSrc && "No viable MEGA register available");
+
+  DebugLoc DL = MIB->getDebugLoc();
+
+  // If it happens to that super source register is the destination register
+  // we do nothing
+  if (Dst == SSrc) {
+    DEBUG(dbgs() << "Remove " << *MIB.getInstr() << '\n');
+    MIB->eraseFromParent();
+  } else { // otherwise we need to MOV
+    DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV\n");
+    MIB->setDesc(get(Move));
+    MIB->getOperand(1).setReg(SSrc);
+  }
+
+  return true;
+}
+
 /// Expand SExt MOVE pseudos into a MOV and a EXT if the operands are two
 /// different registers or just EXT if it is the same register
 bool M680x0InstrInfo::
@@ -229,48 +274,6 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
   } else {
     DEBUG(dbgs() << "Zero Extend" << '\n');
     AddZExt(MBB, I, DL, Dst, MVTSrc, MVTDst);
-  }
-
-  return true;
-}
-
-bool M680x0InstrInfo::
-ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
-              MVT MVTDst, MVT MVTSrc) const {
-  unsigned SubIdx;
-
-  if (MVTSrc == MVT::i8) {
-    SubIdx = M680x0::MxSubRegIndex8Lo;
-  } else { // i16
-    SubIdx = M680x0::MxSubRegIndex16Lo;
-  }
-
-  unsigned Dst = MIB->getOperand(0).getReg();
-  unsigned Src = MIB->getOperand(1).getReg();
-
-  assert (Dst != Src && "You cannot use the same Regs with MOVX_RR");
-
-  auto TRI = getRegisterInfo();
-
-  auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
-  auto RCSrc = TRI.getMinimalPhysRegClass(Src, MVTSrc);
-
-  assert (RCDst && RCSrc && "Wrong use of MOVX_RR");
-  assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVX_RR");
-
-  // We need to find the super source register that matches the size of Dst
-  unsigned SSrc = TRI.getMatchingSuperReg( Src, SubIdx, RCSrc);
-
-  DebugLoc DL = MIB->getDebugLoc();
-
-  // If it happens to that super source register is the destination register
-  // we do nothing
-  if (Dst == SSrc) {
-    DEBUG(dbgs() << "Remove " << *MIB.getInstr() << '\n');
-    MIB->eraseFromParent();
-  } else { // otherwise we need to MOV
-    DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV\n");
-    MIB->setDesc(Desc);
   }
 
   return true;

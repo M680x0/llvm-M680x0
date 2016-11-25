@@ -237,6 +237,9 @@ public:
   void AddZExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
                unsigned Reg, MVT From, MVT To) const;
 
+  // Move across register classes without extension
+  bool ExpandMOVX_RR(MachineInstrBuilder &MIB, MVT MVTDst, MVT MVTSrc) const;
+
   // Move from register and extend
   bool ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                       MVT MVTDst, MVT MVTSrc) const;
@@ -244,10 +247,6 @@ public:
   // Move from memory and extend
   bool ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
                      const MCInstrDesc &Desc,
-                     MVT MVTDst, MVT MVTSrc) const;
-
-  // Move across register classes without extension
-  bool ExpandMOVX_RR(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
                      MVT MVTDst, MVT MVTSrc) const;
 
   // Push/Pop to/from stack
