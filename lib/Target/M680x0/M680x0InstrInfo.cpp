@@ -165,8 +165,8 @@ ExpandMOVX_RR(MachineInstrBuilder &MIB, MVT MVTDst, MVT MVTSrc) const {
 
   auto TRI = getRegisterInfo();
 
-  auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
-  auto RCSrc = TRI.getMinimalPhysRegClass(Src, MVTSrc);
+  auto RCDst = TRI.getMaximalPhysRegClass(Dst, MVTDst);
+  auto RCSrc = TRI.getMaximalPhysRegClass(Src, MVTSrc);
 
   assert (RCDst && RCSrc && "Wrong use of MOVX_RR");
   assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVX_RR");
@@ -213,8 +213,8 @@ ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
 
   auto TRI = getRegisterInfo();
 
-  auto RCDst = TRI.getMinimalPhysRegClass(Dst, MVTDst);
-  auto RCSrc = TRI.getMinimalPhysRegClass(Src, MVTSrc);
+  auto RCDst = TRI.getMaximalPhysRegClass(Dst, MVTDst);
+  auto RCSrc = TRI.getMaximalPhysRegClass(Src, MVTSrc);
 
   assert (RCDst && RCSrc && "Wrong use of MOVSX_RR");
   assert (RCDst != RCSrc && "You cannot use the same Reg Classes with MOVSX_RR");

@@ -79,6 +79,25 @@ for (MCSuperRegIterator Super(Reg, this); Super.isValid(); ++Super)
   return 0;
 }
 
+const TargetRegisterClass * M680x0RegisterInfo::
+getMaximalPhysRegClass(unsigned reg, MVT VT) const {
+  assert(isPhysicalRegister(reg) && "reg must be a physical register");
+  
+  // Pick the most sub register class of the right type that contains
+  // this physreg.
+  const TargetRegisterClass* BestRC = nullptr;
+  for (regclass_iterator I = regclass_begin(), E = regclass_end(); I != E; ++I){
+      const TargetRegisterClass* RC = *I;
+      if ((VT == MVT::Other || RC->hasType(VT)) && RC->contains(reg) &&
+          (!BestRC ||
+           (BestRC->hasSubClass(RC) && RC->getNumRegs() > BestRC->getNumRegs())))
+          BestRC = RC;
+  }
+  
+  assert(BestRC && "Couldn't find the register class");
+  return BestRC;
+}
+
 BitVector M680x0RegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
   static const uint16_t ReservedCPURegs[] = {

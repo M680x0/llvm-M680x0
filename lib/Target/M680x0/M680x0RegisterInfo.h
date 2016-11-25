@@ -62,6 +62,11 @@ public:
   /// NOTE not sure about the term though.
   unsigned getMatchingMegaReg(unsigned Reg, const TargetRegisterClass *RC) const;
 
+  /// getMaximalPhysRegClass - Returns the Register Class of a physical
+  /// register of the given type, picking the biggest register class of
+  /// the right type that contains this physreg.
+  const TargetRegisterClass * getMaximalPhysRegClass(unsigned reg, MVT VT) const;
+
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;
