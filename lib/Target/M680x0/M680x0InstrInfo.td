@@ -441,7 +441,9 @@ def MximmSExt32 : PatLeaf<(i32 imm)>;
 // and then an operation is performed. TODO you need to evaluate whether
 // splitting one big shift(or rotate) into a few smaller is faster than doing
 // a move, if so do custom lowering
-def Mximm1to8   : ImmLeaf<i32, [{ return Imm >= 1 && Imm <= 8; }]>;
+def Mximm8_1to8   : ImmLeaf<i8,  [{ return Imm >= 1 && Imm <= 8; }]>;
+def Mximm16_1to8  : ImmLeaf<i16, [{ return Imm >= 1 && Imm <= 8; }]>;
+def Mximm32_1to8  : ImmLeaf<i32, [{ return Imm >= 1 && Imm <= 8; }]>;
 
 // Helper fragments for loads.
 // It's always safe to treat a anyext i16 load as a i32 load if the i16 is

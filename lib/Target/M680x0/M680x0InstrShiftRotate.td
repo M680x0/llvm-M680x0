@@ -25,29 +25,29 @@
 //===----------------------------------------------------------------------===//
 
 // $reg <- $reg op $reg
-class MxSROp_DD<string mnemonic, MxOperand DST, SDNode node>
-    : MxInst<(outs DST:$dst), (ins DST:$src, DST:$opd),
-           mnemonic#"."#DST.Size.Id#"\t$opd, $dst",
-           [(set DST.VT:$dst, (node DST.VT:$src, DST.VT:$opd))]>;
+class MxSROp_DD<string mnemonic, MxType TYPE, SDNode node>
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
+           mnemonic#"."#TYPE.Prefix#"\t$opd, $dst",
+           [(set TYPE.VT:$dst, (node TYPE.VT:$src, TYPE.VT:$opd))]>;
 
 // $reg <- $reg op $imm
-class MxSROp_DI<string mnemonic, MxOperand DST, SDNode node>
-    : MxInst<(outs DST:$dst), (ins DST:$src, Mxi32imm:$opd),
-           mnemonic#"."#DST.Size.Id#"\t$opd, $dst",
-           [(set DST.VT:$dst, (node DST.VT:$src, Mximm1to8:$opd))]>;
+class MxSROp_DI<string mnemonic, MxType TYPE, SDNode node>
+    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, !cast<Operand>("Mxi"#TYPE.Size#"imm"):$opd),
+           mnemonic#"."#TYPE.Prefix#"\t$opd, $dst",
+           [(set TYPE.VT:$dst, (node TYPE.VT:$src, !cast<ImmLeaf>("Mximm"#TYPE.Size#"_1to8"):$opd))]>;
 
 multiclass MxSROp<string mnemonic, SDNode node> {
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 
-def NAME#"8dd"  : MxSROp_DD<mnemonic, MxDRD8,  node>;
-def NAME#"16dd" : MxSROp_DD<mnemonic, MxDRD16, node>;
-def NAME#"32dd" : MxSROp_DD<mnemonic, MxDRD32, node>;
+def NAME#"8dd"  : MxSROp_DD<mnemonic, MxType8d,  node>;
+def NAME#"16dd" : MxSROp_DD<mnemonic, MxType16d, node>;
+def NAME#"32dd" : MxSROp_DD<mnemonic, MxType32d, node>;
 
-def NAME#"8di"  : MxSROp_DI<mnemonic, MxDRD8,  node>;
-def NAME#"16di" : MxSROp_DI<mnemonic, MxDRD16, node>;
-def NAME#"32di" : MxSROp_DI<mnemonic, MxDRD32, node>;
+def NAME#"8di"  : MxSROp_DI<mnemonic, MxType8d,  node>;
+def NAME#"16di" : MxSROp_DI<mnemonic, MxType16d, node>;
+def NAME#"32di" : MxSROp_DI<mnemonic, MxType32d, node>;
 
 } // $src = $dst
 } // Defs = [CCR]
