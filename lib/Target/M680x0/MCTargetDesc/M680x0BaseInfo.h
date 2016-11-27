@@ -87,41 +87,40 @@ namespace M680x0II {
 
     /// MO_GOT_ABSOLUTE_ADDRESS - On a symbol operand, this represents a
     /// relocation of:
-    ///    SYMBOL_LABEL + [. - PICBASELABEL]
+    ///    name + [. - PICBASELABEL]
     MO_GOT_ABSOLUTE_ADDRESS,
 
-    /// MO_PIC_BASE_OFFSET - On a symbol operand this indicates that the
-    /// immediate should get the value of the symbol minus the PIC base label:
-    ///    SYMBOL_LABEL - PICBASELABEL
-    MO_PIC_BASE_OFFSET,
+    /// MO_ABSOLUTE_ADDRESS - On a symbol operand this indicates that the
+    /// immediate is the absolute address of the symbol.
+    MO_ABSOLUTE_ADDRESS,
+
+    /// MO_PC_RELATIVE_ADDRESS - On a symbol operand this indicates that the
+    /// immediate is the pc-relative address of the symbol.
+    MO_PC_RELATIVE_ADDRESS,
 
     /// MO_GOT - On a symbol operand this indicates that the immediate is the
     /// offset to the GOT entry for the symbol name from the base of the GOT.
     ///
-    /// TODO Read through M680x0 ELF ABI
-    ///    SYMBOL_LABEL @GOT
+    ///    name@GOT
     MO_GOT,
 
     /// MO_GOTOFF - On a symbol operand this indicates that the immediate is
     /// the offset to the location of the symbol name from the base of the GOT.
     ///
-    /// TODO Read through M680x0 ELF ABI
-    ///    SYMBOL_LABEL @GOTOFF
+    ///    name@GOTOFF
     MO_GOTOFF,
 
     /// MO_GOTPCREL - On a symbol operand this indicates that the immediate is
     /// offset to the GOT entry for the symbol name from the current code
     /// location.
     ///
-    /// TODO Read through M680x0 ELF ABI
-    ///    SYMBOL_LABEL @GOTPCREL
+    ///    name@GOTPCREL
     MO_GOTPCREL,
 
     /// MO_PLT - On a symbol operand this indicates that the immediate is
     /// offset to the PLT entry of symbol name from the current code location.
     ///
-    /// TODO Read through M680x0 ELF ABI
-    ///    SYMBOL_LABEL @PLT
+    ///    name@PLT
     MO_PLT,
   }; // enum TOF
 
@@ -138,6 +137,65 @@ namespace M680x0II {
   //   FormMask = 15
   // };
 
+/// isGlobalStubReference - Return true if the specified TargetFlag operand is
+/// a reference to a stub for a global, not the global itself.
+inline static bool
+isGlobalStubReference(unsigned char TargetFlag) {
+  switch (TargetFlag) {
+  default: return false;
+  case M680x0II::MO_GOTPCREL:  // pc-relative GOT reference.
+  case M680x0II::MO_GOT:       // normal GOT reference.
+    return true;
+  }
+}
+
+/// isSimpleGlobalReference - Return True if the specified GlobalValue is a
+/// direct reference for a symbol.
+inline static bool
+isDirectGlobalReference(unsigned char Flag) {
+  switch (Flag) {
+    default: return false;
+    case M680x0II::MO_NO_FLAG:
+    case M680x0II::MO_ABSOLUTE_ADDRESS:
+    case M680x0II::MO_PC_RELATIVE_ADDRESS:
+      return true;
+  }
+}
+
+/// isGlobalRelativeToPICBase - Return true if the specified global value
+/// reference is relative to a 32-bit PIC base (M680x0ISD::GlobalBaseReg). If this
+/// is true, the addressing mode has the PIC base register added in.
+inline static bool
+isGlobalRelativeToPICBase(unsigned char TargetFlag) {
+  switch (TargetFlag) {
+  default: return false;
+  case M680x0II::MO_GOTOFF:          // isPICStyleGOT: local global.
+  case M680x0II::MO_GOT:             // isPICStyleGOT: other global.
+    return true;
+  }
+}
+
+/// isPCRelGlobalReference - Return True if the specified GlobalValue requires PC
+/// addressing mode.
+inline static bool
+isPCRelGlobalReference(unsigned char Flag) {
+  switch (Flag) {
+    default: return false;
+    case M680x0II::MO_GOTPCREL:
+    case M680x0II::MO_PC_RELATIVE_ADDRESS:
+      return true;
+  }
+}
+
+/// isPCRelBlockReference - Return True if the Block is referenced using PC
+inline static bool
+isPCRelBlockReference(unsigned char Flag) {
+  switch (Flag) {
+    default: return false;
+    case M680x0II::MO_PC_RELATIVE_ADDRESS:
+      return true;
+  }
+}
 
 static inline bool
 isAddressRegister(unsigned RegNo) {

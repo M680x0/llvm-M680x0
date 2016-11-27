@@ -33,6 +33,9 @@ FunctionPass *createM680x0ISelDag(M680x0TargetMachine &TM);
 /// the MachineInstr to MC.
 FunctionPass * createM680x0ExpandPseudoPass();
 
+/// This pass initializes a global base register for PIC on M680x0.
+FunctionPass *createM680x0GlobalBaseRegPass();
+
 } // End llvm namespace
 
 #endif

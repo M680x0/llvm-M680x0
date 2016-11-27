@@ -56,7 +56,7 @@ struct M680x0ISelAddressMode {
     FrameIndexBase
   } BaseType;
 
-  int32_t Disp;
+  int64_t Disp;
 
   // This is really a union, discriminated by BaseType!
   SDValue BaseReg;
@@ -90,28 +90,35 @@ struct M680x0ISelAddressMode {
     return BaseType == FrameIndexBase || BaseReg.getNode() != nullptr;
   }
 
+  bool hasBaseReg() {
+    return BaseType == RegBase && BaseReg.getNode() != nullptr;
+  }
+
+  bool hasDisp() {
+    return Disp != 0;
+  }
+
   /// True if address mode type supports displacement
   bool isDispAddrType() const {
-    return AM != ARIPI && AM != ARIPD;
+    return AM == ARII || AM == PCI || AM == ARID || AM == PCD || AM == AL;
   }
 
   int getDispSize() const {
     assert(isDispAddrType() && "Address mode does not support displacement");
-    // These two in the next chip generations can hold upto 32 bit
-    if (AM == ARII || AM == PCI) {
-      return 8;
+    switch (AM) {
+      default: return 0;
+      case ARII:
+      case PCI:
+        return 8;
+      // These two in the next chip generations can hold upto 32 bit
+      case ARID:
+      case PCD:
+        return 16;
+      case AL: // FIXME though really depends on code model
+        return 32;
     }
-    else if (AM == ARID || AM == PCD) {
-      return 16;
-    // FIXME though really depends on code model
-    } else if (AM == AL) {
-      return 32;
-    }
-
-    return 0;
   }
 
-  bool hasNoDisp() { return getDispSize() == 0;  }
   bool isDisp8()   { return getDispSize() == 8;  }
   bool isDisp16()  { return getDispSize() == 16; }
   bool isDisp32()  { return getDispSize() == 32; }
@@ -120,10 +127,6 @@ struct M680x0ISelAddressMode {
   bool isPCRelative() const {
     if (BaseType != RegBase) return false;
     if (AM == PCI || AM == PCD) return true;
-    // TODO this case has to be folded into a proper PC* address type
-    if (RegisterSDNode *RegNode =
-          dyn_cast_or_null<RegisterSDNode>(BaseReg.getNode()))
-      return RegNode->getReg() == M680x0::PC;
     return false;
   }
 
@@ -208,14 +211,14 @@ private:
   bool SelectARII(SDNode *Parent, SDValue N,
                   SDValue &Imm, SDValue &Base, SDValue &Index);
   bool SelectAL(SDNode *Parent, SDValue N, SDValue &Sym);
+  bool SelectPCD(SDNode *Parent, SDValue N, SDValue &Imm);
 
   // If Address Mode represents Frame Index store FI in Disp and
   // Displacement bit size in Base. These values are read symmetrically by
   // M680x0RegisterInfo::eliminateFrameIndex method
   inline bool getFrameIndexAddress(M680x0ISelAddressMode &AM, const SDLoc &DL,
                                    SDValue &Disp, SDValue &Base) {
-    if (AM.BaseType == M680x0ISelAddressMode::FrameIndexBase)
-    {
+    if (AM.BaseType == M680x0ISelAddressMode::FrameIndexBase) {
       Disp = getI32Imm(AM.Disp, DL);
       Base = CurDAG->getTargetFrameIndex(
           AM.BaseFrameIndex,
@@ -260,6 +263,16 @@ private:
     return false;
   }
 
+  inline bool getGOTAddress(M680x0ISelAddressMode &AM, const SDLoc &DL,
+                                   SDValue &Disp, SDValue &Base) {
+    if (AM.hasBaseReg() && getAbsoluteAddress(AM, DL, Disp)) {
+      Base = AM.BaseReg;
+      return true;
+    }
+
+    return false;
+  }
+
   /// Return a target constant with the specified value of type i8.
   inline SDValue getI8Imm(unsigned Imm, const SDLoc &DL) {
     return CurDAG->getTargetConstant(Imm, DL, MVT::i8);
@@ -274,10 +287,18 @@ private:
   inline SDValue getI32Imm(unsigned Imm, const SDLoc &DL) {
     return CurDAG->getTargetConstant(Imm, DL, MVT::i32);
   }
+
+  /// Return a reference to the TargetInstrInfo, casted to the target-specific
+  /// type.
+  const M680x0InstrInfo *getInstrInfo() const {
+    return Subtarget->getInstrInfo();
+  }
+
+  /// Return an SDNode that returns the value of the global base register.
+  /// Output instructions required to initialize the global base register,
+  /// if necessary.
+  SDNode *getGlobalBaseReg();
 };
-
-FunctionPass *createM680x0ISelDag(M680x0TargetMachine &TM);
-
 }
 
 bool M680x0DAGToDAGISel::
@@ -300,14 +321,23 @@ LLVM_CONSTEXPR static inline bool isInt(unsigned N, int64_t x) {
 }
 
 static bool doesDispFitFI(M680x0ISelAddressMode &AM) {
-  if (AM.hasNoDisp()) return false;
+  if (!AM.isDispAddrType()) return false;
   // -1 to make sure that resolved FI will fit into Disp field
   return isInt(AM.getDispSize() - 1, AM.Disp);
 }
 
 static bool doesDispFit(M680x0ISelAddressMode &AM, int64_t Val) {
-  if (AM.hasNoDisp()) return false;
+  if (!AM.isDispAddrType()) return false;
   return isInt(AM.getDispSize(), Val);
+}
+
+/// Return an SDNode that returns the value of the global base register.
+/// Output instructions required to initialize the global base register,
+/// if necessary.
+SDNode *M680x0DAGToDAGISel::getGlobalBaseReg() {
+  unsigned GlobalBaseReg = getInstrInfo()->getGlobalBaseReg(MF);
+  auto &DL = MF->getDataLayout();
+  return CurDAG->getRegister(GlobalBaseReg, TLI->getPointerTy(DL)).getNode();
 }
 
 bool M680x0DAGToDAGISel::
@@ -654,6 +684,10 @@ void M680x0DAGToDAGISel::Select(SDNode *Node) {
 
   switch(Opcode) {
   default: break;
+
+  case M680x0ISD::GlobalBaseReg:
+    ReplaceNode(Node, getGlobalBaseReg());
+    return;
   }
 
   SelectCode(Node);
@@ -721,7 +755,13 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
 
   // If this is a frame index, grab it
   if (getFrameIndexAddress(AM, SDLoc(N), Disp, Base)) {
-    DEBUG(dbgs() << "SUCCESS FI\n");
+    DEBUG(dbgs() << "SUCCESS matched FI\n");
+    return true;
+  }
+
+  // If this is a frame index, grab it
+  if (getGOTAddress(AM, SDLoc(N), Disp, Base)) {
+    DEBUG(dbgs() << "SUCCESS, matched GOT\n");
     return true;
   }
 
@@ -768,4 +808,47 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
   }
 
   return false;;
+}
+
+bool M680x0DAGToDAGISel::
+SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
+  DEBUG(dbgs() << "Selecting PCD: ");
+  M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARID);
+
+  if (!matchAddress(N, AM))
+    return false;
+
+  // MVT VT = N.getSimpleValueType();
+  if (AM.BaseType == M680x0ISelAddressMode::RegBase) {
+    if (!AM.BaseReg.getNode()) {
+      DEBUG(dbgs() << "REJECT: Could match Base Reg\n");
+      return false;
+    }
+    // TODO Base and Index suppression is available since x20 i think
+    // AM.BaseReg = CurDAG->getRegister(0, VT);
+  }
+
+  // If this is a frame index, grab it
+  if (getFrameIndexAddress(AM, SDLoc(N), Disp, Base)) {
+    DEBUG(dbgs() << "SUCCESS matched FI\n");
+    return true;
+  }
+
+  // If this is a frame index, grab it
+  if (getGOTAddress(AM, SDLoc(N), Disp, Base)) {
+    DEBUG(dbgs() << "SUCCESS, matched GOT\n");
+    return true;
+  }
+
+  // Give a chance to ARI
+  if (AM.Disp == 0) {
+    DEBUG(dbgs() << "REJECT: Should be matched by ARI\n");
+    return false;
+  }
+
+  Disp = getI16Imm(AM.Disp, SDLoc(N));
+  Base = AM.BaseReg;
+
+  DEBUG(dbgs() << "SUCCESS\n");
+  return true;
 }

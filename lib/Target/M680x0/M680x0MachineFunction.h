@@ -45,6 +45,11 @@ class M680x0MachineFunctionInfo : public MachineFunctionInfo {
   /// stack slot is moved as the result of tail call optimization.
   int TailCallReturnAddrDelta = 0;
 
+  /// GlobalBaseReg - keeps track of the virtual register initialized for
+  /// use as the global base register. This is used for PIC in some PIC
+  /// relocation models.
+  unsigned GlobalBaseReg = 0;
+
   /// VarArgsFrameIndex - FrameIndex for start of varargs area.
   int VarArgsFrameIndex = 0;
 
@@ -84,6 +89,9 @@ public:
 
   int getTCReturnAddrDelta() const { return TailCallReturnAddrDelta; }
   void setTCReturnAddrDelta(int delta) {TailCallReturnAddrDelta = delta;}
+
+  unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
+  void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }

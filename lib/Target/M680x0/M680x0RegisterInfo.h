@@ -39,6 +39,9 @@ class M680x0RegisterInfo : public M680x0GenRegisterInfo {
   /// variable size stack objects.
   unsigned BasePtr;
 
+  /// GlobalBasePtr - Physical register used to store GOT address if needed.
+  unsigned GlobalBasePtr;
+
 protected:
   const M680x0Subtarget &Subtarget;
 
@@ -87,6 +90,7 @@ public:
   unsigned getFrameRegister(const MachineFunction &MF) const override;
   unsigned getStackRegister() const { return StackPtr; }
   unsigned getBaseRegister() const { return BasePtr; }
+  unsigned getGlobalBaseRegister() const { return GlobalBasePtr; }
 
   const TargetRegisterClass *intRegClass(unsigned Size) const;
 };

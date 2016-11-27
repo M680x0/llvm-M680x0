@@ -72,28 +72,13 @@ LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const {
 
   switch (MO.getTargetFlags()) {
   default: llvm_unreachable("Unknown target flag on GV operand");
-  case M680x0II::MO_NO_FLAG:   break;
+  case M680x0II::MO_NO_FLAG:
+  case M680x0II::MO_ABSOLUTE_ADDRESS:
+  case M680x0II::MO_PC_RELATIVE_ADDRESS: break;
   case M680x0II::MO_GOTPCREL:  RefKind = MCSymbolRefExpr::VK_GOTPCREL; break;
   case M680x0II::MO_GOT:       RefKind = MCSymbolRefExpr::VK_GOT;      break;
   case M680x0II::MO_GOTOFF:    RefKind = MCSymbolRefExpr::VK_GOTOFF;   break;
   case M680x0II::MO_PLT:       RefKind = MCSymbolRefExpr::VK_PLT;      break;
-  case M680x0II::MO_PIC_BASE_OFFSET: {
-    Expr = MCSymbolRefExpr::create(Sym, Ctx);
-    // Subtract the pic base.
-    Expr = MCBinaryExpr::createSub(Expr,
-           MCSymbolRefExpr::create(MF.getPICBaseSymbol(), Ctx), Ctx);
-    if (MO.isJTI()) {
-      assert(MAI.doesSetDirectiveSuppressReloc());
-      // If .set directive is supported, use it to reduce the number of
-      // relocations the assembler will generate for differences between
-      // local labels. This is only safe when the symbols are in the same
-      // section so we are restricting it to jumptable references.
-      MCSymbol *Label = Ctx.createTempSymbol();
-      AsmPrinter.OutStreamer->EmitAssignment(Label, Expr);
-      Expr = MCSymbolRefExpr::create(Label, Ctx);
-    }
-    break;
-  }
   }
 
   if (!Expr) {
@@ -141,7 +126,8 @@ LowerOperand(const MachineInstr *MI,
   }
 }
 
-void M680x0MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
+void M680x0MCInstLower::
+Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {

@@ -67,11 +67,11 @@ static Reloc::Model getEffectiveRelocModel(const Triple &TT,
   return *RM;
 }
 
-M680x0TargetMachine::M680x0TargetMachine(const Target &T, const Triple &TT,
-                                   StringRef CPU, StringRef FS,
-                                   const TargetOptions &Options,
-                                   Optional<Reloc::Model> RM,
-                                   CodeModel::Model CM, CodeGenOpt::Level OL)
+M680x0TargetMachine::
+M680x0TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
+                    StringRef FS, const TargetOptions &Options,
+                    Optional<Reloc::Model> RM, CodeModel::Model CM,
+                    CodeGenOpt::Level OL)
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options), TT, CPU, FS,
                         Options, getEffectiveRelocModel(TT, RM), CM, OL),
       TLOF(make_unique<M680x0ELFTargetObjectFile>()),
@@ -134,6 +134,7 @@ TargetPassConfig *M680x0TargetMachine::createPassConfig(PassManagerBase &PM) {
 bool M680x0PassConfig::addInstSelector() {
   // Install an instruction selector.
   addPass(createM680x0ISelDag(getM680x0TargetMachine()));
+  addPass(createM680x0GlobalBaseRegPass());
   return false;
 }
 

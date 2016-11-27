@@ -46,9 +46,10 @@ M680x0RegisterInfo::M680x0RegisterInfo(const M680x0Subtarget &ST)
     // IP anyway, how this works?
   : M680x0GenRegisterInfo(M680x0::PC), Subtarget(ST) {
     // FIXME would be nice to have tablegen level name aliasing
-    StackPtr = M680x0::SP;
-    FramePtr = M680x0::A6;
-    BasePtr  = M680x0::A5;
+    StackPtr      = M680x0::SP;
+    FramePtr      = M680x0::A6;
+    GlobalBasePtr = M680x0::A5;
+    BasePtr       = M680x0::A4;
   }
 
 //===----------------------------------------------------------------------===//

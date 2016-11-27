@@ -421,7 +421,8 @@ def MxCP_AL    : ComplexPattern<iPTR, 1, "SelectAL",
                                 [SDNPWantParent]>;
 
 def MxCP_PCD   : ComplexPattern<iPTR, 1, "SelectPCD",
-                                [], [SDNPWantParent]>;
+                                [add, sub, mul, or, shl],
+                                [SDNPWantParent]>;
 
 def MxCP_PCI   : ComplexPattern<iPTR, 2, "SelectPCI",
                                 [], [SDNPWantParent]>;

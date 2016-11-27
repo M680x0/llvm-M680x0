@@ -48,19 +48,17 @@ void M680x0Subtarget::anchor() { }
 M680x0Subtarget::
 M680x0Subtarget(const Triple &TT, const std::string &CPU,
                 const std::string &FS,
-                const M680x0TargetMachine &_TM) :
+                const M680x0TargetMachine &TM) :
   M680x0GenSubtargetInfo(TT, CPU, FS),
-  PICStyle(PICStyles::None), TM(_TM), TSInfo(),
+  PICStyle(PICStyles::None), TM(TM), TSInfo(),
   InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
   FrameLowering(*this, this->getStackAlignment()),
   TLInfo(TM, *this), TargetTriple(TT)  {
-  // Determine the PICStyle based on the target selected.
-  if (isPositionIndependent())
-    // NOTE this limits offsets to 16bit. Newer CPUs can do 32bit
-    // TODO make it depend on code model(small, large etc)
+  if (isPositionIndependent()) {
     setPICStyle(PICStyles::PCRel);
-  else
+  } else {
     setPICStyle(PICStyles::None);
+  }
 }
 
 bool M680x0Subtarget::
@@ -76,13 +74,47 @@ isLegalToCallImmediateAddr() const {
 /// Classify a blockaddress reference for the current subtarget according to how
 /// we should reference it in a non-pcrel context.
 unsigned char M680x0Subtarget::classifyBlockAddressReference() const {
-  return classifyLocalReference(nullptr);
+  // Unless we start to support Large Code Model branching is always pc-rel
+  return M680x0II::MO_PC_RELATIVE_ADDRESS;
 }
 
 unsigned char M680x0Subtarget::
 classifyLocalReference(const GlobalValue *GV) const {
-  // Use %pc addressing for anything local
-  return M680x0II::MO_NO_FLAG;
+  switch (TM.getCodeModel()) {
+    default: llvm_unreachable("Unsupported code model");
+    case CodeModel::Small:
+    case CodeModel::Kernel: {
+      return M680x0II::MO_PC_RELATIVE_ADDRESS;
+    }
+    case CodeModel::Medium: {
+      if (isPositionIndependent()) {
+        // On M68020 and better we can fit big any data offset into dips field.
+        if (IsM68020) {
+          return M680x0II::MO_PC_RELATIVE_ADDRESS;
+        }
+        // Otherwise we could check the data size and make sure it will fit into
+        // 16 bit offset. For now we will be conservative and go with @GOTOFF
+        return M680x0II::MO_GOTOFF;
+      } else {
+        if (IsM68020) {
+          return M680x0II::MO_PC_RELATIVE_ADDRESS;
+        }
+        return M680x0II::MO_ABSOLUTE_ADDRESS;
+      }
+    }
+  }
+}
+
+unsigned char M680x0Subtarget::
+classifyExternalReference(const Module &M) const {
+  if (TM.shouldAssumeDSOLocal(M, nullptr))
+    return classifyLocalReference(nullptr);
+
+  if (isPositionIndependent()) {
+    return M680x0II::MO_GOTPCREL;
+  } else {
+    return M680x0II::MO_GOT;
+  }
 }
 
 unsigned char M680x0Subtarget::
@@ -92,14 +124,30 @@ classifyGlobalReference(const GlobalValue *GV) const {
 
 unsigned char M680x0Subtarget::
 classifyGlobalReference(const GlobalValue *GV, const Module &M) const {
-  // Large model never uses stubs.
-  if (TM.getCodeModel() == CodeModel::Large)
-    return M680x0II::MO_NO_FLAG;
-
   if (TM.shouldAssumeDSOLocal(M, GV))
     return classifyLocalReference(GV);
 
-  return M680x0II::MO_GOTPCREL;
+  switch (TM.getCodeModel()) {
+    default: llvm_unreachable("Unsupported code model");
+    case CodeModel::Small:
+    case CodeModel::Kernel: {
+      if (isPositionIndependent()) {
+        return M680x0II::MO_GOTPCREL;
+      } else {
+        return M680x0II::MO_PC_RELATIVE_ADDRESS;
+      }
+    }
+    case CodeModel::Medium: {
+      if (isPositionIndependent()) {
+        return M680x0II::MO_GOTPCREL;
+      } else {
+        if (IsM68020) {
+          return M680x0II::MO_PC_RELATIVE_ADDRESS;
+        }
+        return M680x0II::MO_ABSOLUTE_ADDRESS;
+      }
+    }
+  }
 }
 
 unsigned char M680x0Subtarget::
@@ -109,21 +157,20 @@ classifyGlobalFunctionReference(const GlobalValue *GV) const {
 
 unsigned char M680x0Subtarget::
 classifyGlobalFunctionReference(const GlobalValue *GV, const Module &M) const {
+  // local always use pc-rel referencing
   if (TM.shouldAssumeDSOLocal(M, GV))
     return M680x0II::MO_NO_FLAG;
 
-  if (isTargetELF())
-    return M680x0II::MO_PLT;
-
+  // If the function is marked as non-lazy, generate an indirect call
+  // which loads from the GOT directly. This avoids runtime overhead
+  // at the cost of eager binding.
   auto *F = dyn_cast_or_null<Function>(GV);
   if (F && F->hasFnAttribute(Attribute::NonLazyBind)) {
-    // If the function is marked as non-lazy, generate an indirect call
-    // which loads from the GOT directly. This avoids runtime overhead
-    // at the cost of eager binding.
     return M680x0II::MO_GOTPCREL;
   }
 
-  return M680x0II::MO_NO_FLAG;
+  // otherwise linker will figure this out
+  return M680x0II::MO_PLT;
 }
 
 M680x0Subtarget & M680x0Subtarget::

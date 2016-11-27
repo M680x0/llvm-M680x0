@@ -34,6 +34,8 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Mangler.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCStreamer.h"

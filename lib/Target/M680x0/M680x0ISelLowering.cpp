@@ -2539,20 +2539,21 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const {
   // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
   // global base reg.
   unsigned char OpFlag = Subtarget.classifyLocalReference(nullptr);
-  unsigned WrapperKind = M680x0ISD::Wrapper;
-  CodeModel::Model M = DAG.getTarget().getCodeModel();
 
-  if (Subtarget.isPICStylePCRel() &&
-      (M == CodeModel::Small || M == CodeModel::Kernel))
+  unsigned WrapperKind = M680x0ISD::Wrapper;
+  if (M680x0II::isPCRelGlobalReference(OpFlag)) {
     WrapperKind = M680x0ISD::WrapperPC;
+  }
 
   auto PtrVT = getPointerTy(DAG.getDataLayout());
   SDValue Result = DAG.getTargetConstantPool(
       CP->getConstVal(), PtrVT, CP->getAlignment(), CP->getOffset(), OpFlag);
+
   SDLoc DL(CP);
   Result = DAG.getNode(WrapperKind, DL, PtrVT, Result);
+
   // With PIC, the address is actually $g + Offset.
-  if (OpFlag) {
+  if (M680x0II::isGlobalRelativeToPICBase(OpFlag)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
                  DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
   }
@@ -2567,12 +2568,11 @@ LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
   // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
   // global base reg.
   unsigned char OpFlag = Subtarget.classifyLocalReference(nullptr);
-  unsigned WrapperKind = M680x0ISD::Wrapper;
-  CodeModel::Model M = DAG.getTarget().getCodeModel();
 
-  if (Subtarget.isPICStylePCRel() &&
-      (M == CodeModel::Small || M == CodeModel::Kernel))
+  unsigned WrapperKind = M680x0ISD::Wrapper;
+  if (M680x0II::isPCRelGlobalReference(OpFlag)) {
     WrapperKind = M680x0ISD::WrapperPC;
+  }
 
   auto PtrVT = getPointerTy(DAG.getDataLayout());
   SDValue Result = DAG.getTargetJumpTable(JT->getIndex(), PtrVT, OpFlag);
@@ -2580,9 +2580,10 @@ LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
   Result = DAG.getNode(WrapperKind, DL, PtrVT, Result);
 
   // With PIC, the address is actually $g + Offset.
-  if (OpFlag)
+  if (M680x0II::isGlobalRelativeToPICBase(OpFlag)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
                  DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
+  }
 
   return Result;
 }
@@ -2594,13 +2595,12 @@ LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const {
   // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
   // global base reg.
   const Module *Mod = DAG.getMachineFunction().getFunction()->getParent();
-  unsigned char OpFlag = Subtarget.classifyGlobalReference(nullptr, *Mod);
-  unsigned WrapperKind = M680x0ISD::Wrapper;
-  CodeModel::Model M = DAG.getTarget().getCodeModel();
+  unsigned char OpFlag = Subtarget.classifyExternalReference(*Mod);
 
-  if (Subtarget.isPICStylePCRel() &&
-      (M == CodeModel::Small || M == CodeModel::Kernel))
+  unsigned WrapperKind = M680x0ISD::Wrapper;
+  if (M680x0II::isPCRelGlobalReference(OpFlag)) {
     WrapperKind = M680x0ISD::WrapperPC;
+  }
 
   auto PtrVT = getPointerTy(DAG.getDataLayout());
   SDValue Result = DAG.getTargetExternalSymbol(Sym, PtrVT, OpFlag);
@@ -2609,40 +2609,40 @@ LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const {
   Result = DAG.getNode(WrapperKind, DL, PtrVT, Result);
 
   // With PIC, the address is actually $g + Offset.
-  if (isPositionIndependent()) {
+  if (M680x0II::isGlobalRelativeToPICBase(OpFlag)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
                  DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
   }
 
   // For symbols that require a load from a stub to get the address, emit the
   // load.
-  if (isGlobalStubReference(OpFlag))
+  if (M680x0II::isGlobalStubReference(OpFlag)) {
     Result = DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), Result,
                  MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+  }
 
   return Result;
 }
 
 SDValue M680x0TargetLowering::
 LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const {
-  // Create the TargetBlockAddressAddress node.
-  unsigned char OpFlags =
-    Subtarget.classifyBlockAddressReference();
-  CodeModel::Model M = DAG.getTarget().getCodeModel();
+  unsigned char OpFlags = Subtarget.classifyBlockAddressReference();
   const BlockAddress *BA = cast<BlockAddressSDNode>(Op)->getBlockAddress();
   int64_t Offset = cast<BlockAddressSDNode>(Op)->getOffset();
   SDLoc DL(Op);
   auto PtrVT = getPointerTy(DAG.getDataLayout());
+
+  // Create the TargetBlockAddressAddress node.
   SDValue Result = DAG.getTargetBlockAddress(BA, PtrVT, Offset, OpFlags);
 
-  if (Subtarget.isPICStylePCRel() &&
-      (M == CodeModel::Small || M == CodeModel::Kernel))
+  if (M680x0II::isPCRelBlockReference(OpFlags)) {
     Result = DAG.getNode(M680x0ISD::WrapperPC, DL, PtrVT, Result);
-  else
+  } else {
     Result = DAG.getNode(M680x0ISD::Wrapper, DL, PtrVT, Result);
+  }
 
   // With PIC, the address is actually $g + Offset.
-  if (isGlobalRelativeToPICBase(OpFlags)) {
+  if (M680x0II::isGlobalRelativeToPICBase(OpFlags)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
                  DAG.getNode(M680x0ISD::GlobalBaseReg, DL, PtrVT), Result);
   }
@@ -2653,46 +2653,43 @@ LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const {
 SDValue M680x0TargetLowering::
 LowerGlobalAddress(const GlobalValue *GV, const SDLoc &DL, int64_t Offset,
                    SelectionDAG &DAG) const {
+  unsigned char OpFlags = Subtarget.classifyGlobalReference(GV);
+  auto PtrVT = getPointerTy(DAG.getDataLayout());
+
   // Create the TargetGlobalAddress node, folding in the constant
   // offset if it is legal.
-  unsigned char OpFlags = Subtarget.classifyGlobalReference(GV);
-  CodeModel::Model M = DAG.getTarget().getCodeModel();
-  auto PtrVT = getPointerTy(DAG.getDataLayout());
   SDValue Result;
-  if (OpFlags == M680x0II::MO_NO_FLAG && Subtarget.isM68020()) {
-    // A direct static reference with offset can be lowered only in x20 and hi
+  if (M680x0II::isDirectGlobalReference(OpFlags)) {
     Result = DAG.getTargetGlobalAddress(GV, DL, PtrVT, Offset);
     Offset = 0;
   } else {
     Result = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
   }
 
-  if (Subtarget.isPICStylePCRel() &&
-      // x20 can handle 32 bit displacememt
-     (Subtarget.isM68020() ||
-      // older versions limited to 16
-     (Subtarget.isM68000() && (M == CodeModel::Small || M == CodeModel::Kernel))))
+  if (M680x0II::isPCRelGlobalReference(OpFlags))
     Result = DAG.getNode(M680x0ISD::WrapperPC, DL, PtrVT, Result);
   else
     Result = DAG.getNode(M680x0ISD::Wrapper, DL, PtrVT, Result);
 
   // With PIC, the address is actually $g + Offset.
-  if (isGlobalRelativeToPICBase(OpFlags)) {
+  if (M680x0II::isGlobalRelativeToPICBase(OpFlags)) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT,
                  DAG.getNode(M680x0ISD::GlobalBaseReg, DL, PtrVT), Result);
   }
 
   // For globals that require a load from a stub to get the address, emit the
   // load.
-  if (isGlobalStubReference(OpFlags))
+  if (M680x0II::isGlobalStubReference(OpFlags)) {
     Result = DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), Result,
                  MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+  }
 
   // If there was a non-zero offset that we didn't fold, create an explicit
   // addition for it.
-  if (Offset != 0)
+  if (Offset != 0) {
     Result = DAG.getNode(ISD::ADD, DL, PtrVT, Result,
                  DAG.getConstant(Offset, DL, PtrVT));
+  }
 
   return Result;
 }
@@ -2706,27 +2703,28 @@ LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const {
 
 const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
-  case M680x0ISD::CALL:        return "M680x0ISD::CALL";
-  case M680x0ISD::TAIL_CALL:   return "M680x0ISD::TAIL_CALL";
-  case M680x0ISD::RET:         return "M680x0ISD::RET";
-  case M680x0ISD::TC_RETURN:   return "M680x0ISD::TC_RETURN";
-  case M680x0ISD::ADD:         return "M680x0ISD::ADD";
-  case M680x0ISD::SUB:         return "M680x0ISD::SUB";
-  case M680x0ISD::ADDX:        return "M680x0ISD::ADDX";
-  case M680x0ISD::SUBX:        return "M680x0ISD::SUBX";
-  case M680x0ISD::SMUL:        return "M680x0ISD::SMUL";
-  case M680x0ISD::UMUL:        return "M680x0ISD::UMUL";
-  case M680x0ISD::OR:          return "M680x0ISD::OR";
-  case M680x0ISD::XOR:         return "M680x0ISD::XOR";
-  case M680x0ISD::AND:         return "M680x0ISD::AND";
-  case M680x0ISD::BT:          return "M680x0ISD::BT";
-  case M680x0ISD::CMP:         return "M680x0ISD::CMP";
-  case M680x0ISD::BRCOND:      return "M680x0ISD::BRCOND";
-  case M680x0ISD::SETCC:       return "M680x0ISD::SETCC";
-  case M680x0ISD::SETCC_CARRY: return "M680x0ISD::SETCC_CARRY";
-  case M680x0ISD::Wrapper:     return "M680x0ISD::Wrapper";
-  case M680x0ISD::WrapperPC:   return "M680x0ISD::WrapperPC";
-  default:                     return NULL;
+  case M680x0ISD::CALL:           return "M680x0ISD::CALL";
+  case M680x0ISD::TAIL_CALL:      return "M680x0ISD::TAIL_CALL";
+  case M680x0ISD::RET:            return "M680x0ISD::RET";
+  case M680x0ISD::TC_RETURN:      return "M680x0ISD::TC_RETURN";
+  case M680x0ISD::ADD:            return "M680x0ISD::ADD";
+  case M680x0ISD::SUB:            return "M680x0ISD::SUB";
+  case M680x0ISD::ADDX:           return "M680x0ISD::ADDX";
+  case M680x0ISD::SUBX:           return "M680x0ISD::SUBX";
+  case M680x0ISD::SMUL:           return "M680x0ISD::SMUL";
+  case M680x0ISD::UMUL:           return "M680x0ISD::UMUL";
+  case M680x0ISD::OR:             return "M680x0ISD::OR";
+  case M680x0ISD::XOR:            return "M680x0ISD::XOR";
+  case M680x0ISD::AND:            return "M680x0ISD::AND";
+  case M680x0ISD::BT:             return "M680x0ISD::BT";
+  case M680x0ISD::CMP:            return "M680x0ISD::CMP";
+  case M680x0ISD::BRCOND:         return "M680x0ISD::BRCOND";
+  case M680x0ISD::SETCC:          return "M680x0ISD::SETCC";
+  case M680x0ISD::SETCC_CARRY:    return "M680x0ISD::SETCC_CARRY";
+  case M680x0ISD::GlobalBaseReg:  return "M680x0ISD::GlobalBaseReg";
+  case M680x0ISD::Wrapper:        return "M680x0ISD::Wrapper";
+  case M680x0ISD::WrapperPC:      return "M680x0ISD::WrapperPC";
+  default:                        return NULL;
   }
 }
 
@@ -2976,9 +2974,9 @@ EmitLoweredSelect(MachineInstr &MI, MachineBasicBlock *BB) const {
   // live into the sink and copy blocks.
   const TargetRegisterInfo *TRI = Subtarget.getRegisterInfo();
 
-  MachineInstr *LastEFLAGSUser = CascadedCMOV ? CascadedCMOV : LastCMOV;
-  if (!LastEFLAGSUser->killsRegister(M680x0::CCR) &&
-      !checkAndUpdateCCRKill(LastEFLAGSUser, BB, TRI)) {
+  MachineInstr *LastCCRSUser = CascadedCMOV ? CascadedCMOV : LastCMOV;
+  if (!LastCCRSUser->killsRegister(M680x0::CCR) &&
+      !checkAndUpdateCCRKill(LastCCRSUser, BB, TRI)) {
     copy0MBB->addLiveIn(M680x0::CCR);
     sinkMBB->addLiveIn(M680x0::CCR);
   }

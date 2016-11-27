@@ -66,8 +66,6 @@ namespace llvm {
       SMUL, UMUL,
       OR, XOR, AND,
 
-      /// On Darwin, this node represents the result of the popl
-      /// at function entry, used for PIC code.
       GlobalBaseReg,
 
       /// A wrapper node for TargetConstantPool,

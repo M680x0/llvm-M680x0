@@ -113,6 +113,10 @@ def NAME#REG.POp.Letter#REG.Postfix : MxMove_RM<REG, REG.POp, REG.PPat,
 // REG <- (i,An,Xn)
 def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat,
     SIZE, MxEncEAp_1, MxExtBrief_1, EA_0, MxExtEmpty>;
+
+// REG <- (ABS)
+def NAME#REG.BOp.Letter#REG.Postfix : MxMove_RM<REG, REG.BOp, REG.BPat,
+    SIZE, MxEncEAb, MxExtI32_1, EA_0, MxExtEmpty>;
 }
 
 let mayLoad = 1, mayStore = 1 in {
@@ -411,6 +415,7 @@ class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat, MxEncEA EA, MxEncExt EXT>
 
 def LEA32p : LEA32<MxARID32, MxCP_ARID, MxEncEAp_1, MxExtI16_1>;
 def LEA32f : LEA32<MxARII32, MxCP_ARII, MxEncEAf_1, MxExtBrief_1>;
+def LEA32q : LEA32<MxPCD32,  MxCP_PCD,  MxEncEAq,   MxExtI16_1>;
 
 
 //===----------------------------------------------------------------------===//

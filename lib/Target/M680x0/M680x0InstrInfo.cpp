@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 
@@ -487,3 +488,65 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
   DebugLoc DL = MBB.findDebugLoc(MI);
   addFrameReference(BuildMI(MBB, MI, DL, get(Opc), DstReg), FI);
 }
+
+/// Return a virtual register initialized with the
+/// the global base register value. Output instructions required to
+/// initialize the register in the function entry block, if necessary.
+/// TODO: Eliminate this and move the code to M680x0MachineFunctionInfo.
+unsigned M680x0InstrInfo::
+getGlobalBaseReg(MachineFunction *MF) const {
+  M680x0MachineFunctionInfo *MxFI = MF->getInfo<M680x0MachineFunctionInfo>();
+  unsigned GlobalBaseReg = MxFI->getGlobalBaseReg();
+  if (GlobalBaseReg != 0)
+    return GlobalBaseReg;
+
+  // Create the register. The code to initialize it is inserted
+  // later, by the CGBR pass (below).
+  GlobalBaseReg = RI.getGlobalBaseRegister();
+  MxFI->setGlobalBaseReg(GlobalBaseReg);
+  return GlobalBaseReg;
+}
+
+namespace {
+  /// Create Global Base Reg pass. This initializes the PIC global base register
+  struct CGBR : public MachineFunctionPass {
+    static char ID;
+    CGBR() : MachineFunctionPass(ID) {}
+
+    bool runOnMachineFunction(MachineFunction &MF) override {
+      const M680x0Subtarget &STI = MF.getSubtarget<M680x0Subtarget>();
+      M680x0MachineFunctionInfo *MxFI = MF.getInfo<M680x0MachineFunctionInfo>();
+
+      unsigned GlobalBaseReg = MxFI->getGlobalBaseReg();
+
+      // If we didn't need a GlobalBaseReg, don't insert code.
+      if (GlobalBaseReg == 0)
+        return false;
+
+      // Insert the set of GlobalBaseReg into the first MBB of the function
+      MachineBasicBlock &FirstMBB = MF.front();
+      MachineBasicBlock::iterator MBBI = FirstMBB.begin();
+      DebugLoc DL = FirstMBB.findDebugLoc(MBBI);
+      const M680x0InstrInfo *TII = STI.getInstrInfo();
+
+      // Generate lea (__GLOBAL_OFFSET_TABLE_,%PC), %A4
+      BuildMI(FirstMBB, MBBI, DL, TII->get(M680x0::LEA32q), GlobalBaseReg)
+        .addExternalSymbol("_GLOBAL_OFFSET_TABLE_", M680x0II::MO_GOT);
+
+      return true;
+    }
+
+    const char *getPassName() const override {
+      return "M680x0 PIC Global Base Reg Initialization";
+    }
+
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.setPreservesCFG();
+      MachineFunctionPass::getAnalysisUsage(AU);
+    }
+  };
+}
+
+char CGBR::ID = 0;
+FunctionPass* llvm::
+createM680x0GlobalBaseRegPass() { return new CGBR(); }

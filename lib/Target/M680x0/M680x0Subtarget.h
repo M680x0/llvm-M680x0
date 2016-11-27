@@ -116,12 +116,15 @@ public:
   /// to how we should reference it in a non-pcrel context.
   unsigned char classifyLocalReference(const GlobalValue *GV) const;
 
-
   /// Classify a global variable reference for the current subtarget according
   /// to how we should reference it in a non-pcrel context.
   unsigned char classifyGlobalReference(const GlobalValue *GV,
                                         const Module &M) const;
   unsigned char classifyGlobalReference(const GlobalValue *GV) const;
+
+  /// Classify a external variable reference for the current subtarget according
+  /// to how we should reference it in a non-pcrel context.
+  unsigned char classifyExternalReference(const Module &M) const;
 
   /// Classify a global function reference for the current subtarget.
   unsigned char classifyGlobalFunctionReference(const GlobalValue *GV,
