@@ -24,9 +24,9 @@ namespace llvm {
 // Custom state to propagate llvm type info to register CC assigner
 class M680x0CCState : public CCState {
 public:
-  const llvm::Function &F;
+  const llvm::Function *F;
 
-  M680x0CCState(const llvm::Function &F, CallingConv::ID CC, bool isVarArg,
+  M680x0CCState(const llvm::Function *F, CallingConv::ID CC, bool isVarArg,
                 MachineFunction &MF, SmallVectorImpl<CCValAssign> &locs,
                 LLVMContext &C)
     : CCState(CC, isVarArg, MF, locs, C), F(F) {}
@@ -54,14 +54,14 @@ inline bool CC_M680x0_Any_AssignToReg(unsigned &ValNo, MVT &ValVT,
 
   // SHIT rewrite this
   // NOTE This is probably wrong
-  auto I = CCInfo.F.arg_begin();
+  auto I = CCInfo.F->arg_begin();
   int No = ValNo;
   while (No > 0) {
     No -= I->getType()->isIntegerTy(64) ? 2 : 1;
     I++;
   }
 
-  bool isPtr = I != CCInfo.F.arg_end() && I->getType()->isPointerTy();
+  bool isPtr = I != CCInfo.F->arg_end() && I->getType()->isPointerTy();
 
   unsigned Reg = isPtr ?
     State.AllocateReg(AddrRegList)

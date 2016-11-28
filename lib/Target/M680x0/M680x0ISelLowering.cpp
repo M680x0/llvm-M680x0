@@ -93,6 +93,7 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
     setOperationAction(ISD::USUBO, VT, Custom);
   }
 
+  setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);
 
   for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
@@ -496,7 +497,9 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
-  M680x0CCState CCInfo(*CLI.CS->getCalledFunction(), CallConv,
+  // It is empty for LibCall
+  const Function *CalleeFunc = CLI.CS ? CLI.CS->getCalledFunction() : nullptr;
+  M680x0CCState CCInfo(CalleeFunc, CallConv,
                        isVarArg, MF, ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeCallOperands(Outs, CC_M680x0);
 
@@ -886,7 +889,7 @@ LowerFormalArguments(SDValue Chain, CallingConv::ID CCID, bool isVarArg,
 
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
-  M680x0CCState CCInfo(*MF.getFunction(), CCID, isVarArg,
+  M680x0CCState CCInfo(MF.getFunction(), CCID, isVarArg,
                        MF, ArgLocs, *DAG.getContext());
 
   CCInfo.AnalyzeFormalArguments(Ins, CC_M680x0);
