@@ -515,6 +515,8 @@ class MxType<ValueType vt,  /// Type of data this fixture refers to
       ComplexPattern fPat,  /// What ARII pattern is used
             MxOperand bOp,  /// Supported absolute operand
       ComplexPattern bPat,  /// What absolute pattern is used
+            MxOperand qOp,  /// Supported PCD operand
+      ComplexPattern qPat,  /// What PCD pattern is used
             MxOperand iOp,  /// Supported immediate operand
              PatFrag iPat,  /// What immediate pattern is used
              PatFrag load   /// What load operation is used with MEM
@@ -531,6 +533,7 @@ class MxType<ValueType vt,  /// Type of data this fixture refers to
   MxOperand POp = pOp; ComplexPattern PPat = pPat;
   MxOperand FOp = fOp; ComplexPattern FPat = fPat;
   MxOperand BOp = bOp; ComplexPattern BPat = bPat;
+  MxOperand QOp = qOp; ComplexPattern QPat = qPat;
   MxOperand IOp = iOp; PatFrag IPat = iPat;
   PatFrag Load = load;
 }
@@ -543,6 +546,7 @@ class MxType8Class<string rLet, MxOperand reg>
              MxARID8,  MxCP_ARID,
              MxARII8,  MxCP_ARII,
              MxAL8,    MxCP_AL,
+             MxPCD8,   MxCP_PCD,
              Mxi8imm,  MximmSExt8,
              Mxloadi8>;
 
@@ -556,6 +560,7 @@ class MxType16Class<string rLet, MxOperand reg>
              MxARID16,  MxCP_ARID,
              MxARII16,  MxCP_ARII,
              MxAL16,    MxCP_AL,
+             MxPCD16,   MxCP_PCD,
              Mxi16imm,  MximmSExt16,
              Mxloadi16>;
 
@@ -569,6 +574,7 @@ class MxType32Class<string rLet, MxOperand reg>
              MxARID32,  MxCP_ARID,
              MxARII32,  MxCP_ARII,
              MxAL32,    MxCP_AL,
+             MxPCD32,   MxCP_PCD,
              Mxi32imm,  MximmSExt32,
              Mxloadi32>;
 

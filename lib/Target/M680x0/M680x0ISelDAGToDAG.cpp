@@ -123,10 +123,13 @@ struct M680x0ISelAddressMode {
   bool isDisp16()  { return getDispSize() == 16; }
   bool isDisp32()  { return getDispSize() == 32; }
 
+
   /// Return true if this addressing mode is already PC-relative.
   bool isPCRelative() const {
     if (BaseType != RegBase) return false;
-    if (AM == PCI || AM == PCD) return true;
+    if (RegisterSDNode *RegNode =
+          dyn_cast_or_null<RegisterSDNode>(BaseReg.getNode()))
+      return RegNode->getReg() == M680x0::PC;
     return false;
   }
 
@@ -263,7 +266,7 @@ private:
     return false;
   }
 
-  inline bool getGOTAddress(M680x0ISelAddressMode &AM, const SDLoc &DL,
+  inline bool getSymbolDisp(M680x0ISelAddressMode &AM, const SDLoc &DL,
                                    SDValue &Disp, SDValue &Base) {
     if (AM.hasBaseReg() && getAbsoluteAddress(AM, DL, Disp)) {
       Base = AM.BaseReg;
@@ -575,21 +578,8 @@ matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
     return false;
 
   SDValue N0 = N.getOperand(0);
-  CodeModel::Model M = TM.getCodeModel();
 
-  // Handle M68020 pc-relative addresses.  We check this before checking direct
-  // folding because PC is preferable to non-PC accesses. Starting from x20
-  // we support 32bit offsets.
-  if (N.getOpcode() == M680x0ISD::WrapperPC &&
-      // With original cpu we limited with 16 bit, plus if there is any offset
-      // for the symbol it cannot match, since it is not poosible to represent
-      // in assembly language
-      ((Subtarget->isM68000() && (M == CodeModel::Small || M == CodeModel::Kernel))
-       // But the newer x20 cpu can do everything we need to match up to 32 bit
-       // wide references and 32 bit wide offsets
-    || (Subtarget->isM68020()))) {
-
-    llvm_unreachable("Not available right now");
+  if (N.getOpcode() == M680x0ISD::WrapperPC) {
 
     // Base and index reg must be 0 in order to use %pc as base.
     if (AM.hasBase())
@@ -631,8 +621,7 @@ matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
     } else
       llvm_unreachable("Unhandled symbol reference node.");
 
-    if (N.getOpcode() == M680x0ISD::WrapperPC)
-      AM.setBaseReg(CurDAG->getRegister(M680x0::PC, MVT::i32));
+    AM.setBaseReg(CurDAG->getRegister(M680x0::PC, MVT::i32));
     return true;
   }
 
@@ -703,6 +692,11 @@ SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
     return false;
   }
 
+  if (AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    return false;
+  }
+
   // ARI does not use these
   if (AM.IndexReg.getNode() || AM.Disp != 0) {
     DEBUG(dbgs() << "REJECT: Index Reg or Disp cannot be matched by ARI\n");
@@ -743,6 +737,11 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
   if (!matchAddress(N, AM))
     return false;
 
+  if (AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    return false;
+  }
+
   // MVT VT = N.getSimpleValueType();
   if (AM.BaseType == M680x0ISelAddressMode::RegBase) {
     if (!AM.BaseReg.getNode()) {
@@ -760,8 +759,8 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
   }
 
   // If this is a frame index, grab it
-  if (getGOTAddress(AM, SDLoc(N), Disp, Base)) {
-    DEBUG(dbgs() << "SUCCESS, matched GOT\n");
+  if (getSymbolDisp(AM, SDLoc(N), Disp, Base)) {
+    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
 
@@ -796,6 +795,11 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
     return false;
   }
 
+  if (AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    return false;
+  }
+
   // AL does not use these
   if (AM.IndexReg.getNode()) {
     DEBUG(dbgs() << "REJECT: Index Reg cannot be matched by AL\n");
@@ -813,41 +817,22 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
 bool M680x0DAGToDAGISel::
 SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
   DEBUG(dbgs() << "Selecting PCD: ");
-  M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARID);
+  M680x0ISelAddressMode AM(M680x0ISelAddressMode::PCD);
 
   if (!matchAddress(N, AM))
     return false;
 
-  // MVT VT = N.getSimpleValueType();
-  if (AM.BaseType == M680x0ISelAddressMode::RegBase) {
-    if (!AM.BaseReg.getNode()) {
-      DEBUG(dbgs() << "REJECT: Could match Base Reg\n");
-      return false;
-    }
-    // TODO Base and Index suppression is available since x20 i think
-    // AM.BaseReg = CurDAG->getRegister(0, VT);
-  }
-
-  // If this is a frame index, grab it
-  if (getFrameIndexAddress(AM, SDLoc(N), Disp, Base)) {
-    DEBUG(dbgs() << "SUCCESS matched FI\n");
-    return true;
-  }
-
-  // If this is a frame index, grab it
-  if (getGOTAddress(AM, SDLoc(N), Disp, Base)) {
-    DEBUG(dbgs() << "SUCCESS, matched GOT\n");
-    return true;
-  }
-
-  // Give a chance to ARI
-  if (AM.Disp == 0) {
-    DEBUG(dbgs() << "REJECT: Should be matched by ARI\n");
+  if (!AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: Not PC relative\n");
     return false;
   }
 
+  if (getAbsoluteAddress(AM, SDLoc(N), Disp)) {
+    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
+    return true;
+  }
+
   Disp = getI16Imm(AM.Disp, SDLoc(N));
-  Base = AM.BaseReg;
 
   DEBUG(dbgs() << "SUCCESS\n");
   return true;
