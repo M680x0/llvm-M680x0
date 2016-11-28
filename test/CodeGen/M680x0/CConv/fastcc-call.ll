@@ -24,8 +24,8 @@ declare fastcc void @bar1(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e);
 ; Pass pointers in %a registers if there are any free left
 
 ; x00-LABEL: foo2:
-; x00-DAG:   lea (4,%sp), %a0
-; x00-DAG:   lea (0,%sp), %a1
+; x00-DAG:   lea (8,%sp), %a0
+; x00-DAG:   lea (4,%sp), %a1
 ; x00-DAG:   move.l #2, %d0
 ; x00-DAG:   move.l #4, %d1
 ; x00-DAG:   jsr (bar2@PLT,%pc)

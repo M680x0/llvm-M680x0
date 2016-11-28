@@ -56,7 +56,7 @@ inline bool CC_M680x0_Any_AssignToReg(unsigned &ValNo, MVT &ValVT,
   // NOTE This is probably wrong
   auto I = CCInfo.F.arg_begin();
   int No = ValNo;
-  while (No >= 0) {
+  while (No > 0) {
     No -= I->getType()->isIntegerTy(64) ? 2 : 1;
     I++;
   }
