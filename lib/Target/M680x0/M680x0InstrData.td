@@ -110,13 +110,13 @@ def NAME#REG.POp.Letter#REG.Postfix : MxMove_RM<REG, REG.POp, REG.PPat,
 def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat,
     SIZE, MxEncEAp_1, MxExtBrief_1, EA_0, MxExtEmpty>;
 
-// REG <- (ABS)
-def NAME#REG.BOp.Letter#REG.Postfix : MxMove_RM<REG, REG.BOp, REG.BPat,
-    SIZE, MxEncEAb, MxExtI32_1, EA_0, MxExtEmpty>;
-
 // REG <- (i,PC)
 def NAME#REG.QOp.Letter#REG.Postfix : MxMove_RM<REG, REG.QOp, REG.QPat,
     SIZE, MxEncEAq, MxExtI16_1, EA_0, MxExtEmpty>;
+
+// REG <- (ABS)
+def NAME#REG.BOp.Letter#REG.Postfix : MxMove_RM<REG, REG.BOp, REG.BPat,
+    SIZE, MxEncEAb, MxExtI32_1, EA_0, MxExtEmpty>;
 
 // REG <- (An)
 def NAME#REG.JOp.Letter#REG.Postfix : MxMove_RM<REG, REG.JOp, REG.JPat,
@@ -156,15 +156,15 @@ def NAME#TYPE.FOp.Letter#TYPE.Postfix
   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.FOp, TYPE.FPat,
               SIZE, MxEncEAf_1, MxExtBrief_1, EA_0, EXT_0>;
 
-// MEM <- (ABS)
-def NAME#TYPE.BOp.Letter#TYPE.Postfix
-  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.BOp, TYPE.BPat,
-              SIZE, MxEncEAb, MxExtI32_1, EA_0, EXT_0>;
-
 // MEM <- (i,PC)
 def NAME#TYPE.QOp.Letter#TYPE.Postfix
   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.QOp, TYPE.QPat,
               SIZE, MxEncEAq, MxExtI16_1, EA_0, EXT_0>;
+
+// MEM <- (ABS)
+def NAME#TYPE.BOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.BOp, TYPE.BPat,
+              SIZE, MxEncEAb, MxExtI32_1, EA_0, EXT_0>;
 
 // MEM <- (An)
 def NAME#TYPE.JOp.Letter#TYPE.Postfix
