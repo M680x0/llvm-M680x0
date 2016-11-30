@@ -117,8 +117,13 @@ printARIDMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printARIIMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (i,An,Rn.W)
-    // HMM... is it allowed for M68000 to use this form?
+  O << '(';
+  printDisp(MI, opNum + M680x0::MemDisp, O);
+  O << ',';
+  printOperand(MI, opNum + M680x0::MemBase, O);
+  O << ',';
+  printOperand(MI, opNum + M680x0::MemIndex, O);
+  O << ')';
 }
 
 // NOTE forcing (W,L) size available since M68020 only
