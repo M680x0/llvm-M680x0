@@ -50,7 +50,7 @@ entry:
 @v4 = common global i32 0, align 4
 
 ; x00-LABEL: t4:
-; x00:       cmpi.l #1, v4
+; x00:       cmpi.l #1, (v4,%pc)
 ; x00:       subx.w %d0, %d0
 ; x00:       lsr.w
 ; x00:       add.w

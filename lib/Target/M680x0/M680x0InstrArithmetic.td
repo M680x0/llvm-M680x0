@@ -301,7 +301,7 @@ defm XOR : MxBiArOp_DF_EAd<"eor", MxXor, 0xB, 0xA>;
 
 
 //===----------------------------------------------------------------------===//
-// Cmp
+// CMP
 //===----------------------------------------------------------------------===//
 
 // TODO TEST ENCODING
@@ -316,29 +316,29 @@ class MxCmp_RR<MxType TYPE>
                     MxBeadReg<1>, MxEncEAd_0, MxExtEmpty>>;
 
 class MxCmp_RI<MxType TYPE>
-    : MxInst<(outs), (ins TYPE.ROp:$reg, TYPE.IOp:$imm),
+    : MxInst<(outs), (ins TYPE.IOp:$imm, TYPE.ROp:$reg),
       "cmpi."#TYPE.Prefix#"\t$imm, $reg",
       [(set CCR, (MxCmp TYPE.VT:$reg, TYPE.IPat:$imm))],
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                        MxEncEAd_1, MxExtEmpty,
-                       !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
+                       !cast<MxEncExt>("MxExtI"#TYPE.Size#"_1")>>;
 
 let mayLoad = 1 in {
 
 class MxCmp_MI<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                MxEncEA EA, MxEncExt EXT>
-    : MxInst<(outs), (ins MEMOpd:$mem, TYPE.IOp:$imm),
+    : MxInst<(outs), (ins TYPE.IOp:$imm, MEMOpd:$mem),
       "cmpi."#TYPE.Prefix#"\t$imm, $mem",
-      [(set CCR, (MxCmp (load MEMPat:$mem), TYPE.IPat:$imm))],
+      [(set CCR, (MxCmp TYPE.IPat:$imm, (load MEMPat:$mem)))],
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
-                       EA, EXT, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_1")>>;
+                       EA, EXT, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
 
 class MxCmp_BI<MxType TYPE>
-    : MxInst<(outs), (ins MxAL32:$abs, TYPE.IOp:$imm),
+    : MxInst<(outs), (ins TYPE.IOp:$imm, MxAL32:$abs),
       "cmpi."#TYPE.Prefix#"\t$imm, $abs",
-      [(set CCR, (MxCmp (load (i32 (MxWrapper tglobaladdr:$abs))), TYPE.IPat:$imm))],
+      [(set CCR, (MxCmp TYPE.IPat:$imm, (load (i32 (MxWrapper tglobaladdr:$abs)))))],
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
-                       MxEncEAb, MxExtI32_0, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_1")>>;
+                       MxEncEAb, MxExtI32_1, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
 
 class MxCmp_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                MxEncEA EA, MxEncExt EXT>
@@ -359,9 +359,11 @@ def NAME#TYPE.FOp.Letter : MxCmp_MR<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_0, MxExt
 }
 
 multiclass MMxCmp_MI<MxType TYPE> {
-def NAME#TYPE.JOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_0, MxExtEmpty>;
-def NAME#TYPE.POp.Letter#"i" : MxCmp_MI<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_0, MxExtI16_0>;
-def NAME#TYPE.FOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_0, MxExtBrief_0>;
+def NAME#TYPE.QOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.QOp, TYPE.QPat, MxEncEAq,   MxExtI16_1>;
+def NAME#TYPE.KOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.KOp, TYPE.KPat, MxEncEAk,   MxExtBrief_1>;
+def NAME#TYPE.POp.Letter#"i" : MxCmp_MI<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_1, MxExtI16_1>;
+def NAME#TYPE.FOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_1, MxExtBrief_1>;
+def NAME#TYPE.JOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_1, MxExtEmpty>;
 }
 
 foreach S = [8, 16, 32] in {

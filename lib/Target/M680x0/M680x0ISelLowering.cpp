@@ -1745,8 +1745,8 @@ EmitTest(SDValue Op, unsigned M680x0CC, const SDLoc &DL,
   // we prove that the arithmetic won't overflow, we can't use OF or CF.
   if (Op.getResNo() != 0 || NeedOF || NeedCF) {
     // Emit a CMP with 0, which is the TEST pattern.
-    return DAG.getNode(M680x0ISD::CMP, DL, MVT::i32, Op,
-                       DAG.getConstant(0, DL, Op.getValueType()));
+    return DAG.getNode(M680x0ISD::CMP, DL, MVT::i8,
+        DAG.getConstant(0, DL, Op.getValueType()), Op);
   }
   unsigned Opcode = 0;
   unsigned NumOperands = 0;
@@ -1882,8 +1882,8 @@ EmitTest(SDValue Op, unsigned M680x0CC, const SDLoc &DL,
 
   if (Opcode == 0) {
     // Emit a CMP with 0, which is the TEST pattern.
-    return DAG.getNode(M680x0ISD::CMP, DL, MVT::i8, Op,
-                       DAG.getConstant(0, DL, Op.getValueType()));
+    return DAG.getNode(M680x0ISD::CMP, DL, MVT::i8,
+        DAG.getConstant(0, DL, Op.getValueType()), Op);
   }
   SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::i8);
   SmallVector<SDValue, 4> Ops(Op->op_begin(), Op->op_begin() + NumOperands);
@@ -2085,7 +2085,6 @@ LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
   SDValue Op1 = Op.getOperand(1);
   SDValue Op2 = Op.getOperand(2);
   SDLoc DL(Op);
-  MVT VT = Op1.getSimpleValueType();
   SDValue CC;
 
   if (Cond.getOpcode() == ISD::SETCC) {
@@ -2099,7 +2098,7 @@ LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
   // (select (x != 0), -1, y) -> ~(sign_bit (x - 1)) | y
   if (Cond.getOpcode() == M680x0ISD::SETCC &&
       Cond.getOperand(1).getOpcode() == M680x0ISD::CMP &&
-      isNullConstant(Cond.getOperand(1).getOperand(1))) {
+      isNullConstant(Cond.getOperand(1).getOperand(0))) {
     SDValue Cmp = Cond.getOperand(1);
 
     unsigned CondCode =cast<ConstantSDNode>(Cond.getOperand(0))->getZExtValue();
@@ -2108,7 +2107,7 @@ LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
         (CondCode == M680x0::COND_EQ || CondCode == M680x0::COND_NE)) {
       SDValue Y = isAllOnesConstant(Op2) ? Op1 : Op2;
 
-      SDValue CmpOp0 = Cmp.getOperand(0);
+      SDValue CmpOp0 = Cmp.getOperand(1);
       // Apply further optimizations for special cases
       // (select (x != 0), -1, 0) -> neg & sbb
       // (select (x == 0), 0, -1) -> neg & sbb
@@ -2125,8 +2124,8 @@ LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
           return Res;
         }
 
-      Cmp = DAG.getNode(M680x0ISD::CMP, DL, MVT::i32,
-                        CmpOp0, DAG.getConstant(1, DL, CmpOp0.getValueType()));
+      Cmp = DAG.getNode(M680x0ISD::CMP, DL, MVT::i8,
+          DAG.getConstant(1, DL, CmpOp0.getValueType()), CmpOp0);
       // Cmp = ConvertCmpIfNecessary(Cmp, DAG);
 
       SDValue Res =   // Res = 0 or -1.

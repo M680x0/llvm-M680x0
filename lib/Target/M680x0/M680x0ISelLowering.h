@@ -32,7 +32,9 @@ namespace llvm {
 
       CALL, RET, TAIL_CALL, TC_RETURN,
 
-      /// M680x0 compare and logical compare instructions
+      /// M680x0 compare and logical compare instructions. Subtracts the source
+      /// operand from the destination data register and sets the condition
+      /// codes according to the result. Immediate always goes first.
       CMP,
 
       /// M680x0 bit-test instructions.
