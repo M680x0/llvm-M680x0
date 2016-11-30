@@ -137,4 +137,24 @@ Lower(const MachineInstr *MI, MCInst &OutMI) const {
     if (MCOp.hasValue() && MCOp.getValue().isValid())
       OutMI.addOperand(MCOp.getValue());
   }
+
+  switch (OutMI.getOpcode()) {
+
+  // TAILJMPj, TAILJMPq - Lower to the correct jump instructions.
+  case M680x0::TAILJMPj:
+  case M680x0::TAILJMPq:{
+    unsigned Opcode;
+    switch (OutMI.getOpcode()) {
+    default: llvm_unreachable("Invalid opcode");
+    case M680x0::TAILJMPj: Opcode = M680x0::JMP32j; break;
+    case M680x0::TAILJMPq: Opcode = M680x0::BRA8; break;
+    }
+
+    MCOperand Saved = OutMI.getOperand(0);
+    OutMI = MCInst();
+    OutMI.setOpcode(Opcode);
+    OutMI.addOperand(Saved);
+    break;
+  }
+  }
 }
