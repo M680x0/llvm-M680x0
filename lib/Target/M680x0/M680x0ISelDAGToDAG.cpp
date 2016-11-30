@@ -90,11 +90,19 @@ struct M680x0ISelAddressMode {
     return BaseType == FrameIndexBase || BaseReg.getNode() != nullptr;
   }
 
-  bool hasBaseReg() {
+  bool hasFrameIndex() const {
+    return BaseType == FrameIndexBase;
+  }
+
+  bool hasBaseReg() const {
     return BaseType == RegBase && BaseReg.getNode() != nullptr;
   }
 
-  bool hasDisp() {
+  bool hasIndexReg() const {
+    return BaseType == RegBase && IndexReg.getNode() != nullptr;
+  }
+
+  bool hasDisp() const {
     return Disp != 0;
   }
 
@@ -136,6 +144,10 @@ struct M680x0ISelAddressMode {
   void setBaseReg(SDValue Reg) {
     BaseType = RegBase;
     BaseReg = Reg;
+  }
+
+  void setIndexReg(SDValue Reg) {
+    IndexReg = Reg;
   }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
@@ -215,6 +227,7 @@ private:
                   SDValue &Imm, SDValue &Base, SDValue &Index);
   bool SelectAL(SDNode *Parent, SDValue N, SDValue &Sym);
   bool SelectPCD(SDNode *Parent, SDValue N, SDValue &Imm);
+  bool SelectPCI(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Index);
 
   // If Address Mode represents Frame Index store FI in Disp and
   // Displacement bit size in Base. These values are read symmetrically by
@@ -233,7 +246,7 @@ private:
   }
 
   // Gets a symbol plus optional displacement
-  inline bool getAbsoluteAddress(M680x0ISelAddressMode &AM,
+  inline bool getSymbolicDisplacement(M680x0ISelAddressMode &AM,
                                  const SDLoc &DL,
                                  SDValue &Sym) {
     if (AM.GV) {
@@ -266,28 +279,18 @@ private:
     return false;
   }
 
-  inline bool getSymbolDisp(M680x0ISelAddressMode &AM, const SDLoc &DL,
-                                   SDValue &Disp, SDValue &Base) {
-    if (AM.hasBaseReg() && getAbsoluteAddress(AM, DL, Disp)) {
-      Base = AM.BaseReg;
-      return true;
-    }
-
-    return false;
-  }
-
   /// Return a target constant with the specified value of type i8.
-  inline SDValue getI8Imm(unsigned Imm, const SDLoc &DL) {
+  inline SDValue getI8Imm(int64_t Imm, const SDLoc &DL) {
     return CurDAG->getTargetConstant(Imm, DL, MVT::i8);
   }
 
   /// Return a target constant with the specified value of type i8.
-  inline SDValue getI16Imm(unsigned Imm, const SDLoc &DL) {
+  inline SDValue getI16Imm(int64_t Imm, const SDLoc &DL) {
     return CurDAG->getTargetConstant(Imm, DL, MVT::i16);
   }
 
   /// Return a target constant with the specified value, of type i32.
-  inline SDValue getI32Imm(unsigned Imm, const SDLoc &DL) {
+  inline SDValue getI32Imm(int64_t Imm, const SDLoc &DL) {
     return CurDAG->getTargetConstant(Imm, DL, MVT::i32);
   }
 
@@ -368,9 +371,9 @@ foldOffsetIntoAddress(uint64_t Offset, M680x0ISelAddressMode &AM) {
 bool M680x0DAGToDAGISel::
 matchAddressBase(SDValue N, M680x0ISelAddressMode &AM) {
   // Is the base register already occupied?
-  if (AM.BaseType != M680x0ISelAddressMode::RegBase || AM.BaseReg.getNode()) {
+  if (AM.hasBase()) {
     // If so, check to see if the scale index register is set.
-    if (!AM.IndexReg.getNode()) {
+    if (!AM.hasIndexReg()) {
       AM.IndexReg = N;
       AM.Scale = 1;
       return true;
@@ -420,11 +423,6 @@ matchLoadInAddress(LoadSDNode *N, M680x0ISelAddressMode &AM){
 bool M680x0DAGToDAGISel::
 matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
   SDLoc DL(N);
-
-  // DEBUG({
-  //   dbgs() << "MatchAddress: ";
-  //   AM.dump();
-  // });
 
   // Limit recursion.
   if (Depth > 5)
@@ -554,8 +552,7 @@ matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
   // If we couldn't fold both operands into the address at the same time,
   // see if we can just put each operand into a register and fold at least
   // the add.
-  if (AM.BaseType == M680x0ISelAddressMode::RegBase &&
-      !AM.BaseReg.getNode() && !AM.IndexReg.getNode()) {
+  if (!AM.hasBase() && !AM.hasIndexReg()) {
     N = Handle.getValue();
     AM.BaseReg = N.getOperand(0);
     AM.IndexReg = N.getOperand(1);
@@ -581,12 +578,14 @@ matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
 
   if (N.getOpcode() == M680x0ISD::WrapperPC) {
 
-    // Base and index reg must be 0 in order to use %pc as base.
-    if (AM.hasBase())
+    // If cannot match here just restore the old version
+    M680x0ISelAddressMode Backup = AM;
+
+    if (AM.hasBase()) {
       return false;
+    }
 
     if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(N0)) {
-      M680x0ISelAddressMode Backup = AM;
       AM.GV = G->getGlobal();
       AM.SymbolFlags = G->getTargetFlags();
       if (!foldOffsetIntoAddress(G->getOffset(), AM)) {
@@ -594,7 +593,6 @@ matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
         return false;
       }
     } else if (ConstantPoolSDNode *CP = dyn_cast<ConstantPoolSDNode>(N0)) {
-      M680x0ISelAddressMode Backup = AM;
       AM.CP = CP->getConstVal();
       AM.Align = CP->getAlignment();
       AM.SymbolFlags = CP->getTargetFlags();
@@ -611,7 +609,6 @@ matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
       AM.JT = J->getIndex();
       AM.SymbolFlags = J->getTargetFlags();
     } else if (BlockAddressSDNode *BA = dyn_cast<BlockAddressSDNode>(N0)) {
-      M680x0ISelAddressMode Backup = AM;
       AM.BlockAddr = BA->getBlockAddress();
       AM.SymbolFlags = BA->getTargetFlags();
       if (!foldOffsetIntoAddress(BA->getOffset(), AM)) {
@@ -698,7 +695,7 @@ SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
   }
 
   // ARI does not use these
-  if (AM.IndexReg.getNode() || AM.Disp != 0) {
+  if (AM.hasIndexReg() || AM.Disp != 0) {
     DEBUG(dbgs() << "REJECT: Index Reg or Disp cannot be matched by ARI\n");
     return false;
   }
@@ -709,10 +706,13 @@ SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
     return false;
   }
 
-  Base = AM.BaseReg;
+  if (AM.hasBaseReg()) {
+    Base = AM.BaseReg;
+    DEBUG(dbgs() << "SUCCESS\n");
+    return true;
+  }
 
-  DEBUG(dbgs() << "SUCCESS\n");
-  return true;;
+  return false;
 }
 
 bool M680x0DAGToDAGISel::
@@ -742,24 +742,20 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
     return false;
   }
 
-  // MVT VT = N.getSimpleValueType();
-  if (AM.BaseType == M680x0ISelAddressMode::RegBase) {
-    if (!AM.BaseReg.getNode()) {
-      DEBUG(dbgs() << "REJECT: Could match Base Reg\n");
-      return false;
-    }
-    // TODO Base and Index suppression is available since x20 i think
-    // AM.BaseReg = CurDAG->getRegister(0, VT);
-  }
-
   // If this is a frame index, grab it
   if (getFrameIndexAddress(AM, SDLoc(N), Disp, Base)) {
     DEBUG(dbgs() << "SUCCESS matched FI\n");
     return true;
   }
 
+  if (!AM.hasBaseReg()) {
+    DEBUG(dbgs() << "REJECT: No Base reg\n");
+    return false;
+  }
+
   // If this is a frame index, grab it
-  if (getSymbolDisp(AM, SDLoc(N), Disp, Base)) {
+  if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
+    Base = AM.BaseReg;
     DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
@@ -770,8 +766,8 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
     return false;
   }
 
-  Disp = getI16Imm(AM.Disp, SDLoc(N));
   Base = AM.BaseReg;
+  Disp = getI16Imm(AM.Disp, SDLoc(N));
 
   DEBUG(dbgs() << "SUCCESS\n");
   return true;
@@ -779,10 +775,48 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
 
 bool M680x0DAGToDAGISel::
 SelectARII(SDNode *Parent, SDValue N,
-                  SDValue &Imm, SDValue &Base, SDValue &Index) {
+           SDValue &Disp, SDValue &Base, SDValue &Index) {
+  M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARII);
   DEBUG(dbgs() << "Selecting ARII: ");
-  DEBUG(dbgs() << "NOT IMPLEMENTED\n");
-  return false;
+
+  if (!matchAddress(N, AM))
+    return false;
+
+  if (AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: PC relative\n");
+    return false;
+  }
+
+  if (!AM.hasIndexReg()) {
+    DEBUG(dbgs() << "REJECT: No Index, should be matched by ARID\n");
+    return false;
+  }
+
+  if (!AM.hasBaseReg()) {
+    DEBUG(dbgs() << "REJECT: No Base\n");
+    return false;
+  }
+
+  // If we have a symbol as index, make it the base
+  unsigned Opcode = AM.IndexReg.getOpcode();
+  if (Opcode == M680x0ISD::WrapperPC || Opcode == M680x0ISD::Wrapper) {
+    Base = AM.IndexReg;
+    Index = AM.BaseReg;
+  } else {
+    Index = AM.IndexReg;
+    Base = AM.BaseReg;
+  }
+
+  if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
+    assert(!AM.Disp && "Should not be any displacement");
+    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
+    return true;
+  }
+
+  Disp = getI8Imm(AM.Disp, SDLoc(N));
+
+  DEBUG(dbgs() << "SUCCESS\n");
+  return true;
 }
 
 bool M680x0DAGToDAGISel::
@@ -801,12 +835,18 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
   }
 
   // AL does not use these
-  if (AM.IndexReg.getNode()) {
-    DEBUG(dbgs() << "REJECT: Index Reg cannot be matched by AL\n");
+  if (AM.hasIndexReg()) {
+    DEBUG(dbgs() << "REJECT: Index cannot be matched by AL\n");
     return false;
   }
 
-  if (getAbsoluteAddress(AM, SDLoc(N), Sym)) {
+  if (getSymbolicDisplacement(AM, SDLoc(N), Sym)) {
+    DEBUG(dbgs() << "SUCCESS: Matched symbol\n");
+    return true;
+  }
+
+  if (AM.Disp) {
+    Sym = getI32Imm(AM.Disp, SDLoc(N));
     DEBUG(dbgs() << "SUCCESS\n");
     return true;
   }
@@ -826,13 +866,51 @@ SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
     DEBUG(dbgs() << "REJECT: Not PC relative\n");
     return false;
   }
+    
+  if (AM.hasIndexReg()) {
+    DEBUG(dbgs() << "REJECT: Not PC relative\n");
+    return false;
+  }
 
-  if (getAbsoluteAddress(AM, SDLoc(N), Disp)) {
+  if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
+    assert(!AM.Disp && "Should not be any displacement");
     DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
 
   Disp = getI16Imm(AM.Disp, SDLoc(N));
+
+  DEBUG(dbgs() << "SUCCESS\n");
+  return true;
+}
+
+bool M680x0DAGToDAGISel::
+SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Index) {
+  DEBUG(dbgs() << "Selecting PCI: ");
+  M680x0ISelAddressMode AM(M680x0ISelAddressMode::PCI);
+
+  if (!matchAddress(N, AM))
+    return false;
+
+  if (!AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: Not PC relative\n");
+    return false;
+  }
+
+  if (!AM.hasIndexReg()) {
+    DEBUG(dbgs() << "REJECT: No Index, should be matched by PCD\n");
+    return false;
+  }
+
+  Index = AM.IndexReg;
+
+  if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
+    assert(!AM.Disp && "Should not be any displacement");
+    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
+    return true;
+  }
+
+  Disp = getI8Imm(AM.Disp, SDLoc(N));
 
   DEBUG(dbgs() << "SUCCESS\n");
   return true;
