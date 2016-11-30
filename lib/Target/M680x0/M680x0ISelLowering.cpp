@@ -46,6 +46,8 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
 
   setBooleanContents(ZeroOrOneBooleanContent);
 
+  ValueTypeActions.setTypeAction(MVT::i64, TypeExpandInteger);
+
   // Use _setjmp/_longjmp instead of setjmp/longjmp.
   setUseUnderscoreSetJmp(true);
   setUseUnderscoreLongJmp(true);
@@ -60,21 +62,23 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   for (auto VT : MVT::integer_valuetypes())
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
 
+  setOperationAction(ISD::MUL, MVT::i8,  Legal);
+  setOperationAction(ISD::MUL, MVT::i16, Legal);
+  setOperationAction(ISD::MUL, MVT::i32, Custom);
+
   for (auto OP : { ISD::SDIV, ISD::UDIV,
                    ISD::SREM, ISD::UREM,
-                   ISD::MUL, ISD::MULHS, ISD::MULHU,
+                   ISD::MULHS, ISD::MULHU,
                    ISD::UMUL_LOHI, ISD::SMUL_LOHI }) {
     setOperationAction(OP, MVT::i8,  Legal);
     setOperationAction(OP, MVT::i16, Legal);
     setOperationAction(OP, MVT::i32, LibCall);
-    setOperationAction(OP, MVT::i64, LibCall);
   }
 
   for (auto OP : { ISD::SMULO, ISD::UMULO }) {
     setOperationAction(OP, MVT::i8,  Expand);
     setOperationAction(OP, MVT::i16, Expand); //FIXME something wrong with custom lowering here
     setOperationAction(OP, MVT::i32, Expand);
-    setOperationAction(OP, MVT::i64, Expand);
   }
 
   // Add/Sub overflow ops with MVT::Glues are lowered to CCR dependences.
@@ -1349,30 +1353,11 @@ IsEligibleForTailCallOptimization(SDValue Callee, CallingConv::ID CalleeCC,
 // Custom Lower
 //===----------------------------------------------------------------------===//
 
-/// Replace a node with an illegal result type with a new node built out of
-/// custom code.
-// void M680x0TargetLowering::
-// ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
-//                    SelectionDAG &DAG) const {
-//   SDLoc dl(N);
-//   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-//   switch (N->getOpcode()) {
-//   default:
-//     llvm_unreachable("Do not know how to custom type legalize this operation!");
-//   case ISD::SIGN_EXTEND_INREG:
-//   case ISD::ADDC:
-//   case ISD::ADDE:
-//   case ISD::SUBC:
-//   case ISD::SUBE:
-//     // We don't want to expand or promote these.
-//     return;
-//   }
-// }
-
 SDValue M680x0TargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default: llvm_unreachable("Should not custom lower this!");
+  case ISD::MUL:                return LowerMUL(Op, DAG);
   case ISD::SADDO:
   case ISD::UADDO:
   case ISD::SSUBO:
@@ -1393,6 +1378,65 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
   }
+}
+
+SDValue M680x0TargetLowering::
+LowerMUL(SDValue &N, SelectionDAG &DAG) const {
+  EVT VT = N->getValueType(0);
+  SDLoc DL(N);
+
+  ConstantSDNode *C = dyn_cast<ConstantSDNode>(N->getOperand(1));
+
+  if (C && isPowerOf2_64(C->getZExtValue())) {
+    uint64_t MulAmt = C->getZExtValue();
+
+    if (isPowerOf2_64(MulAmt))
+      return DAG.getNode(ISD::SHL, DL, VT, N->getOperand(0),
+                           DAG.getConstant(Log2_64(MulAmt), DL, MVT::i8));
+
+    if (isPowerOf2_64(MulAmt - 1)) {
+      // (mul x, 2^N + 1) => (add (shl x, N), x)
+      return DAG.getNode(ISD::ADD, DL, VT, N->getOperand(0),
+                         DAG.getNode(ISD::SHL, DL, VT, N->getOperand(0),
+                         DAG.getConstant(Log2_64(MulAmt - 1), DL,
+                         MVT::i8)));
+    }
+
+    if (isPowerOf2_64(MulAmt + 1)) {
+      // (mul x, 2^N - 1) => (sub (shl x, N), x)
+      return DAG.getNode(ISD::SUB, DL, VT, DAG.getNode(ISD::SHL, DL, VT,
+                         N->getOperand(0),
+                         DAG.getConstant(Log2_64(MulAmt + 1),
+                         DL, MVT::i8)), N->getOperand(0));
+    }
+  }
+
+  // These cannot be handle by M68000 and M68010
+  if (!Subtarget.isM68020()) {
+    SDValue LHS = N->getOperand(0);
+    SDValue RHS = N->getOperand(1);
+    if (VT == MVT::i32) {
+      SDValue Args[] = { LHS, RHS };
+      return makeLibCall( DAG, RTLIB::MUL_I32, VT, Args, true, DL).first;
+    } else if (VT == MVT::i64) {
+      unsigned LoSize = VT.getSizeInBits();
+      SDValue HiLHS = DAG.getNode(ISD::SRA, DL, VT, LHS,
+                      DAG.getConstant(LoSize - 1, DL,
+                                      getPointerTy(DAG.getDataLayout())));
+      SDValue HiRHS = DAG.getNode(ISD::SRA, DL, VT, RHS,
+                      DAG.getConstant(LoSize - 1, DL,
+                                      getPointerTy(DAG.getDataLayout())));
+      SDValue Args[] = { HiLHS, LHS, HiRHS, RHS };
+      SDValue Ret = makeLibCall( DAG, RTLIB::MUL_I64, VT, Args, true, DL).first;
+
+      // We are intereseted in Lo part
+      return DAG.getNode(ISD::EXTRACT_ELEMENT, DL, VT, Ret,
+                         DAG.getIntPtrConstant(0, DL));
+    }
+  }
+
+  // The rest is considered legal
+  return SDValue();
 }
 
 SDValue M680x0TargetLowering::
@@ -1892,8 +1936,7 @@ EmitCmp(SDValue Op0, SDValue Op1, unsigned M680x0CC,
     }
     // Use SUB instead of CMP to enable CSE between SUB and CMP.
     SDVTList VTs = DAG.getVTList(Op0.getValueType(), MVT::i8);
-    SDValue Sub = DAG.getNode(M680x0ISD::SUB, DL, VTs,
-                              Op0, Op1);
+    SDValue Sub = DAG.getNode(M680x0ISD::SUB, DL, VTs, Op0, Op1);
     return SDValue(Sub.getNode(), 1);
   }
   return DAG.getNode(M680x0ISD::CMP, DL, MVT::i8, Op0, Op1);
@@ -3093,4 +3136,17 @@ EmitInstrWithCustomInserter(MachineInstr &MI,
     return EmitLoweredSelect(MI, BB);
 
   }
+}
+
+//===----------------------------------------------------------------------===//
+// DAG Combine
+//===----------------------------------------------------------------------===//
+
+SDValue M680x0TargetLowering::
+PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const {
+  // SelectionDAG &DAG = DCI.DAG;
+  // switch (N->getOpcode()) {
+  // }
+  //
+  return SDValue();
 }

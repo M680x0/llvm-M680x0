@@ -36,7 +36,7 @@ namespace M680x0 {
   enum { 
     MemDisp = 0,
     MemBase = 1,
-    MemScale = 2, //FIXME assumes Scale 1 for now
+    MemIndex = 2, //FIXME assumes Scale 1 for now
     MemOuter = 3
   };
 

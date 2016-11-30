@@ -116,10 +116,12 @@ namespace llvm {
     /// Provide custom lowering hooks for some operations.
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
-    /// Replace the results of node with an illegal result type with new values
-    /// built out of custom code.
+    // Replace the results of node with an illegal result type with new values
+    // built out of custom code.
     // void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
     //                         SelectionDAG &DAG) const override;
+
+    SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
     MachineBasicBlock *
     EmitInstrWithCustomInserter(MachineInstr &MI,
@@ -155,6 +157,7 @@ namespace llvm {
                              const CCValAssign &VA,
                              ISD::ArgFlagsTy Flags) const;
 
+    SDValue LowerMUL(SDValue &N, SelectionDAG &DAG) const;
     SDValue LowerXALUO(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerToBT(SDValue And, ISD::CondCode CC, const SDLoc &DL,
                       SelectionDAG &DAG) const;

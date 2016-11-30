@@ -109,7 +109,7 @@ EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
   MCOperand MCO;
   // TODO PCRel operands are always Alt for reg
   if (MIO.isTargetType() && MIO.OpsNum > 1) {
-    MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemScale : M680x0::MemBase));
+    MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemIndex : M680x0::MemBase));
   } else {
     assert (!Alt && "You cannot use Alt register with a simple operand");
     MCO = MI.getOperand(MIO.MINo);
