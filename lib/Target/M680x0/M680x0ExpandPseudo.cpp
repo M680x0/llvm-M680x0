@@ -178,10 +178,10 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     // Jump to label or value in register.
     if (Opcode == M680x0::TCRETURNq) {
       MachineInstrBuilder MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::TAILJMPq));
-      if (JumpTarget.isGlobal())
+      if (JumpTarget.isGlobal()) {
         MIB.addGlobalAddress(JumpTarget.getGlobal(), JumpTarget.getOffset(),
                              JumpTarget.getTargetFlags());
-      else {
+      } else {
         assert(JumpTarget.isSymbol());
         MIB.addExternalSymbol(JumpTarget.getSymbolName(),
                               JumpTarget.getTargetFlags());

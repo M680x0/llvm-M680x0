@@ -59,12 +59,22 @@ runOnMachineFunction(MachineFunction &MF) {
 
 void M680x0AsmPrinter::
 EmitInstruction(const MachineInstr *MI) {
-  if (MI->isPseudo()) {
-    DEBUG(dbgs()
-        << "Pseudo opcode("
-        << MI->getOpcode()
-        << ") found in EmitInstruction()\n");
-    llvm_unreachable("Cannot proceed");
+  switch (MI->getOpcode()) {
+  default: {
+    if (MI->isPseudo()) {
+      DEBUG(dbgs()
+          << "Pseudo opcode("
+          << MI->getOpcode()
+          << ") found in EmitInstruction()\n");
+      llvm_unreachable("Cannot proceed");
+    }
+    break;
+  }
+  case M680x0::TAILJMPj:
+  case M680x0::TAILJMPq:
+    // Lower these as normal, but add some comments.
+    OutStreamer->AddComment("TAILCALL");
+    break;
   }
 
   MCInst TmpInst0;
@@ -74,12 +84,12 @@ EmitInstruction(const MachineInstr *MI) {
 
 void M680x0AsmPrinter::
 EmitFunctionBodyStart() {
-    // TODO
+  // TODO
 }
 
 void M680x0AsmPrinter::
 EmitFunctionBodyEnd() {
-    // TODO
+  // TODO
 }
 
 void M680x0AsmPrinter::
