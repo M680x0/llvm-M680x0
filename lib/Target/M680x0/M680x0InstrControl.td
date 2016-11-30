@@ -184,8 +184,9 @@ let isCall = 1 in
 // registers are added manually.
 let Uses = [SP] in {
 
-def CALLB : MxInst<(outs), (ins MxAL32 :$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
+def CALLk : MxInst<(outs), (ins MxPCI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAk,   MxExtBrief_0>>;
 def CALLq : MxInst<(outs), (ins MxPCD32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
+def CALLB : MxInst<(outs), (ins MxAL32 :$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
 def CALLj : MxInst<(outs), (ins MxARI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
 
 } // let Uses = [SP]
@@ -208,13 +209,15 @@ def : Pat<(MxCall iPTR:$dst), (CALLj MxARI32:$dst)>, Requires<[IsPIC]>;
 
 let isCodeGenOnly = 1 in {
 let Uses = [SP] in {
-let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1 in {
+let isCall = 1, isTerminator = 1, isBarrier = 1 in {
 
-def TCRETURNq : MxPseudo<(outs), (ins MxPCI32:$dst,    i32imm:$adj)>;
-def TAILJMPq  : MxPseudo<(outs), (ins MxPCI32:$dst)>;
+let isReturn = 1 in
+def TCRETURNq : MxPseudo<(outs), (ins MxPCD32:$dst,    i32imm:$adj)>;
+def TAILJMPq  : MxPseudo<(outs), (ins MxPCD32:$dst)>;
 
 // NOTE j does not mean load and jump M680x0 jmp just calculates EA and jumps
 // and it is using Mem form like (An) thus j letter.
+let isReturn = 1 in
 def TCRETURNj : MxPseudo<(outs), (ins MxARI32_TC:$dst, i32imm:$adj)>;
 def TAILJMPj  : MxPseudo<(outs), (ins MxARI32_TC:$dst)>;
 }

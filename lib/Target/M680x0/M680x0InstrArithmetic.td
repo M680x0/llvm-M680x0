@@ -15,7 +15,7 @@
 //    ADD       [~]   ADDA      [~]   ADDI        [~]   ADDQ [ ]   ADDX [~]
 //    CLR       [ ]   CMP       [~]   CMPA        [~]   CMPI [~]   CMPM [ ]
 //    CMP2      [ ]   DIVS/DIVU [~]   DIVSL/DIVUL [ ]   EXT  [~]   EXTB [ ]
-//    MULS/MULU [~]   NEG       [~]   NEGX        [ ]   SUB  [~]   SUBA [~]
+//    MULS/MULU [~]   NEG       [~]   NEGX        [~]   SUB  [~]   SUBA [~]
 //    SUBI      [~]   SUBQ      [ ]   SUBX        [~]
 //
 //  Map:
@@ -162,9 +162,13 @@ def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
 
 } // isCommutable = ?
 
-def NAME#"8dj"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_2, MxExtEmpty>;
-def NAME#"16dj" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
-def NAME#"32rj" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"8dk"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.KOp,  MxType8.KPat,  CMD, MxEncEAk, MxExtBrief_2>;
+def NAME#"16dk" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.KOp, MxType16.KPat, CMD, MxEncEAk, MxExtBrief_2>;
+def NAME#"32rk" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_2>;
+
+def NAME#"8dq"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.QOp,  MxType8.QPat,  CMD, MxEncEAq, MxExtI16_2>;
+def NAME#"16dq" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.QOp, MxType16.QPat, CMD, MxEncEAq, MxExtI16_2>;
+def NAME#"32rq" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_2>;
 
 def NAME#"8dp"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_2, MxExtI16_2>;
 def NAME#"16dp" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.POp, MxType16.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
@@ -173,6 +177,10 @@ def NAME#"32rp" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.POp, MxType32.PPat
 def NAME#"8df"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.FOp,  MxType8.FPat,  CMD, MxEncEAf_2, MxExtBrief_2>;
 def NAME#"16df" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.FOp, MxType16.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
 def NAME#"32rf" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
+
+def NAME#"8dj"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"16dj" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"32rj" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
 
 def NAME#"8di"  : MxBiArOp_RFRI_xEA<MN, NODE, MxType8d,  CMD>;
 def NAME#"16di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType16d, CMD>;

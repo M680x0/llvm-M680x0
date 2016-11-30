@@ -1,5 +1,4 @@
-//=== M680x0InstrFormats.td - Motorola 680x0 Instruction Formats tablegen -===//
-//
+//=== M680x0InstrFormats.td - Motorola 680x0 Instruction Formats tablegen -===// //
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
@@ -227,7 +226,7 @@ def MxEncEAf_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b11>, MxBead1Bit<0>>;
 def MxEncEAb : MxEncEA<MxBead3Bits<0b000>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAB : MxEncEA<MxBead3Bits<0b001>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAq : MxEncEA<MxBead3Bits<0b010>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
-def MxEncEAg : MxEncEA<MxBead3Bits<0b011>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+def MxEncEAk : MxEncEA<MxBead3Bits<0b011>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAi : MxEncEA<MxBead3Bits<0b100>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 
 // Allows you to specify each bit of opcode

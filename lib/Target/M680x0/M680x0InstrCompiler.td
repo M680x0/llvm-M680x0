@@ -106,7 +106,7 @@ def : Pat<(MxTCRet AR32_TC:$dst, imm:$adj),
           (TCRETURNj MxARI32_TC:$dst, imm:$adj)>;
 
 def : Pat<(MxTCRet (i32 tglobaladdr:$dst), imm:$adj),
-          (TCRETURNq MxPCI32:$dst, imm:$adj)>;
+          (TCRETURNq MxPCD32:$dst, imm:$adj)>;
 
 def : Pat<(MxTCRet (i32 texternalsym:$dst), imm:$adj),
-          (TCRETURNq MxPCI32:$dst, imm:$adj)>;
+          (TCRETURNq MxPCD32:$dst, imm:$adj)>;
