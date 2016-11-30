@@ -65,11 +65,72 @@ bool M680x0Subtarget::
 isPositionIndependent() const { return TM.isPositionIndependent(); }
 
 bool M680x0Subtarget::
-isLegalToCallImmediateAddr() const {
+isLegalToCallImmediateAddr() const { return true; }
+
+bool M680x0Subtarget::
+abiUsesSoftFloat() const {
+//  return TM->Options.UseSoftFloat;
   return true;
-  // return isTargetELF() || TM.getRelocationModel() == Reloc::Static;
 }
 
+M680x0Subtarget & M680x0Subtarget::
+initializeSubtargetDependencies(StringRef CPU, StringRef FS,
+                                const M680x0TargetMachine &TM) {
+  std::string CPUName = selectM680x0CPU(TargetTriple, CPU);
+
+  // Parse features string.
+  ParseSubtargetFeatures(CPUName, FS);
+  // Initialize scheduling itinerary for the specified CPU.
+  InstrItins = getInstrItineraryForCPU(CPUName);
+
+  // Default stack alignment is 8 bytes, ??? Do I need this override?
+  // if (StackAlignOverride)
+  //   stackAlignment = StackAlignOverride;
+  // else
+    stackAlignment = 8;
+
+  return *this;
+}
+
+//===----------------------------------------------------------------------===//
+// Code Model
+//
+// Key assumptions:
+//  - Whenever possible we use pc-rel encoding since it is smaller(16 bit) than
+//    absolute(32 bit).
+//  - GOT is reachable within 16 bit offset for both Small and Medium models.
+//  - Code section is reachable within 16 bit offset for both models.
+//
+//  ---------------------+-------------------------+--------------------------
+//                       |          Small          |          Medium          
+//                       +-------------------------+------------+-------------
+//                       |   Static   |    PIC     |   Static   |    PIC      
+//  ---------------------+------------+------------+------------+-------------
+//                branch |   pc-rel   |   pc-rel   |   pc-rel   |   pc-rel    
+//  ---------------------+------------+------------+------------+-------------
+//           call global |    @PLT    |    @PLT    |    @PLT    |    @PLT     
+//  ---------------------+------------+------------+------------+-------------
+//         call internal |   pc-rel   |   pc-rel   |   pc-rel   |   pc-rel    
+//  ---------------------+------------+------------+------------+-------------
+//            data local |   pc-rel   |   pc-rel   |  ~pc-rel   |  ^pc-rel 
+//  ---------------------+------------+------------+------------+-------------
+//       data local big* |   pc-rel   |   pc-rel   |  absolute  |  @GOTOFF
+//  ---------------------+------------+------------+------------+-------------
+//           data global |   pc-rel   |  @GOTPCREL |  ~pc-rel   |  @GOTPCREL           
+//  ---------------------+------------+------------+------------+-------------
+//      data global big* |   pc-rel   |  @GOTPCREL |  absolute  |  @GOTPCREL
+//  ---------------------+------------+------------+------------+-------------
+//
+// * Big data potentially cannot be reached within 16 bit offset and requires
+//   special handling for old(x00 and x10) CPUs. Normally these symbols go into
+//   separate .ldata section which mapped after normal .data and .text, but I
+//   don't really know how this must be done for M680x0 atm... will try to dig
+//   this info out from GCC. For now CPUs prior to M68020 will use static ref
+//   for Static Model and @GOT based references for PIC.
+//
+// ~ These are absolute for older CPUs for now.
+// ^ These are @GOTOFF for older CPUs for now.
+//===----------------------------------------------------------------------===//
 
 /// Classify a blockaddress reference for the current subtarget according to how
 /// we should reference it in a non-pcrel context.
@@ -171,28 +232,4 @@ classifyGlobalFunctionReference(const GlobalValue *GV, const Module &M) const {
 
   // otherwise linker will figure this out
   return M680x0II::MO_PLT;
-}
-
-M680x0Subtarget & M680x0Subtarget::
-initializeSubtargetDependencies(StringRef CPU, StringRef FS,
-                                const M680x0TargetMachine &TM) {
-  std::string CPUName = selectM680x0CPU(TargetTriple, CPU);
-
-  // Parse features string.
-  ParseSubtargetFeatures(CPUName, FS);
-  // Initialize scheduling itinerary for the specified CPU.
-  InstrItins = getInstrItineraryForCPU(CPUName);
-
-  // Default stack alignment is 8 bytes, ??? Do I need this override?
-  // if (StackAlignOverride)
-  //   stackAlignment = StackAlignOverride;
-  // else
-    stackAlignment = 8;
-
-  return *this;
-}
-
-bool M680x0Subtarget::abiUsesSoftFloat() const {
-//  return TM->Options.UseSoftFloat;
-  return true;
 }
