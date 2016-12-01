@@ -56,6 +56,7 @@ def MxMoveSize8  : MxMoveSize<0b01>;
 def MxMoveSize16 : MxMoveSize<0b11>;
 def MxMoveSize32 : MxMoveSize<0b10>;
 
+let Defs = [CCR] in
 class MxMove<string size, dag outs, dag ins, list<dag> pattern, MxEncoding enc>
     : MxInst<outs, ins, "move."#size#"\t$src, $dst", pattern, enc>;
 
@@ -437,6 +438,7 @@ defm MOV32j : MMxMove_MM<MxType32,     MxType32.JOp, MxType32.JPat,
 ///                               | EFFECTIVE ADDRESS
 ///  0  1  0  0  0  1  0  0  1  1 |   MODE  |   REG
 /// --------------------------------------------------
+let Defs = [CCR] in
 class MxMoveToCCR<dag INS, MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs CCRC:$dst), INS, "move.w\t$src, $dst", [],
       MxEncoding<EA.Reg, EA.DA, EA.Mode,
@@ -460,6 +462,7 @@ def  MOV8cd : MxMoveToCCRPseudo<(ins MxType8d.ROp:$src)>;
 ///                               | EFFECTIVE ADDRESS
 ///  0  1  0  0  0  0  1  0  1  1 |   MODE  |   REG
 /// --------------------------------------------------
+let Uses = [CCR] in
 class MxMoveFromCCR<dag INS, MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs), INS, "move.w\t$src, $dst", [],
       MxEncoding<EA.Reg, EA.DA, EA.Mode,

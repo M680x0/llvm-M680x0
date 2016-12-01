@@ -36,6 +36,10 @@ normal:
   store i32 0, i32* %X
   br label %carry
 
+carry:
+    ret i1 false
+}
+
 ; x00-LABEL: test7:
 ; x00:       move.l (4,%sp), %d0
 ; x00-NEXT:  add.l  (8,%sp), %d0

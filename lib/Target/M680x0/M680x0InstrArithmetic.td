@@ -83,6 +83,9 @@ class MxArithImmEncoding<MxBead4Bits CMD, MxEncSize SIZE,
 // Add/Sub
 //===----------------------------------------------------------------------===//
 
+let Defs = [CCR] in {
+let Constraints = "$src = $dst" in {
+
 // $reg, $ccr <- $reg op $reg
 class MxBiArOp_RFRR_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
@@ -128,18 +131,6 @@ class MxBiArOp_RFRI<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
                    !cast<MxEncExt>("MxExtI"#TYPE.Size#"_2")>>;
 
 let mayLoad = 1 in
-let mayStore = 1 in
-class MxBiArOp_RFMI<string MN, SDNode NODE, MxType TYPE,
-                    MxOperand MEMOpd, ComplexPattern MEMPat,
-                    bits<4> CMD, MxEncEA MEMEA, MxEncExt MEMExt>
-    : MxInst<(outs), (ins MEMOpd:$dst, TYPE.IOp:$opd),
-              MN#"."#TYPE.Prefix#"\t$opd, $dst",
-              [(store (NODE (load MEMPat:$dst), TYPE.IPat:$opd), MEMPat:$dst)],
-              MxArithImmEncoding<MxBead4Bits<CMD>,
-                                 !cast<MxEncSize>("MxEncSize"#TYPE.Size),
-                                 MEMEA, MEMExt,
-                                 !cast<MxEncExt>("MxExtI"#TYPE.Size#"_1")>>;
-
 class MxBiArOp_RFRM<string MN, SDNode NODE, MxType TYPE, MxOperand OPD, ComplexPattern PAT,
                     bits<4> CMD, MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, OPD:$opd),
@@ -149,19 +140,41 @@ class MxBiArOp_RFRM<string MN, SDNode NODE, MxType TYPE, MxOperand OPD, ComplexP
                            !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#TYPE.RLet#"EA"),
                            MxBeadReg<0>, EA, EXT>>;
 
+} // Constraints
+
+let mayLoad = 1, mayStore = 1 in {
+
+class MxBiArOp_FMR<string MN, SDNode NODE, MxType TYPE,
+                   MxOperand MEMOpd, ComplexPattern MEMPat,
+                   bits<4> CMD, MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins MEMOpd:$dst, TYPE.ROp:$opd),
+        MN#"."#TYPE.Prefix#"\t$opd, $dst",
+        // FIXME These cannot consume CCR from MxAdd/MxSub which leads for
+        // MxAdd to survive the match and subsequent malmatch.
+        /* [(store (NODE (TYPE.Load MEMPat:$dst), TYPE.VT:$opd), MEMPat:$dst)], */
+        [],
+         MxArithEncoding<MxBead4Bits<CMD>,
+                         !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#"EA"#TYPE.RLet),
+                         MxBeadReg<1>, EA, EXT>>;
+
+class MxBiArOp_FMI<string MN, SDNode NODE, MxType TYPE,
+                   MxOperand MEMOpd, ComplexPattern MEMPat,
+                   bits<4> CMD, MxEncEA MEMEA, MxEncExt MEMExt>
+    : MxInst<(outs), (ins MEMOpd:$dst, TYPE.IOp:$opd),
+        MN#"."#TYPE.Prefix#"\t$opd, $dst",
+        // FIXME Same as above
+        /* [(store (NODE (TYPE.Load MEMPat:$dst), TYPE.IPat:$opd), MEMPat:$dst)], */
+        [],
+         MxArithImmEncoding<MxBead4Bits<CMD>,
+                            !cast<MxEncSize>("MxEncSize"#TYPE.Size),
+                            MEMEA, MEMExt,
+                            !cast<MxEncExt>("MxExtI"#TYPE.Size#"_1")>>;
+} // mayLoad, mayStore
+} // Defs = [CCR]
 
 multiclass MxBiArOp_RF<string MN, SDNode NODE, bit isComm, bits<4> CMD, bits<4> CMDI> {
 
-let Defs = [CCR] in {
-let Constraints = "$src = $dst" in {
-let isCommutable = isComm in {
-
-def NAME#"8dd"  : MxBiArOp_RFRR_xEA<MN, NODE, MxType8d,  CMD>;
-def NAME#"16dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType16d, CMD>;
-def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
-
-} // isCommutable = ?
-
+// op $mem, $reg
 def NAME#"8dk"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.KOp,  MxType8.KPat,  CMD, MxEncEAk, MxExtBrief_2>;
 def NAME#"16dk" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.KOp, MxType16.KPat, CMD, MxEncEAk, MxExtBrief_2>;
 def NAME#"32rk" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_2>;
@@ -186,13 +199,55 @@ def NAME#"8di"  : MxBiArOp_RFRI_xEA<MN, NODE, MxType8d,  CMD>;
 def NAME#"16di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType16d, CMD>;
 def NAME#"32ri" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32r, CMD>;
 
-} // $src = $dst
+// op $reg, $mem
+def NAME#"8kd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.KOp,  MxType8.KPat,  CMD, MxEncEAk, MxExtBrief_0>;
+def NAME#"16kd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.KOp, MxType16.KPat, CMD, MxEncEAk, MxExtBrief_0>;
+def NAME#"32kd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_0>;
 
-def NAME#"8ji"  : MxBiArOp_RFMI<MN, NODE, MxType8,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_0, MxExtEmpty>;
-def NAME#"16ji" : MxBiArOp_RFMI<MN, NODE, MxType16, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_0, MxExtEmpty>;
-def NAME#"32ji" : MxBiArOp_RFMI<MN, NODE, MxType32, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_0, MxExtEmpty>;
+def NAME#"8qd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.QOp,  MxType8.QPat,  CMD, MxEncEAq, MxExtI16_0>;
+def NAME#"16qd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.QOp, MxType16.QPat, CMD, MxEncEAq, MxExtI16_0>;
+def NAME#"32qd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_0>;
 
-} // Defs = [CCR]
+def NAME#"8pd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_0, MxExtI16_0>;
+def NAME#"16pd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.POp, MxType16.PPat, CMD, MxEncEAp_0, MxExtI16_0>;
+def NAME#"32pd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_0, MxExtI16_0>;
+
+def NAME#"8fd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.FOp,  MxType8.FPat,  CMD, MxEncEAf_0, MxExtBrief_0>;
+def NAME#"16fd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.FOp, MxType16.FPat, CMD, MxEncEAf_0, MxExtBrief_0>;
+def NAME#"32fd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_0, MxExtBrief_0>;
+
+def NAME#"8jd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_0, MxExtEmpty>;
+def NAME#"16jd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_0, MxExtEmpty>;
+def NAME#"32jd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_0, MxExtEmpty>;
+
+// op $imm, $mem
+def NAME#"8ki"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.KOp,  MxType8.KPat,  CMDI, MxEncEAk, MxExtBrief_0>;
+def NAME#"16ki" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.KOp, MxType16.KPat, CMDI, MxEncEAk, MxExtBrief_0>;
+def NAME#"32ki" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.KOp, MxType32.KPat, CMDI, MxEncEAk, MxExtBrief_0>;
+
+def NAME#"8qi"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.QOp,  MxType8.QPat,  CMDI, MxEncEAq, MxExtI16_0>;
+def NAME#"16qi" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.QOp, MxType16.QPat, CMDI, MxEncEAq, MxExtI16_0>;
+def NAME#"32qi" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.QOp, MxType32.QPat, CMDI, MxEncEAq, MxExtI16_0>;
+
+def NAME#"8pi"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.POp,  MxType8.PPat,  CMDI, MxEncEAp_0, MxExtI16_0>;
+def NAME#"16pi" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.POp, MxType16.PPat, CMDI, MxEncEAp_0, MxExtI16_0>;
+def NAME#"32pi" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.POp, MxType32.PPat, CMDI, MxEncEAp_0, MxExtI16_0>;
+
+def NAME#"8fi"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.FOp,  MxType8.FPat,  CMDI, MxEncEAf_0, MxExtBrief_0>;
+def NAME#"16fi" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.FOp, MxType16.FPat, CMDI, MxEncEAf_0, MxExtBrief_0>;
+def NAME#"32fi" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.FOp, MxType32.FPat, CMDI, MxEncEAf_0, MxExtBrief_0>;
+
+def NAME#"8ji"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.JOp,  MxType8.JPat,  CMDI, MxEncEAj_0, MxExtEmpty>;
+def NAME#"16ji" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.JOp, MxType16.JPat, CMDI, MxEncEAj_0, MxExtEmpty>;
+def NAME#"32ji" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.JOp, MxType32.JPat, CMDI, MxEncEAj_0, MxExtEmpty>;
+
+let isCommutable = isComm in {
+
+def NAME#"8dd"  : MxBiArOp_RFRR_xEA<MN, NODE, MxType8d,  CMD>;
+def NAME#"16dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType16d, CMD>;
+def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
+
+} // isCommutable = ?
 
 } // MxBiArOp_RF
 
@@ -200,8 +255,10 @@ def NAME#"32ji" : MxBiArOp_RFMI<MN, NODE, MxType32, MxType32.JOp, MxType32.JPat,
 defm ADD : MxBiArOp_RF<"add", MxAdd, 1, 0xD, 0x6>;
 defm SUB : MxBiArOp_RF<"sub", MxSub, 0, 0x9, 0x4>;
 
+let Uses = [CCR], Defs = [CCR] in {
+let Constraints = "$src = $dst" in {
 
-// $reg, $ccr <- $reg op $reg op $ccr
+// $reg, ccr <- $reg op $reg op ccr
 class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
              MN#"."#TYPE.Prefix#"\t$opd, $dst",
@@ -210,7 +267,7 @@ class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
                               !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                               MxBead1Bit<0>, MxBeadReg<2>, MxBeadReg<0>>>;
 
-// $reg <- $reg op $imm
+// $reg, ccr <- $reg op $imm op ccr
 class MxBiArOp_RFRIF_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
               MN#"."#TYPE.Prefix#"\t$opd, $dst",
@@ -220,10 +277,11 @@ class MxBiArOp_RFRIF_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
                               MxBeadReg<0>, MxEncEAi,
                               !cast<MxEncExt>("MxExtI"#TYPE.Size#"_2")>>;
 
+} // Constraints
+} // Uses, Defs
+
 multiclass MxBiArOp_RFF<string MN, SDNode NODE, bit isComm, bits<4> CMD> {
 
-let Defs = [CCR], Uses = [CCR] in {
-let Constraints = "$src = $dst" in {
 let isCommutable = isComm in {
 
 def NAME#"8dd"  : MxBiArOp_RFRRF<MN, NODE, MxType8d,  CMD>;
@@ -232,13 +290,9 @@ def NAME#"32dd" : MxBiArOp_RFRRF<MN, NODE, MxType32d, CMD>;
 
 } // isCommutable = ?
 
-} // $src = $dst
-
 def NAME#"8di"  : MxBiArOp_RFRIF_xEA<MN, NODE, MxType8d,  CMD>;
 def NAME#"16di" : MxBiArOp_RFRIF_xEA<MN, NODE, MxType16d, CMD>;
 def NAME#"32ri" : MxBiArOp_RFRIF_xEA<MN, NODE, MxType32r, CMD>;
-
-} // Defs = [CCR]
 
 } // MxBiArOp_RFF
 
@@ -254,22 +308,17 @@ defm SUBX : MxBiArOp_RFF<"subx", MxSubX, 0, 0x9>;
 // Does not allow use of An registers
 multiclass MxBiArOp_DF_xEA<string MN, SDNode NODE, bits<4> CMD> {
 
-let Defs = [CCR] in {
-let Constraints = "$src = $dst" in {
 let isCommutable = 1 in {
 
 def NAME#"8dd"  : MxBiArOp_RFRR_xEA<MN, NODE, MxType8d,  CMD>;
 def NAME#"16dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType16d, CMD>;
 def NAME#"32dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32d, CMD>;
 
-} // isCommutable = 1
+} // let isCommutable = 1
 
 def NAME#"8di"  : MxBiArOp_RFRI_xEA<MN, NODE,  MxType8d, CMD>;
 def NAME#"16di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType16d, CMD>;
 def NAME#"32di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32d, CMD>;
-
-} // $src = $dst
-} // Defs = [CCR]
 
 } // MxBiArOp_DF_xEA
 
@@ -278,8 +327,6 @@ defm OR  : MxBiArOp_DF_xEA<"or",  MxOr,  0x8>;
 
 multiclass MxBiArOp_DF_EAd<string MN, SDNode NODE, bits<4> CMD, bits<4> CMDI> {
 
-let Defs = [CCR] in {
-let Constraints = "$src = $dst" in {
 let isCommutable = 1 in {
 
 def NAME#"8dd"  : MxBiArOp_RFRR_EAd<MN, NODE, MxType8d,  CMD>;
@@ -291,9 +338,6 @@ def NAME#"32dd" : MxBiArOp_RFRR_EAd<MN, NODE, MxType32d, CMD>;
 def NAME#"8di"  : MxBiArOp_RFRI<MN, NODE,  MxType8d, CMDI>;
 def NAME#"16di" : MxBiArOp_RFRI<MN, NODE, MxType16d, CMDI>;
 def NAME#"32di" : MxBiArOp_RFRI<MN, NODE, MxType32d, CMDI>;
-
-} // $src = $dst
-} // Defs = [CCR]
 
 } // MxBiArOp_DF_EAd
 

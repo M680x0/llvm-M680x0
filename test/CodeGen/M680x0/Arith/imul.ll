@@ -127,10 +127,11 @@ define i32 @mul4294967295_32(i32 %A) {
 }
 
 ; x00-LABEL: mul18446744073709551615_64:
-; x00:       move.l #0
-; x00-NEXT:  sub.l
-; x00-NEXT:  move.l
-; x00-NEXT:  negx.l
+; x00-DAG: move.l (4,%sp), %d0
+; x00-DAG: move.l #0, %d1
+; x00:     sub.l (8,%sp), %d1
+; x00:     negx.l %d0
+; x00:     rts
 define i64 @mul18446744073709551615_64(i64 %A) {
     %mul = mul i64 %A, 18446744073709551615
     ret i64 %mul

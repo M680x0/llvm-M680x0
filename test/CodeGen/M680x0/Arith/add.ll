@@ -38,12 +38,13 @@ define fastcc void @test2_fast(i32* inreg %a) nounwind {
 
 
 ; x00-LABEL: test3:
-; x00:       move.l (%a0), [[HX:%d[0-7]]]
-; x00:       add.l  (4,%a0), [[LO:%d[0-7]]]
-; x00-NEXT:  addx.l [[HX]], [[HI:%d[0-7]]]
-; x00-NEXT:  move.l [[LO]], (4,%a0)
-; x00-NEXT:  move.l [[HI]], (%a0)
-
+; x00        move.l (%a0), %d0
+; x00-NEXT   move.l #-2147483648, %d1
+; x00-NEXT   add.l (4,%a0), %d1
+; x00-NEXT   addx.l #0, %d0
+; x00-NEXT   move.l %d1, (4,%a0)
+; x00-NEXT   move.l %d0, (%a0)
+; x00-NEXT   rts
 define fastcc void @test3(i64* inreg %a) nounwind {
   %aa = load i64, i64* %a
   %b = add i64 %aa, 2147483648
@@ -53,20 +54,19 @@ define fastcc void @test3(i64* inreg %a) nounwind {
 
 
 ; x00-LABEL: test4:
-; x00:       move.l (%a0), [[HX:%d[0-7]]]
-; x00:       add.l  (4,%a0), [[LO:%d[0-7]]]
-; x00-NEXT:  addx.l [[HX]], [[HI:%d[0-7]]]
-; x00-NEXT:  move.l [[LO]], (4,%a0)
-; x00-NEXT:  move.l [[HI]], (%a0)
-
+; x00 move.l #128, %d0
+; x00-NEXT   add.l  (4,%a0), %d0
+; x00-NEXT   move.l (%a0), %d1
+; x00-NEXT   move.l %d0, (4,%a0)
+; x00-NEXT   addx.l #0, %d1
+; x00-NEXT   move.l %d1, (%a0)
+; x00-NEXT   rts
 define fastcc void @test4(i64* inreg %a) nounwind {
   %aa = load i64, i64* %a
   %b = add i64 %aa, 128
   store i64 %b, i64* %a
   ret void
 }
-
-
 
 ; x00-LABEL: test9:
 ; x00:       sub.l #10
@@ -82,4 +82,3 @@ define fastcc i32 @test9(i32 %x, i32 %y) nounwind readnone {
   %cond = add i32 %sub, %y
   ret i32 %cond
 }
-

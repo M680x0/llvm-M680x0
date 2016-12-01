@@ -813,6 +813,16 @@ SelectARII(SDNode *Parent, SDValue N,
     return true;
   }
 
+  // The idea here is that we want to use ARII without displacement only if
+  // necessary like memory operations, otherwise this must be lowered into
+  // addition
+  if (AM.Disp == 0 && (!Parent ||
+      (Parent->getOpcode() != ISD::LOAD &&
+       Parent->getOpcode() != ISD::STORE))) {
+    DEBUG(dbgs() << "REJECT: Displacement is Zero\n");
+    return false;
+  }
+
   Disp = getI8Imm(AM.Disp, SDLoc(N));
 
   DEBUG(dbgs() << "SUCCESS\n");
