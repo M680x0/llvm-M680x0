@@ -288,6 +288,14 @@ foreach S = [16, 32] in {
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAq, MxExtI16_0>>;
 
+    def MOV#S#"b"#D : MxMove_MR<
+      !cast<MxType>("MxType"#S).BOp,
+      !cast<MxType>("MxType"#S).BPat,
+      !cast<MxType>("MxType"#S#D),
+      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
+                     !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
+                     MxEncEAb, MxExtI32_0>>;
+
     def MOV#S#"j"#D : MxMove_MR<
       !cast<MxType>("MxType"#S).JOp,
       !cast<MxType>("MxType"#S).JPat,
@@ -313,7 +321,7 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).FPat,
     !cast<MxType>("MxType"#S),
     MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, MxExtI32_1,
+                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                    MxEncEAf_0, MxExtBrief_0>>;
 
   def MOV#S#"p"#"i" : MxMove_MI<
@@ -321,7 +329,7 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).PPat,
     !cast<MxType>("MxType"#S),
     MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, MxExtI32_1,
+                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                    MxEncEAp_0, MxExtI16_0>>;
 
   def MOV#S#"k"#"i" : MxMove_MI<
@@ -329,7 +337,7 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).KPat,
     !cast<MxType>("MxType"#S),
     MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, MxExtI32_1,
+                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                    MxEncEAk, MxExtBrief_0>>;
 
   def MOV#S#"q"#"i" : MxMove_MI<
@@ -337,15 +345,23 @@ foreach S = [8, 16, 32] in {
     !cast<MxType>("MxType"#S).QPat,
     !cast<MxType>("MxType"#S),
     MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, MxExtI32_1,
+                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                    MxEncEAq, MxExtI16_0>>;
+
+  def MOV#S#"b"#"i" : MxMove_MI<
+    !cast<MxType>("MxType"#S).BOp,
+    !cast<MxType>("MxType"#S).BPat,
+    !cast<MxType>("MxType"#S),
+    MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
+                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
+                   MxEncEAb, MxExtI32_0>>;
 
   def MOV#S#"j"#"i" : MxMove_MI<
     !cast<MxType>("MxType"#S).JOp,
     !cast<MxType>("MxType"#S).JPat,
     !cast<MxType>("MxType"#S),
     MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, MxExtI32_1,
+                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                    MxEncEAj_0, MxExtEmpty>>;
 }
 
@@ -361,6 +377,9 @@ def : Pat<(store   MxType32.BPat :$src, MxType32.KPat :$dst),
 
 def : Pat<(store   MxType32.BPat :$src, MxType32.QPat :$dst),
           (MOV32qi MxType32.QOp  :$dst, MxType32.IOp  :$src)>;
+
+def : Pat<(store   MxType32.BPat :$src, MxType32.BPat :$dst),
+          (MOV32bi MxType32.BOp  :$dst, MxType32.IOp  :$src)>;
 
 def : Pat<(store   MxType32.BPat :$src, MxType32.JPat :$dst),
           (MOV32ji MxType32.JOp  :$dst, MxType32.IOp  :$src)>;
@@ -412,6 +431,13 @@ defm MOV16q : MMxMove_MM<MxType16,     MxType16.QOp, MxType16.QPat,
                          MxMoveSize16, MxEncEAq,     MxExtI16_0>;
 defm MOV32q : MMxMove_MM<MxType32,     MxType32.QOp, MxType32.QPat,
                          MxMoveSize32, MxEncEAq,     MxExtI16_0>;
+
+defm MOV8b  : MMxMove_MM<MxType8,      MxType8.BOp,  MxType8.BPat,
+                         MxMoveSize8,  MxEncEAb,     MxExtI32_0>;
+defm MOV16b : MMxMove_MM<MxType16,     MxType16.BOp, MxType16.BPat,
+                         MxMoveSize16, MxEncEAb,     MxExtI32_0>;
+defm MOV32b : MMxMove_MM<MxType32,     MxType32.BOp, MxType32.BPat,
+                         MxMoveSize32, MxEncEAb,     MxExtI32_0>;
 
 defm MOV8j  : MMxMove_MM<MxType8,      MxType8.JOp,  MxType8.JPat,
                          MxMoveSize8,  MxEncEAj_0,   MxExtEmpty>;
