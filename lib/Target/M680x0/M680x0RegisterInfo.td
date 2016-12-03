@@ -110,6 +110,8 @@ def DR32 : MxRegClass<[i32], 32, (sequence "D%u",  0, 7)>;
 def AR16 : MxRegClass<[i16], 16, (sequence "WA%u", 0, 6)>;
 def AR32 : MxRegClass<[i32], 32, (add (sequence "A%u", 0, 6), SP)>;
 
+def AR32_NOSP : MxRegClass<[i32], 32, (add (sequence "A%u", 0, 6))>;
+
 // Index Register Classes
 // FIXME try order D0, D1, A0, A1, ...
 def XR16 : MxRegClass<[i16], 16, (add DR16, AR16)>;
