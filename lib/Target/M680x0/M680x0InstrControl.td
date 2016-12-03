@@ -199,9 +199,7 @@ def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLB tglobaladdr:$dst)>,  Requires
 def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLB texternalsym:$dst)>, Requires<[IsNotPIC]>;
 def : Pat<(MxCall (i32 imm:$dst)),          (CALLB imm:$dst)>,          Requires<[IsNotPIC]>;
 
-// NOTE I use iPTR instead of MxCP_ARI so it won't match it for patterns above
-// since MxCP_ARI is a single operand pattern. Maybe there is a better solution
-def : Pat<(MxCall iPTR:$dst), (CALLj MxARI32:$dst)>, Requires<[IsPIC]>;
+def : Pat<(MxCall iPTR:$dst), (CALLj MxARI32:$dst)>;
 
 //===----------------------------------------------------------------------===//
 // Tail Call
