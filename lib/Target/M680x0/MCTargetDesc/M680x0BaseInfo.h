@@ -85,11 +85,6 @@ namespace M680x0II {
 
     MO_NO_FLAG,
 
-    /// MO_GOT_ABSOLUTE_ADDRESS - On a symbol operand, this represents a
-    /// relocation of:
-    ///    name + [. - PICBASELABEL]
-    MO_GOT_ABSOLUTE_ADDRESS,
-
     /// MO_ABSOLUTE_ADDRESS - On a symbol operand this indicates that the
     /// immediate is the absolute address of the symbol.
     MO_ABSOLUTE_ADDRESS,
@@ -97,6 +92,12 @@ namespace M680x0II {
     /// MO_PC_RELATIVE_ADDRESS - On a symbol operand this indicates that the
     /// immediate is the pc-relative address of the symbol.
     MO_PC_RELATIVE_ADDRESS,
+
+    /// MO_GOTPC - On a symbol operand this indicates that the immediate is the
+    /// offset to the GOT from the current instruction.
+    ///
+    ///    name@GOTPC
+    MO_GOTPC,
 
     /// MO_GOT - On a symbol operand this indicates that the immediate is the
     /// offset to the GOT entry for the symbol name from the base of the GOT.
