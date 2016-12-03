@@ -1,15 +1,14 @@
-; RUN: llc < %s -mtriple=m680x0-linux-gnu -relocation-model=pic | FileCheck %s -check-prefix=x00
+; RUN: llc < %s -O2 -mtriple=m680x0-linux-gnu -verify-machineinstrs \
+; RUN:              -code-model=medium -relocation-model=static     \
+; RUN: | FileCheck %s -check-prefix=x00
 
 @ptr = external global i32*
 @dst = external global i32
 @src = external global i32
 
 ; x00-LABEL: test0:
-; x00:       move.l (dst@GOTPCREL,%pc), %a0
-; x00-NEXT:  move.l (ptr@GOTPCREL,%pc), %a1
-; x00-NEXT:  %a0, (%a1)
-; x00-NEXT:  move.l (src@GOTPCREL,%pc), %a1
-; x00-NEXT:  (%a1), (%a0)
+; x00:       move.l #dst, ptr
+; x00-NEXT:  move.l src, dst
 ; x00-NEXT:  rts
 define void @test0() nounwind {
 entry:
@@ -24,11 +23,8 @@ entry:
 @src2 = global i32 0
 
 ; x00-LABEL: test1:
-; x00:       move.l (dst2@GOTPCREL,%pc), %a0
-; x00-NEXT:  move.l (ptr2@GOTPCREL,%pc), %a1
-; x00-NEXT:  %a0, (%a1)
-; x00-NEXT:  move.l (src2@GOTPCREL,%pc), %a1
-; x00-NEXT:  (%a1), (%a0)
+; x00:       move.l #dst2, ptr2
+; x00-NEXT:  move.l src2, dst2
 ; x00-NEXT:  rts
 define void @test1() nounwind {
 entry:
@@ -42,7 +38,7 @@ declare i8* @malloc(i32)
 
 ; x00-LABEL: test2:
 ; x00:       move.l #40, (%sp)
-; x00:  jsr (malloc@PLT,%pc)
+; x00:       jsr malloc
 define void @test2() nounwind {
 entry:
     %ptr = call i8* @malloc(i32 40)
@@ -53,10 +49,9 @@ entry:
 declare void(...)* @afoo(...)
 
 ; x00-LABEL: test3:
-; x00:       jsr (afoo@PLT,%pc)
+; x00:       jsr afoo
 ; x00-NEXT:  move.l %d0, %a0
-; x00-NEXT:  move.l (pfoo@GOTPCREL,%pc), %a1
-; x00-NEXT:  move.l %a0, (%a1)
+; x00-NEXT:  move.l %a0, pfoo
 ; x00-NEXT:  jsr (%a0)
 define void @test3() nounwind {
 entry:
@@ -70,7 +65,7 @@ entry:
 declare void @foo(...)
 
 ; x00-LABEL: test4:
-; x00:       jsr (foo@PLT,%pc)
+; x00:       jsr foo
 define void @test4() nounwind {
 entry:
     call void(...) @foo()
@@ -120,51 +115,51 @@ entry:
 ; x00-NEXT:  sub.l #12, %a1
 ; x00-NEXT:  bhi .LBB{{.*}}_14
 ; x00:       lsl.l #2, %d0
-; x00-NEXT:  lea (.LJTI{{.*}}_0,%pc), %a0
-; x00-NEXT:  add.l (0,%a0,%d0), %a0
+; x00:       move.l %d0, %a0
+; x00-NEXT:  move.l (.LJTI{{.*}}_0,%a0), %a0
 ; x00-NEXT:  jmp (%a0)
 ;
 ; x00:       .LBB{{.*}}_2:
-; x00-NEXT:  bra foo1@PLT
+; x00-NEXT:  bra foo1
 ; x00:       .LBB{{.*}}_8:
-; x00-NEXT:  bra foo1@PLT
+; x00-NEXT:  bra foo1
 ; x00:       .LBB{{.*}}_14:
-; x00-NEXT:  bra foo6@PLT
+; x00-NEXT:  bra foo6
 ; x00:       .LBB{{.*}}_9:
-; x00-NEXT:  bra foo2@PLT
+; x00-NEXT:  bra foo2
 ; x00:       .LBB{{.*}}_10:
-; x00-NEXT:  bra foo6@PLT
+; x00-NEXT:  bra foo6
 ; x00:       .LBB{{.*}}_12:
-; x00-NEXT:  bra foo4@PLT
+; x00-NEXT:  bra foo4
 ; x00:       .LBB{{.*}}_3:
-; x00-NEXT:  bra foo2@PLT
+; x00-NEXT:  bra foo2
 ; x00:       .LBB{{.*}}_5:
-; x00-NEXT:  bra foo3@PLT
+; x00-NEXT:  bra foo3
 ; x00:       .LBB{{.*}}_6:
-; x00-NEXT:  bra foo4@PLT
+; x00-NEXT:  bra foo4
 ; x00:       .LBB{{.*}}_11:
-; x00-NEXT:  bra foo3@PLT
+; x00-NEXT:  bra foo3
 ; x00:       .LBB{{.*}}_4:
-; x00-NEXT:  bra foo6@PLT
+; x00-NEXT:  bra foo6
 ; x00:       .LBB{{.*}}_7:
-; x00-NEXT:  bra foo5@PLT
+; x00-NEXT:  bra foo5
 ; x00:       .LBB{{.*}}_13:
-; x00-NEXT:  bra foo5@PLT
+; x00-NEXT:  bra foo5
 ;
 ; x00: .p2align 2
-; x00: .long .LBB{{.*}}_2-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_8-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_14-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_9-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_10-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_12-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_3-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_5-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_6-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_11-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_4-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_7-.LJTI{{.*}}_0
-; x00: .long .LBB{{.*}}_13-.LJTI{{.*}}_0
+; x00: .long .LBB{{.*}}_2
+; x00: .long .LBB{{.*}}_8
+; x00: .long .LBB{{.*}}_14
+; x00: .long .LBB{{.*}}_9
+; x00: .long .LBB{{.*}}_10
+; x00: .long .LBB{{.*}}_12
+; x00: .long .LBB{{.*}}_3
+; x00: .long .LBB{{.*}}_5
+; x00: .long .LBB{{.*}}_6
+; x00: .long .LBB{{.*}}_11
+; x00: .long .LBB{{.*}}_4
+; x00: .long .LBB{{.*}}_7
+; x00: .long .LBB{{.*}}_13
 define void @test7(i32 %n.u) nounwind {
 entry:
     switch i32 %n.u, label %bb12 [i32 1, label %bb i32 2, label %bb6 i32 4, label %bb7 i32 5, label %bb8 i32 6, label %bb10 i32 7, label %bb1 i32 8, label %bb3 i32 9, label %bb4 i32 10, label %bb9 i32 11, label %bb2 i32 12, label %bb5 i32 13, label %bb11 ]

@@ -1,4 +1,6 @@
-; RUN: llc < %s -O0 -mtriple=m680x0-linux-gnu -relocation-model=pic -verify-machineinstrs | FileCheck %s -check-prefix=x00
+; RUN: llc < %s -O0 -mtriple=m680x0-linux-gnu -verify-machineinstrs \
+; RUN:              -code-model=small -relocation-model=pic         \
+; RUN: | FileCheck %s -check-prefix=x00
 
 define weak void @weak_foo() {
   ret void

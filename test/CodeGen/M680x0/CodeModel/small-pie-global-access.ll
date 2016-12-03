@@ -1,4 +1,6 @@
-; RUN: llc < %s -mtriple=m680x0-linux -relocation-model=pic | FileCheck -check-prefix=x00 %s
+; RUN: llc < %s -O2 -mtriple=m680x0-linux-gnu -verify-machineinstrs \
+; RUN:              -code-model=small -relocation-model=pic         \
+; RUN: | FileCheck %s -check-prefix=x00
 
 ; External Linkage
 @a = global i32 0, align 4
