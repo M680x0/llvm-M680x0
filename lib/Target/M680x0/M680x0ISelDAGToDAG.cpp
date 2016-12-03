@@ -696,13 +696,13 @@ SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
 
   // ARI does not use these
   if (AM.hasIndexReg() || AM.Disp != 0) {
-    DEBUG(dbgs() << "REJECT: Index Reg or Disp cannot be matched by ARI\n");
+    DEBUG(dbgs() << "REJECT: Cannot match Index or Disp\n");
     return false;
   }
 
   // Must be matched by AL
   if (AM.hasSymbolicDisplacement()) {
-    DEBUG(dbgs() << "REJECT: Symbolic Disp cannot be matched by ARI\n");
+    DEBUG(dbgs() << "REJECT: Cannot match Symbolic Disp\n");
     return false;
   }
 
@@ -762,7 +762,7 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
 
   // Give a chance to ARI
   if (AM.Disp == 0) {
-    DEBUG(dbgs() << "REJECT: Should be matched by ARI\n");
+    DEBUG(dbgs() << "REJECT: No displacement\n");
     return false;
   }
 
@@ -788,7 +788,7 @@ SelectARII(SDNode *Parent, SDValue N,
   }
 
   if (!AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: No Index, should be matched by ARID\n");
+    DEBUG(dbgs() << "REJECT: No Index\n");
     return false;
   }
 
@@ -846,9 +846,13 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
     return false;
   }
 
-  // AL does not use these
+  if (AM.hasBase()) {
+    DEBUG(dbgs() << "REJECT: Cannot match Base\n");
+    return false;
+  }
+
   if (AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: Index cannot be matched by AL\n");
+    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
     return false;
   }
 
@@ -863,6 +867,7 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
     return true;
   }
 
+  DEBUG(dbgs() << "REJECT: Not Symbol or Disp\n");
   return false;;
 }
 
@@ -910,7 +915,7 @@ SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Index) {
   }
 
   if (!AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: No Index, should be matched by PCD\n");
+    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
     return false;
   }
 
