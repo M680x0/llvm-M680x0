@@ -20,6 +20,7 @@
 #include "M680x0TargetMachine.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -49,16 +50,10 @@ M680x0Subtarget::
 M680x0Subtarget(const Triple &TT, const std::string &CPU,
                 const std::string &FS,
                 const M680x0TargetMachine &TM) :
-  M680x0GenSubtargetInfo(TT, CPU, FS),
-  PICStyle(PICStyles::None), TM(TM), TSInfo(),
+  M680x0GenSubtargetInfo(TT, CPU, FS), TM(TM), TSInfo(),
   InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
   FrameLowering(*this, this->getStackAlignment()),
   TLInfo(TM, *this), TargetTriple(TT)  {
-  if (isPositionIndependent()) {
-    setPICStyle(PICStyles::PCRel);
-  } else {
-    setPICStyle(PICStyles::None);
-  }
 }
 
 bool M680x0Subtarget::
@@ -209,6 +204,23 @@ classifyGlobalReference(const GlobalValue *GV, const Module &M) const {
       }
     }
   }
+}
+
+unsigned M680x0Subtarget::
+getJumpTableEncoding() const {
+  if (isPositionIndependent()) {
+    // The only time we want to use GOTOFF(used when with EK_Custom32) is when
+    // the potential delta between the jump target and table base can be larger
+    // than displacement field, which is True for older CPUs(16 bit disp)
+    // in Medium model(can have large data way beyond 16 bit).
+    if (TM.getCodeModel() == CodeModel::Medium && !isM68020())
+      return MachineJumpTableInfo::EK_Custom32;
+
+    return MachineJumpTableInfo::EK_LabelDifference32;
+  }
+
+  // In non-pic modes, just use the address of a block.
+  return MachineJumpTableInfo::EK_BlockAddress;
 }
 
 unsigned char M680x0Subtarget::

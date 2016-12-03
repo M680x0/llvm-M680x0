@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
@@ -42,7 +43,7 @@ STATISTIC(NumTailCalls, "Number of tail calls");
 
 M680x0TargetLowering::
 M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
-    : TargetLowering(TM), Subtarget(STI) {
+    : TargetLowering(TM), Subtarget(STI), TM(TM) {
 
   setBooleanContents(ZeroOrOneBooleanContent);
 
@@ -460,19 +461,20 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (Attr.getValueAsString() == "true")
     isTailCall = false;
 
-  if (Subtarget.isPICStyleGOT() &&
-      !MF.getTarget().Options.GuaranteedTailCallOpt) {
-    // TODO reqd more about this stuff
-    // If we are using a GOT, disable tail calls to external symbols with
-    // default visibility. Tail calling such a symbol requires using a GOT
-    // relocation, which forces early binding of the symbol. This breaks code
-    // that require lazy function symbol resolution. Using musttail or
-    // GuaranteedTailCallOpt will override this.
-    GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
-    if (!G || (!G->getGlobal()->hasLocalLinkage() &&
-               G->getGlobal()->hasDefaultVisibility()))
-      isTailCall = false;
-  }
+  // FIXME check this
+  // if (Subtarget.isPICStyleGOT() &&
+  //     !MF.getTarget().Options.GuaranteedTailCallOpt) {
+  //   // TODO reqd more about this stuff
+  //   // If we are using a GOT, disable tail calls to external symbols with
+  //   // default visibility. Tail calling such a symbol requires using a GOT
+  //   // relocation, which forces early binding of the symbol. This breaks code
+  //   // that require lazy function symbol resolution. Using musttail or
+  //   // GuaranteedTailCallOpt will override this.
+  //   GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
+  //   if (!G || (!G->getGlobal()->hasLocalLinkage() &&
+  //              G->getGlobal()->hasDefaultVisibility()))
+  //     isTailCall = false;
+  // }
 
   bool IsMustTail = CLI.CS && CLI.CS->isMustTailCall();
   if (IsMustTail) {
@@ -620,33 +622,36 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (!MemOpChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, MemOpChains);
 
-  if (Subtarget.isPICStyleGOT()) {
-    // ELF / PIC requires GOT in the %BP register before function calls via PLT
-    // GOT pointer.
-    if (!isTailCall) {
-      RegsToPass.push_back(std::make_pair(
-          unsigned(TRI->getBaseRegister()),
-            DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(),
-            getPointerTy(DAG.getDataLayout()))));
-    } else {
-      // ??? WUT, debug this
-      // If we are tail calling and generating PIC/GOT style code load the
-      // address of the callee into %A1. The value in %A1 is used as target of
-      // the tail jump. This is done to circumvent the %BP/callee-saved problem
-      // for tail calls on PIC/GOT architectures. Normally we would just put the
-      // address of GOT into %BP and then call target@PLT. But for tail calls
-      // %BP would be restored (since %BP is callee saved) before jumping to the
-      // target@PLT.
-
-      // NOTE: The actual moving to %A1 is done further down.
-      GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
-      if (G && !G->getGlobal()->hasLocalLinkage() &&
-          G->getGlobal()->hasDefaultVisibility())
-        Callee = LowerGlobalAddress(Callee, DAG);
-      else if (isa<ExternalSymbolSDNode>(Callee))
-        Callee = LowerExternalSymbol(Callee, DAG);
-    }
-  }
+  // FIXME check this
+  // ??? The only time GOT is really needed is for Medium-PIC static data
+  // ??? otherwise we are happy with pc-rel or static references
+  // if (Subtarget.isPICStyleGOT()) {
+  //   // ELF / PIC requires GOT in the %BP register before function calls via PLT
+  //   // GOT pointer.
+  //   if (!isTailCall) {
+  //     RegsToPass.push_back(std::make_pair(
+  //         unsigned(TRI->getBaseRegister()),
+  //           DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(),
+  //           getPointerTy(DAG.getDataLayout()))));
+  //   } else {
+  //     // ??? WUT, debug this
+  //     // If we are tail calling and generating PIC/GOT style code load the
+  //     // address of the callee into %A1. The value in %A1 is used as target of
+  //     // the tail jump. This is done to circumvent the %BP/callee-saved problem
+  //     // for tail calls on PIC/GOT architectures. Normally we would just put the
+  //     // address of GOT into %BP and then call target@PLT. But for tail calls
+  //     // %BP would be restored (since %BP is callee saved) before jumping to the
+  //     // target@PLT.
+  //
+  //     // NOTE: The actual moving to %A1 is done further down.
+  //     GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
+  //     if (G && !G->getGlobal()->hasLocalLinkage() &&
+  //         G->getGlobal()->hasDefaultVisibility())
+  //       Callee = LowerGlobalAddress(Callee, DAG);
+  //     else if (isa<ExternalSymbolSDNode>(Callee))
+  //       Callee = LowerExternalSymbol(Callee, DAG);
+  //   }
+  // }
 
   if (isVarArg && IsMustTail) {
     const auto &Forwards = MFI->getForwardedMustTailRegParms();
@@ -2607,33 +2612,6 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue M680x0TargetLowering::
-LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
-  JumpTableSDNode *JT = cast<JumpTableSDNode>(Op);
-
-  // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
-  // global base reg.
-  unsigned char OpFlag = Subtarget.classifyLocalReference(nullptr);
-
-  unsigned WrapperKind = M680x0ISD::Wrapper;
-  if (M680x0II::isPCRelGlobalReference(OpFlag)) {
-    WrapperKind = M680x0ISD::WrapperPC;
-  }
-
-  auto PtrVT = getPointerTy(DAG.getDataLayout());
-  SDValue Result = DAG.getTargetJumpTable(JT->getIndex(), PtrVT, OpFlag);
-  SDLoc DL(JT);
-  Result = DAG.getNode(WrapperKind, DL, PtrVT, Result);
-
-  // With PIC, the address is actually $g + Offset.
-  if (M680x0II::isGlobalRelativeToPICBase(OpFlag)) {
-    Result = DAG.getNode(ISD::ADD, DL, PtrVT,
-                 DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
-  }
-
-  return Result;
-}
-
-SDValue M680x0TargetLowering::
 LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const {
   const char *Sym = cast<ExternalSymbolSDNode>(Op)->getSymbol();
 
@@ -2744,6 +2722,67 @@ LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const {
   const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
   int64_t Offset = cast<GlobalAddressSDNode>(Op)->getOffset();
   return LowerGlobalAddress(GV, SDLoc(Op), Offset, DAG);
+}
+
+//===----------------------------------------------------------------------===//
+// Custom Lower Jump Table
+//===----------------------------------------------------------------------===//
+
+SDValue M680x0TargetLowering::
+LowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
+  JumpTableSDNode *JT = cast<JumpTableSDNode>(Op);
+
+  // In PIC mode (unless we're in PCRel PIC mode) we add an offset to the
+  // global base reg.
+  unsigned char OpFlag = Subtarget.classifyLocalReference(nullptr);
+
+  unsigned WrapperKind = M680x0ISD::Wrapper;
+  if (M680x0II::isPCRelGlobalReference(OpFlag)) {
+    WrapperKind = M680x0ISD::WrapperPC;
+  }
+
+  auto PtrVT = getPointerTy(DAG.getDataLayout());
+  SDValue Result = DAG.getTargetJumpTable(JT->getIndex(), PtrVT, OpFlag);
+  SDLoc DL(JT);
+  Result = DAG.getNode(WrapperKind, DL, PtrVT, Result);
+
+  // With PIC, the address is actually $g + Offset.
+  if (M680x0II::isGlobalRelativeToPICBase(OpFlag)) {
+    Result = DAG.getNode(ISD::ADD, DL, PtrVT,
+                 DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(), PtrVT), Result);
+  }
+
+  return Result;
+}
+
+unsigned M680x0TargetLowering::
+getJumpTableEncoding() const {
+  return Subtarget.getJumpTableEncoding();
+}
+
+const MCExpr * M680x0TargetLowering::
+LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
+                          const MachineBasicBlock *MBB,
+                          unsigned uid, MCContext &Ctx) const{
+  return MCSymbolRefExpr::create(
+      MBB->getSymbol(), MCSymbolRefExpr::VK_GOTOFF, Ctx);
+}
+
+SDValue M680x0TargetLowering::
+getPICJumpTableRelocBase(SDValue Table, SelectionDAG &DAG) const {
+  if (getJumpTableEncoding() == MachineJumpTableInfo::EK_Custom32)
+    return DAG.getNode(M680x0ISD::GlobalBaseReg, SDLoc(),
+                       getPointerTy(DAG.getDataLayout()));
+
+  // MachineJumpTableInfo::EK_LabelDifference32 entry
+  return Table;
+}
+
+// NOTE This only used for MachineJumpTableInfo::EK_LabelDifference32 entries
+const MCExpr *M680x0TargetLowering::
+getPICJumpTableRelocBaseExpr(const MachineFunction *MF, unsigned JTI,
+                             MCContext &Ctx) const {
+  return MCSymbolRefExpr::create(MF->getJTISymbol(JTI, Ctx), Ctx);
 }
 
 const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {

@@ -83,7 +83,7 @@ for (MCSuperRegIterator Super(Reg, this); Super.isValid(); ++Super)
 const TargetRegisterClass * M680x0RegisterInfo::
 getMaximalPhysRegClass(unsigned reg, MVT VT) const {
   assert(isPhysicalRegister(reg) && "reg must be a physical register");
-  
+
   // Pick the most sub register class of the right type that contains
   // this physreg.
   const TargetRegisterClass* BestRC = nullptr;
@@ -94,20 +94,49 @@ getMaximalPhysRegClass(unsigned reg, MVT VT) const {
            (BestRC->hasSubClass(RC) && RC->getNumRegs() > BestRC->getNumRegs())))
           BestRC = RC;
   }
-  
+
   assert(BestRC && "Couldn't find the register class");
   return BestRC;
 }
 
 BitVector M680x0RegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
-  static const uint16_t ReservedCPURegs[] = {
-    M680x0::SP, M680x0::PC
-  };
+  const M680x0FrameLowering *TFI = getFrameLowering(MF);
+
   BitVector Reserved(getNumRegs());
 
-  for (unsigned I = 0; I < array_lengthof(ReservedCPURegs); ++I)
-    Reserved.set(ReservedCPURegs[I]);
+  // Set the stack-pointer register and its aliases as reserved.
+  for (MCSubRegIterator I(M680x0::SP, this, /*Self=*/true); I.isValid(); ++I)
+    Reserved.set(*I);
+
+  // Set the instruction pointer register and its aliases as reserved.
+  for (MCSubRegIterator I(M680x0::PC, this, /*Self=*/true); I.isValid(); ++I)
+    Reserved.set(*I);
+
+  // Set the frame-pointer register and its aliases as reserved if needed.
+  if (TFI->hasFP(MF)) {
+    for (MCSubRegIterator I(FramePtr, this, /*Self=*/true); I.isValid(); ++I)
+      Reserved.set(*I);
+  }
+
+  // Set the base-pointer register and its aliases as reserved if needed.
+  if (hasBasePointer(MF)) {
+    CallingConv::ID CC = MF.getFunction()->getCallingConv();
+    const uint32_t *RegMask = getCallPreservedMask(MF, CC);
+    if (MachineOperand::clobbersPhysReg(RegMask, getBaseRegister()))
+      report_fatal_error(
+        "Stack realignment in presence of dynamic allocas is not supported with"
+        "this calling convention.");
+
+    for (MCSubRegIterator I(getBaseRegister(), this, /*Self=*/true); I.isValid(); ++I)
+      Reserved.set(*I);
+  }
+
+  // // Set the global-base-pointer register and its aliases as reserved if needed.
+  // if (getGlobalBaseRegister()) {
+  //   for (MCSubRegIterator I(getGlobalBaseRegister(), this, #<{(|Self=|)}>#true); I.isValid(); ++I)
+  //     Reserved.set(*I);
+  // }
 
   return Reserved;
 }

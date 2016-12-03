@@ -500,9 +500,16 @@ getGlobalBaseReg(MachineFunction *MF) const {
   if (GlobalBaseReg != 0)
     return GlobalBaseReg;
 
-  // Create the register. The code to initialize it is inserted
-  // later, by the CGBR pass (below).
-  GlobalBaseReg = RI.getGlobalBaseRegister();
+  // Create the register. The code to initialize it is inserted later,
+  // by the CGBR pass (below).
+  //
+  // NOTE
+  // Normally M680x0 uses A5 register as global base pointer but this will
+  // create unnecessary spill if we use less then 4 registers in code; since A5
+  // is callee-save anyway we could try to allocate caller-save first and if
+  // lucky get one, otherwise it does not really matter which callee-save to use.
+  MachineRegisterInfo &RegInfo = MF->getRegInfo();
+  GlobalBaseReg = RegInfo.createVirtualRegister(&M680x0::AR32_NOSPRegClass);
   MxFI->setGlobalBaseReg(GlobalBaseReg);
   return GlobalBaseReg;
 }
@@ -529,9 +536,9 @@ namespace {
       DebugLoc DL = FirstMBB.findDebugLoc(MBBI);
       const M680x0InstrInfo *TII = STI.getInstrInfo();
 
-      // Generate lea (__GLOBAL_OFFSET_TABLE_,%PC), %A4
+      // Generate lea (__GLOBAL_OFFSET_TABLE_,%PC), %A5
       BuildMI(FirstMBB, MBBI, DL, TII->get(M680x0::LEA32q), GlobalBaseReg)
-        .addExternalSymbol("_GLOBAL_OFFSET_TABLE_", M680x0II::MO_GOT);
+        .addExternalSymbol("_GLOBAL_OFFSET_TABLE_", M680x0II::MO_GOTPC);
 
       return true;
     }

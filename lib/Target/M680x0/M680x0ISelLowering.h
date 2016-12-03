@@ -98,6 +98,7 @@ namespace llvm {
 
   class M680x0TargetLowering : public TargetLowering  {
     const M680x0Subtarget &Subtarget;
+    const M680x0TargetMachine &TM;
 
   public:
     explicit M680x0TargetLowering(const M680x0TargetMachine &TM,
@@ -117,6 +118,26 @@ namespace llvm {
 
     /// Provide custom lowering hooks for some operations.
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+
+    /// Return the entry encoding for a jump table in the current function.
+    /// The returned value is a member of the  MachineJumpTableInfo::JTEntryKind
+    /// enum.
+    unsigned getJumpTableEncoding() const override;
+
+    const MCExpr *
+    LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
+                              const MachineBasicBlock *MBB, unsigned uid,
+                              MCContext &Ctx) const override;
+
+    /// Returns relocation base for the given PIC jumptable.
+    SDValue getPICJumpTableRelocBase(SDValue Table,
+                                     SelectionDAG &DAG) const override;
+
+    /// This returns the relocation base for the given PIC jumptable,
+    /// the same as getPICJumpTableRelocBase, but as an MCExpr.
+    const MCExpr *
+    getPICJumpTableRelocBaseExpr(const MachineFunction *MF,
+                                 unsigned JTI, MCContext &Ctx) const override;
 
     // Replace the results of node with an illegal result type with new values
     // built out of custom code.

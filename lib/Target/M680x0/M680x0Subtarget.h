@@ -35,15 +35,6 @@ class StringRef;
 
 class M680x0TargetMachine;
 
-/// The M680x0 backend supports a number of different styles of PIC.
-namespace PICStyles {
-enum Style {
-  GOT,
-  PCRel,
-  None
-};
-}
-
 class M680x0Subtarget : public M680x0GenSubtargetInfo {
   virtual void anchor();
 
@@ -61,9 +52,6 @@ protected:
 
   // UseSmallSection - Small section is used.
   bool UseSmallSection;
-
-  /// Which PIC style to use
-  PICStyles::Style PICStyle;
 
   const M680x0TargetMachine &TM;
 
@@ -97,12 +85,6 @@ public:
 
   bool abiUsesSoftFloat() const;
 
-  PICStyles::Style getPICStyle() const { return PICStyle; }
-  void setPICStyle(PICStyles::Style Style)  { PICStyle = Style; }
-
-  bool isPICStyleGOT()    const { return PICStyle == PICStyles::GOT;     }
-  bool isPICStylePCRel()  const { return PICStyle == PICStyles::PCRel;  }
-
   const Triple &getTargetTriple() const { return TargetTriple; }
 
   bool isTargetELF() const { return TargetTriple.isOSBinFormatELF(); }
@@ -134,6 +116,8 @@ public:
   /// Classify a blockaddress reference for the current subtarget according to
   /// how we should reference it in a non-pcrel context.
   unsigned char classifyBlockAddressReference() const;
+
+  unsigned getJumpTableEncoding() const;
 
   /// TODO this must be controlled by options like -malign-int and -mshort
   unsigned getStackAlignment() const { return stackAlignment; }
