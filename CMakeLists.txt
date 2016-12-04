@@ -428,6 +428,8 @@ if( WIN32 AND NOT CYGWIN )
   set(LLVM_LIT_TOOLS_DIR "" CACHE PATH "Path to GnuWin32 tools")
 endif()
 
+set(LLVM_UTILS_DIR "${LLVM_MAIN_SRC_DIR}/utils" CACHE PATH "Path to LLVM utils dir")
+
 # Define options to control the inclusion and default build behavior for
 # components which may not strictly be necessary (tools, examples, and tests).
 #
