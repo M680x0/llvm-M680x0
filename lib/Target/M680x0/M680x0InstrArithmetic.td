@@ -75,9 +75,6 @@ class MxArithImmEncoding<MxBead4Bits CMD, MxEncSize SIZE,
       SRC_EXT.Imm, SRC_EXT.B8, SRC_EXT.Scale, SRC_EXT.WL, SRC_EXT.DAReg,
       DST_EXT.Imm, DST_EXT.B8, DST_EXT.Scale, DST_EXT.WL, DST_EXT.DAReg>;
 
-/* class MxImmEncoding<MxEncEA EA, MxOpMode OPMODE, bits<4> CMD, MxEncExt EXT> */
-/*     : MxEncoding<EA, OPMODE, MxBeadReg<>>; */
-
 
 //===----------------------------------------------------------------------===//
 // Add/Sub

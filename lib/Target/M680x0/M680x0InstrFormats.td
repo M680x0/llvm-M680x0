@@ -262,9 +262,9 @@ def MxOpMode16rEA : MxEncOpMode<MxBead1Bit<1>, MxBeadDA<0>, MxBead1Bit<0>>;
 def MxOpMode32rEA : MxEncOpMode<MxBeadDA<0>, MxBead1Bit<1>, MxBeadDA<0>>;
 
 // op Dn, EA
-def MxOpMode8EAd : MxEncOpMode<MxBead3Bits<0b011>>;
-def MxOpMode16EAd : MxEncOpMode<MxBead3Bits<0b100>>;
-def MxOpMode32EAd : MxEncOpMode<MxBead3Bits<0b101>>;
+def MxOpMode8EAd : MxEncOpMode<MxBead3Bits<0b100>>;
+def MxOpMode16EAd : MxEncOpMode<MxBead3Bits<0b101>>;
+def MxOpMode32EAd : MxEncOpMode<MxBead3Bits<0b110>>;
 
 
 // Represents two types of extension word:
