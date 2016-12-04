@@ -74,7 +74,7 @@ EncodeBits(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc 
   }
   unsigned char Val = (Bead & 0xF0) >> 4;
 
-  DEBUG(dbgs() << "\tEncodeBits" 
+  DEBUG(dbgs() << "\tEncodeBits"
                << " Num: " << Num
                << " Val: 0x");
   DEBUG(dbgs().write_hex(Val) << "\n");
@@ -97,7 +97,7 @@ EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
 
   unsigned Op = (Bead & 0x70) >> 4;
   bool Alt = (Bead & 0x80);
-  DEBUG(dbgs() << "\tEncodeReg" 
+  DEBUG(dbgs() << "\tEncodeReg"
                << " Op: " << Op
                << ", DA: " << DA
                << ", Reg: " << Reg
@@ -133,19 +133,20 @@ EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
 
   return Written;
 }
-/// intDoseFit - Checks if an integer fits into the given bit width.
+/// intDoesFit - Checks if an integer fits into the given bit width.
 /// non-templated version
-LLVM_CONSTEXPR static inline bool intDoseFit(unsigned N, int64_t x) {
-  return N >= 64 || (-(INT64_C(1)<<(N-1)) <= x && x < (INT64_C(1)<<(N-1)));
+LLVM_CONSTEXPR static inline bool intDoesFit(unsigned N, uint64_t x) {
+  return N >= 64 || x <= (UINT64_MAX >> (64-N));
 }
 
 static unsigned
-EmitConstant(int64_t Val, unsigned Size, unsigned Pad, uint64_t &Buffer, unsigned Offset) {
+EmitConstant(uint64_t Val, unsigned Size, unsigned Pad, uint64_t &Buffer, unsigned Offset) {
   assert (Size && (Size == 8 || Size == 16 || Size == 32));
   assert (Size + Offset <= 64 && "Value does not fit");
-  assert (intDoseFit(Size, Val));
+  assert (intDoesFit(Size, Val));
 
   // Pad the instruction with zeros if any
+  // FIXME Actually emit zeros, since there might be trash in the buffer.
   Size += Pad;
 
   // Writing Value in host's endianness
@@ -220,16 +221,17 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
       return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
   }
+    
+  uint64_t Imm = MCO.getImm();
 
   // 32 bit Imm requires HI16 first then LO16
   if (Size == 32) {
-    uint64_t Imm = MCO.getImm();
     Offset += EmitConstant((Imm >> 16) & 0xFFFF, 16, Pad, Buffer, Offset);
     EmitConstant(Imm & 0xFFFF, 16, Pad, Buffer, Offset);
     return Size;
   }
 
-  return EmitConstant(MCO.getImm(), Size, Pad, Buffer, Offset);
+  return EmitConstant(Imm & (UINT64_MAX >> (64 - Size)), Size, Pad, Buffer, Offset);
 }
 
 #include "M680x0GenMCCodeBeads.inc"
