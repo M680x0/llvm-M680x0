@@ -148,6 +148,9 @@ printPCDMem(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void M680x0InstPrinter::
 printPCIMem(const MCInst *MI, int opNum, raw_ostream &O) {
-    // TODO print (i,PC,Rn.W)
-    // HMM... is it allowed for M68000 to use this form?
+  O << '(';
+  printDisp(MI, opNum + M680x0::PCRelDisp, O);
+  O << ",%pc,";
+  printOperand(MI, opNum + M680x0::PCRelIndex, O);
+  O << ')';
 }
