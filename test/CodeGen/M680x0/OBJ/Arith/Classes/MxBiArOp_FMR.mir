@@ -1,7 +1,6 @@
 # RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
 # RUN:  | extract-section .text                                                \
-# RUN:  | FileCheck %s -check-prefixes=ADD8kd,ADD32kd,ADD8qd,ADD32qd,\
-# RUN:ADD8fd,ADD32fd,ADD8pd,ADD32pd,ADD8jd,ADD32jd
+# RUN:  | FileCheck %s -check-prefixes=ADD8fd,ADD32fd,ADD8pd,ADD32pd,ADD8jd,ADD32jd
 
 #------------------------------------------------------------------------------
 # MxBiArOp_FMR class used for binary arithmetic operations and operates on
@@ -9,66 +8,13 @@
 # encoding class and MxOpModeEAd opmode class.
 #------------------------------------------------------------------------------
 
---- # PCI
-#               ---------------+-----------+-----------+-----------+-----------
-#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
-#               ---------------+-----------+-----------+-----------+-----------
-#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
-#               ---------------+-----------+-----------+-----------+-----------
-# ADD8kd:        1   1   0   1   0   0   0   1 . 0   0   1   1   1   0   1   1
-# ADD8kd-SAME:   0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
-#               ---------------------------------------------------------------
-# ADD8kd-SAME:   1   1   0   1   0   0   0   1 . 0   0   1   1   1   0   1   1
-# ADD8kd-SAME:   0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
-#               ---------------------------------------------------------------
-# ADD32kd-SAME:  1   1   0   1   0   0   0   1 . 1   0   1   1   1   0   1   1
-# ADD32kd-SAME:  0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
-#               ---------------------------------------------------------------
-# ADD32kd-SAME:  1   1   0   1   0   0   1   1 . 1   0   1   1   1   0   1   1
-# ADD32kd-SAME:  1   0   1   0   1   0   0   0 . 0   0   0   0   0   0   0   0
-#               ---+-----------+---+-------+---+-------------------------------
-#        BRIEF  DA |    REG    | L | SCALE | 0 |          DISPLACEMENT
-#               ---+-----------+---+-------+---+-------------------------------
-#
-# NOTE Immediates for pc-rel instructions use relocations and addendum is encoded
-# inside the relocation record thus there are 0s instead of the value.
-name: MxBiArOp_FMR_PCI
-body: |
-  bb.0:
-    ADD8kd  0,  %d1, %bd0, implicit-def %ccr
-    ADD8kd  -1, %d1, %bd0, implicit-def %ccr
-    ADD32kd 0,  %d1,  %d0, implicit-def %ccr
-    ADD32kd 0,  %a2,  %d1, implicit-def %ccr
-
-...
---- # PCD
-#               ---------------+-----------+-----------+-----------+-----------
-#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
-#               ---------------+-----------+-----------+-----------+-----------
-#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
-#               ---------------+-----------+-----------+-----------+-----------
-# ADD8qd-SAME:   1   1   0   1   0   0   0   1 . 0   0   1   1   1   0   1   0
-# ADD8qd-SAME:   0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
-#               ---------------------------------------------------------------
-# ADD32qd-SAME:  1   1   0   1   0   0   0   1 . 1   0   1   1   1   0   1   0
-# ADD32qd-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
-#
-# NOTE Immediates for pc-rel instructions use relocations and addendum is encoded
-# inside the relocation record thus there are 0s instead of the value.
-name: MxBiArOp_FMR_PCD
-body: |
-  bb.0:
-    ADD8qd   0, %bd0, implicit-def %ccr
-    ADD32qd -1,  %d0, implicit-def %ccr
-
-...
 --- # ARII
 #               ---------------+-----------+-----------+-----------+-----------
 #                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
 #               ---------------+-----------+-----------+-----------+-----------
 #       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
 #               ---------------+-----------+-----------+-----------+-----------
-# ADD8fd-SAME:   1   1   0   1   0   0   0   1 . 0   0   1   1   0   0   0   0
+# ADD8fd:        1   1   0   1   0   0   0   1 . 0   0   1   1   0   0   0   0
 # ADD8fd-SAME:   0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
 #               ---------------------------------------------------------------
 # ADD8fd-SAME:   1   1   0   1   0   0   0   1 . 0   0   1   1   0   0   0   0

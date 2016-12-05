@@ -197,14 +197,6 @@ def NAME#"16di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType16d, CMD>;
 def NAME#"32ri" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32r, CMD>;
 
 // op $reg, $mem
-def NAME#"8kd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.KOp,  MxType8.KPat,  CMD, MxEncEAk, MxExtBrief_0>;
-def NAME#"16kd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.KOp, MxType16.KPat, CMD, MxEncEAk, MxExtBrief_0>;
-def NAME#"32kd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_0>;
-
-def NAME#"8qd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.QOp,  MxType8.QPat,  CMD, MxEncEAq, MxExtI16_0>;
-def NAME#"16qd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.QOp, MxType16.QPat, CMD, MxEncEAq, MxExtI16_0>;
-def NAME#"32qd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_0>;
-
 def NAME#"8pd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_0, MxExtI16_0>;
 def NAME#"16pd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.POp, MxType16.PPat, CMD, MxEncEAp_0, MxExtI16_0>;
 def NAME#"32pd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_0, MxExtI16_0>;
@@ -218,14 +210,6 @@ def NAME#"16jd" : MxBiArOp_FMR<MN, NODE, MxType16d, MxType16.JOp, MxType16.JPat,
 def NAME#"32jd" : MxBiArOp_FMR<MN, NODE, MxType32d, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_0, MxExtEmpty>;
 
 // op $imm, $mem
-def NAME#"8ki"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.KOp,  MxType8.KPat,  CMDI, MxEncEAk, MxExtBrief_0>;
-def NAME#"16ki" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.KOp, MxType16.KPat, CMDI, MxEncEAk, MxExtBrief_0>;
-def NAME#"32ki" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.KOp, MxType32.KPat, CMDI, MxEncEAk, MxExtBrief_0>;
-
-def NAME#"8qi"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.QOp,  MxType8.QPat,  CMDI, MxEncEAq, MxExtI16_0>;
-def NAME#"16qi" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.QOp, MxType16.QPat, CMDI, MxEncEAq, MxExtI16_0>;
-def NAME#"32qi" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.QOp, MxType32.QPat, CMDI, MxEncEAq, MxExtI16_0>;
-
 def NAME#"8pi"  : MxBiArOp_FMI<MN, NODE, MxType8,  MxType8.POp,  MxType8.PPat,  CMDI, MxEncEAp_0, MxExtI16_0>;
 def NAME#"16pi" : MxBiArOp_FMI<MN, NODE, MxType16, MxType16.POp, MxType16.PPat, CMDI, MxEncEAp_0, MxExtI16_0>;
 def NAME#"32pi" : MxBiArOp_FMI<MN, NODE, MxType32, MxType32.POp, MxType32.PPat, CMDI, MxEncEAp_0, MxExtI16_0>;
