@@ -6,7 +6,7 @@
 # Read object file from stdin, extract named section and print its bit-pattern
 #-------------------------------------------------------------------------------
 
-SECTION=$1
+SECTION="\s$1"
 
 DIR=/tmp/extract-section
 TEMP=$DIR/$(uuidgen).o
