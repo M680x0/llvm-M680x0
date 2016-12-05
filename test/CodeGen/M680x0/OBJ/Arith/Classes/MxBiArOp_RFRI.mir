@@ -4,8 +4,8 @@
 
 #------------------------------------------------------------------------------
 # MxBiArOp_RFRI class used for binary arithmetic operations and operates on
-# register and immediate data. It uses MxArithImmEncoding class and either
-# MxOpModeEAd opmode classe. This is special case for XOR.
+# register and immediate data. It uses MxArithImmEncoding class. This is special
+# case for XOR.
 #------------------------------------------------------------------------------
 
 
@@ -15,7 +15,7 @@
 #                x   x   x   x   x   x   x   x |  SIZE |    MODE   |    REG 
 #               -------------------------------+-------+-----------+-----------
 # XOR16di:       0   0   0   0   1   0   1   0 . 0   1   0   0   0   0   0   0
-# XOR16di:       0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+# XOR16di-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
 #               -------------------------------+-------------------------------
 # XOR16di-SAME:  0   0   0   0   1   0   1   0 . 0   1   0   0   0   0   1   1
 # XOR16di-SAME:  1   1   1   1   1   1   1   1 . 1   1   1   1   1   1   1   1
