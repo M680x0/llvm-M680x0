@@ -1,7 +1,7 @@
 # RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
 # RUN:  | extract-section .text                                                \
 # RUN:  | FileCheck %s -check-prefixes=ADD8dk,ADD32rk,ADD8dq,ADD32rq,\
-# RUN:ADD8df,ADD32df,ADD8dp,ADD32dp,ADD8dj,ADD32dj
+# RUN:ADD8df,ADD32rf,ADD8dp,ADD32rp,ADD8dj,ADD32rj
 
 #------------------------------------------------------------------------------
 # MxBiArOp_RFRM class used for binary arithmetic operations and operates on
@@ -77,7 +77,7 @@ body: |
 # ADD32rf-SAME:  1   1   0   1   0   0   0   0 . 1   0   1   1   0   0   0   1
 # ADD32rf-SAME:  0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
 #               ---------------------------------------------------------------
-# ADD32rf-SAME:  1   1   0   1   0   0   1   1 . 1   1   1   1   0   0   1   1
+# ADD32rf-SAME:  1   1   0   1   0   0   1   1 . 1   1   1   1   0   0   1   0
 # ADD32rf-SAME:  1   0   1   0   1   0   0   0 . 0   0   0   0   0   0   0   0
 #               ---+-----------+---+-------+---+-------------------------------
 #        BRIEF  DA |    REG    | L | SCALE | 0 |          DISPLACEMENT
@@ -101,7 +101,7 @@ body: |
 # ADD8dp-SAME:   0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
 #               ---------------------------------------------------------------
 # ADD32rp-SAME:  1   1   0   1   0   0   0   0 . 1   0   1   0   1   0   0   1
-# ADD32rp-SAME:  0   0   0   0   0   0   0   0 . 1   1   1   1   1   1   1   1
+# ADD32rp-SAME:  1   1   1   1   1   1   1   1 . 1   1   1   1   1   1   1   1
 name: MxBiArOp_RFRM_ARID
 body: |
   bb.0:
@@ -117,7 +117,6 @@ body: |
 #               ---------------+-----------+-----------+-----------+-----------
 # ADD8dj-SAME:   1   1   0   1   0   0   0   0 . 0   0   0   1   0   0   0   0
 #               ---------------------------------------------------------------
-# ADD32rj-SAME:  1   1   0   1   0   0   0   0 . 1   0   0   1   0   0   0   1
 # ADD32rj-SAME:  1   1   0   1   0   1   1   1 . 1   1   0   1   0   0   0   1
 name: MxBiArOp_RFRM_ARI
 body: |
