@@ -270,20 +270,20 @@ def : Pat<(i32 (sext (i8 (MxSetCC_C MxCONDcs, CCR)))), (SETCS_C32d)>;
 // and, we might as well just match it as a setb.
 def : Pat<(and (i8 (MxSetCC_C MxCONDcs, CCR)), 1), (SETd8cs)>;
 
-// (add OP, SETB) -> (addx OP, 0)
+// (add OP, SETB) -> (addx OP, (move 0))
 def : Pat<(add (and (i8 (MxSetCC_C MxCONDcs, CCR)), 1), MxDRD8:$op),
-          (ADDX8di MxDRD8:$op, 0)>;
+          (ADDX8dd MxDRD8:$op, (MOV8di 0))>;
 def : Pat<(add (and (i32 (MxSetCC_C MxCONDcs, CCR)), 1), MxXRD32:$op),
-          (ADDX32ri MxXRD32:$op, 0)>;
+          (ADDX32dd MxDRD32:$op, (MOV32ri 0))>;
 
-// (sub OP, SETB) -> (subx OP, 0)
+// (sub OP, SETB) -> (subx OP, (move 0))
 def : Pat<(sub MxDRD8:$op, (and (i8 (MxSetCC_C MxCONDcs, CCR)), 1)),
-          (SUBX8di MxDRD8:$op, 0)>;
+          (SUBX8dd MxDRD8:$op, (MOV8di 0))>;
 def : Pat<(sub MxXRD32:$op, (and (i32 (MxSetCC_C MxCONDcs, CCR)), 1)),
-          (SUBX32ri MxXRD32:$op, 0)>;
+          (SUBX32dd MxDRD32:$op, (MOV32ri 0))>;
 
-// (sub OP, SETCC_CARRY) -> (addx OP, 0)
+// (sub OP, SETCC_CARRY) -> (addx OP, (move 0))
 def : Pat<(sub MxDRD8:$op, (i8 (MxSetCC_C MxCONDcs, CCR))),
-          (ADDX8di MxDRD8:$op, 0)>;
+          (ADDX8dd MxDRD8:$op, (MOV8di 0))>;
 def : Pat<(sub MxXRD32:$op, (i32 (MxSetCC_C MxCONDcs, CCR))),
-          (ADDX32ri MxXRD32:$op, 0)>;
+          (ADDX32dd MxDRD32:$op, (MOV32ri 0))>;

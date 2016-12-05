@@ -248,16 +248,6 @@ class MxBiArOp_RFRRF<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
                               !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                               MxBead1Bit<0>, MxBeadReg<2>, MxBeadReg<0>>>;
 
-// $reg, ccr <- $reg op $imm op ccr
-class MxBiArOp_RFRIF_xEA<string MN, SDNode NODE, MxType TYPE, bits<4> CMD>
-    : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.IOp:$opd),
-              MN#"."#TYPE.Prefix#"\t$opd, $dst",
-              [(set TYPE.VT:$dst, CCR, (NODE TYPE.VT:$src, TYPE.IPat:$opd, CCR))],
-              MxArithEncoding<MxBead4Bits<CMD>,
-                              !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#TYPE.RLet#"EA"),
-                              MxBeadReg<0>, MxEncEAi,
-                              !cast<MxEncExt>("MxExtI"#TYPE.Size#"_2")>>;
-
 } // Constraints
 } // Uses, Defs
 
@@ -270,10 +260,6 @@ def NAME#"16dd" : MxBiArOp_RFRRF<MN, NODE, MxType16d, CMD>;
 def NAME#"32dd" : MxBiArOp_RFRRF<MN, NODE, MxType32d, CMD>;
 
 } // isCommutable = ?
-
-def NAME#"8di"  : MxBiArOp_RFRIF_xEA<MN, NODE, MxType8d,  CMD>;
-def NAME#"16di" : MxBiArOp_RFRIF_xEA<MN, NODE, MxType16d, CMD>;
-def NAME#"32ri" : MxBiArOp_RFRIF_xEA<MN, NODE, MxType32r, CMD>;
 
 } // MxBiArOp_RFF
 

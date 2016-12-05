@@ -34,8 +34,9 @@ entry:
 }
 
 ; x00-LABEL: t3:
+; x00:       move.l #0, %d2
 ; x00:       sub.l #18, %d1
-; x00:       subx.l #0, %d0
+; x00:       subx.l %d2, %d0
 ; x00:       scs
 ; x00:       and.l
 ; x00:       lsl.l
