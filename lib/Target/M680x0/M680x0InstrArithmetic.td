@@ -315,8 +315,6 @@ defm XOR : MxBiArOp_DF_EAd<"eor", MxXor, 0xB, 0xA>;
 // CMP
 //===----------------------------------------------------------------------===//
 
-// TODO TEST ENCODING
-
 let Defs = [CCR] in {
 class MxCmp_RR<MxType TYPE>
     : MxInst<(outs), (ins TYPE.ROp:$lhs, TYPE.ROp:$rhs),
@@ -332,7 +330,7 @@ class MxCmp_RI<MxType TYPE>
       [(set CCR, (MxCmp TYPE.VT:$reg, TYPE.IPat:$imm))],
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                        MxEncEAd_1, MxExtEmpty,
-                       !cast<MxEncExt>("MxExtI"#TYPE.Size#"_1")>>;
+                       !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
 
 let mayLoad = 1 in {
 
