@@ -303,23 +303,23 @@ def MxExtI32_2 : MxEncExt<MxBead32Imm<2>>;
 /*                MxBeadDAReg<opN, 1>>; */
 
 // NOTE They are all using Long Xn
-def MxExtBrief_0 : MxEncExt<MxBead8Imm<0>, MxBead1Bit<0b0>,
+def MxExtBrief_0 : MxEncExt<MxBead8Disp<0>, MxBead1Bit<0b0>,
                             MxBead2Bits<0b00>, MxBead1Bit<1>,
                             MxBeadDAReg<0, 1>>;
 
-def MxExtBrief_1 : MxEncExt<MxBead8Imm<1>, MxBead1Bit<0b0>,
+def MxExtBrief_1 : MxEncExt<MxBead8Disp<1>, MxBead1Bit<0b0>,
                             MxBead2Bits<0b00>, MxBead1Bit<1>,
                             MxBeadDAReg<1, 1>>;
 
-def MxExtBrief_2 : MxEncExt<MxBead8Imm<2>, MxBead1Bit<0b0>,
+def MxExtBrief_2 : MxEncExt<MxBead8Disp<2>, MxBead1Bit<0b0>,
                             MxBead2Bits<0b00>, MxBead1Bit<1>,
                             MxBeadDAReg<2, 1>>;
 
-def MxExtBrief_3 : MxEncExt<MxBead8Imm<3>, MxBead1Bit<0b0>,
+def MxExtBrief_3 : MxEncExt<MxBead8Disp<3>, MxBead1Bit<0b0>,
                             MxBead2Bits<0b00>, MxBead1Bit<1>,
                             MxBeadDAReg<3, 1>>;
 
-def MxExtBrief_4 : MxEncExt<MxBead8Imm<4>, MxBead1Bit<0b0>,
+def MxExtBrief_4 : MxEncExt<MxBead8Disp<4>, MxBead1Bit<0b0>,
                             MxBead2Bits<0b00>, MxBead1Bit<1>,
                             MxBeadDAReg<4, 1>>;
 
