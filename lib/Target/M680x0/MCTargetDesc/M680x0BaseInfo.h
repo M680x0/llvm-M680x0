@@ -47,7 +47,7 @@ namespace M680x0 {
   // ([bd,PC,Xn],od)
   enum { 
     PCRelDisp = 0,
-    PCRelScale = 1,
+    PCRelIndex = 1,
     PCRelOuter = 2
   };
 } // end namespace M680x0;

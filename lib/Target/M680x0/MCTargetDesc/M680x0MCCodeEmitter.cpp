@@ -106,10 +106,15 @@ EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
 
   assert (Op < Desc.NumMIOperands);
   MIOperandInfo MIO = Desc.MIOpInfo[Op];
+  bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
   MCOperand MCO;
-  // TODO PCRel operands are always Alt for reg
   if (MIO.isTargetType() && MIO.OpsNum > 1) {
-    MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemIndex : M680x0::MemBase));
+    if (isPCRel) {
+      assert(Alt && "PCRel addresses use Alt bead register encoding by default");
+      MCO = MI.getOperand(MIO.MINo + M680x0::PCRelIndex);
+    } else {
+      MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemIndex : M680x0::MemBase));
+    }
   } else {
     assert (!Alt && "You cannot use Alt register with a simple operand");
     MCO = MI.getOperand(MIO.MINo);
