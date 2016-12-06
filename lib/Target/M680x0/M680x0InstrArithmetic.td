@@ -169,7 +169,7 @@ class MxBiArOp_FMI<string MN, SDNode NODE, MxType TYPE,
 } // mayLoad, mayStore
 } // Defs = [CCR]
 
-multiclass MxBiArOp_RF<string MN, SDNode NODE, bit isComm, bits<4> CMD, bits<4> CMDI> {
+multiclass MxBiArOp_DF<string MN, SDNode NODE, bit isComm, bits<4> CMD, bits<4> CMDI> {
 
 // op $mem, $reg
 def NAME#"8dk"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.KOp,  MxType8.KPat,  CMD, MxEncEAk, MxExtBrief_2>;
@@ -231,26 +231,31 @@ def NAME#"32dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32d, CMD>;
 
 } // isCommutable = ?
 
+} // MxBiArOp_DF
 
 // These special snowflakes allowed to match address registers but since *A
 // operations do not produce CCR we should not match them against Mx nodes that
 // produce it.
-let Pattern = [(null_frag)] in {
+let Pattern = [(null_frag)] in
+multiclass MxBiArOp_AF<string MN, SDNode NODE, bit isComm, bits<4> CMD, bits<4> CMDI> {
+
 def NAME#"32rk" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_2>;
 def NAME#"32rq" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_2>;
 def NAME#"32rf" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
 def NAME#"32rp" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
 def NAME#"32rj" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
 def NAME#"32ri" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32r, CMD>;
+
 let isCommutable = isComm in
 def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
-}
 
-} // MxBiArOp_RF
+} // MxBiArOp_AF
 
 // NOTE These naturally produce CCR
-defm ADD : MxBiArOp_RF<"add", MxAdd, 1, 0xD, 0x6>;
-defm SUB : MxBiArOp_RF<"sub", MxSub, 0, 0x9, 0x4>;
+defm ADD : MxBiArOp_DF<"add", MxAdd, 1, 0xD, 0x6>;
+defm ADD : MxBiArOp_AF<"add", MxAdd, 1, 0xD, 0x6>;
+defm SUB : MxBiArOp_DF<"sub", MxSub, 0, 0x9, 0x4>;
+defm SUB : MxBiArOp_AF<"sub", MxSub, 0, 0x9, 0x4>;
 
 let Uses = [CCR], Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
@@ -288,25 +293,8 @@ defm SUBX : MxBiArOp_RFF<"subx", MxSubX, 0, 0x9>;
 // And/Xor/Or
 //===----------------------------------------------------------------------===//
 
-// Does not allow use of An registers
-multiclass MxBiArOp_DF_xEA<string MN, SDNode NODE, bits<4> CMD> {
-
-let isCommutable = 1 in {
-
-def NAME#"8dd"  : MxBiArOp_RFRR_xEA<MN, NODE, MxType8d,  CMD>;
-def NAME#"16dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType16d, CMD>;
-def NAME#"32dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32d, CMD>;
-
-} // let isCommutable = 1
-
-def NAME#"8di"  : MxBiArOp_RFRI_xEA<MN, NODE,  MxType8d, CMD>;
-def NAME#"16di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType16d, CMD>;
-def NAME#"32di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32d, CMD>;
-
-} // MxBiArOp_DF_xEA
-
-defm AND : MxBiArOp_DF_xEA<"and", MxAnd, 0xC>;
-defm OR  : MxBiArOp_DF_xEA<"or",  MxOr,  0x8>;
+defm AND : MxBiArOp_DF<"and", MxAnd, 1, 0xC, 0x2>;
+defm OR  : MxBiArOp_DF<"or",  MxOr,  1, 0x8, 0x0>;
 
 multiclass MxBiArOp_DF_EAd<string MN, SDNode NODE, bits<4> CMD, bits<4> CMDI> {
 
