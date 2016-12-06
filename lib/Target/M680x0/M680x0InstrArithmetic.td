@@ -347,7 +347,7 @@ class MxCmp_BI<MxType TYPE>
       "cmpi."#TYPE.Prefix#"\t$imm, $abs",
       [(set CCR, (MxCmp TYPE.IPat:$imm, (load (i32 (MxWrapper tglobaladdr:$abs)))))],
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
-                       MxEncEAb, MxExtI32_1, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
+                       MxEncEAB, MxExtI32_1, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
 
 class MxCmp_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                MxEncEA EA, MxEncExt EXT>
