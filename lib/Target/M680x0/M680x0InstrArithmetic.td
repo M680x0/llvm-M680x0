@@ -368,8 +368,8 @@ def NAME#TYPE.FOp.Letter : MxCmp_MR<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_0, MxExt
 }
 
 multiclass MMxCmp_MI<MxType TYPE> {
-def NAME#TYPE.QOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.QOp, TYPE.QPat, MxEncEAq,   MxExtI16_1>;
 def NAME#TYPE.KOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.KOp, TYPE.KPat, MxEncEAk,   MxExtBrief_1>;
+def NAME#TYPE.QOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.QOp, TYPE.QPat, MxEncEAq,   MxExtI16_1>;
 def NAME#TYPE.POp.Letter#"i" : MxCmp_MI<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_1, MxExtI16_1>;
 def NAME#TYPE.FOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_1, MxExtBrief_1>;
 def NAME#TYPE.JOp.Letter#"i" : MxCmp_MI<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_1, MxExtEmpty>;
