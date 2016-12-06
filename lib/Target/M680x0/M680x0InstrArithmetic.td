@@ -174,27 +174,28 @@ multiclass MxBiArOp_RF<string MN, SDNode NODE, bit isComm, bits<4> CMD, bits<4> 
 // op $mem, $reg
 def NAME#"8dk"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.KOp,  MxType8.KPat,  CMD, MxEncEAk, MxExtBrief_2>;
 def NAME#"16dk" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.KOp, MxType16.KPat, CMD, MxEncEAk, MxExtBrief_2>;
-def NAME#"32rk" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_2>;
+def NAME#"32dk" : MxBiArOp_RFRM<MN, NODE, MxType32d, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_2>;
 
 def NAME#"8dq"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.QOp,  MxType8.QPat,  CMD, MxEncEAq, MxExtI16_2>;
 def NAME#"16dq" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.QOp, MxType16.QPat, CMD, MxEncEAq, MxExtI16_2>;
-def NAME#"32rq" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_2>;
+def NAME#"32dq" : MxBiArOp_RFRM<MN, NODE, MxType32d, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_2>;
 
 def NAME#"8dp"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_2, MxExtI16_2>;
 def NAME#"16dp" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.POp, MxType16.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
-def NAME#"32rp" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
+def NAME#"32dp" : MxBiArOp_RFRM<MN, NODE, MxType32d, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
 
 def NAME#"8df"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.FOp,  MxType8.FPat,  CMD, MxEncEAf_2, MxExtBrief_2>;
 def NAME#"16df" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.FOp, MxType16.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
-def NAME#"32rf" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
+def NAME#"32df" : MxBiArOp_RFRM<MN, NODE, MxType32d, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
 
 def NAME#"8dj"  : MxBiArOp_RFRM<MN, NODE, MxType8d,  MxType8.JOp,  MxType8.JPat,  CMD, MxEncEAj_2, MxExtEmpty>;
 def NAME#"16dj" : MxBiArOp_RFRM<MN, NODE, MxType16d, MxType16.JOp, MxType16.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
-def NAME#"32rj" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"32dj" : MxBiArOp_RFRM<MN, NODE, MxType32d, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
 
+// op $imm, $reg
 def NAME#"8di"  : MxBiArOp_RFRI_xEA<MN, NODE, MxType8d,  CMD>;
 def NAME#"16di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType16d, CMD>;
-def NAME#"32ri" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32r, CMD>;
+def NAME#"32di" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32d, CMD>;
 
 // op $reg, $mem
 def NAME#"8pd"  : MxBiArOp_FMR<MN, NODE, MxType8d,  MxType8.POp,  MxType8.PPat,  CMD, MxEncEAp_0, MxExtI16_0>;
@@ -226,9 +227,24 @@ let isCommutable = isComm in {
 
 def NAME#"8dd"  : MxBiArOp_RFRR_xEA<MN, NODE, MxType8d,  CMD>;
 def NAME#"16dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType16d, CMD>;
-def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
+def NAME#"32dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32d, CMD>;
 
 } // isCommutable = ?
+
+
+// These special snowflakes allowed to match address registers but since *A
+// operations do not produce CCR we should not match them against Mx nodes that
+// produce it.
+let Pattern = [(null_frag)] in {
+def NAME#"32rk" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.KOp, MxType32.KPat, CMD, MxEncEAk, MxExtBrief_2>;
+def NAME#"32rq" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.QOp, MxType32.QPat, CMD, MxEncEAq, MxExtI16_2>;
+def NAME#"32rf" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.FOp, MxType32.FPat, CMD, MxEncEAf_2, MxExtBrief_2>;
+def NAME#"32rp" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.POp, MxType32.PPat, CMD, MxEncEAp_2, MxExtI16_2>;
+def NAME#"32rj" : MxBiArOp_RFRM<MN, NODE, MxType32r, MxType32.JOp, MxType32.JPat, CMD, MxEncEAj_2, MxExtEmpty>;
+def NAME#"32ri" : MxBiArOp_RFRI_xEA<MN, NODE, MxType32r, CMD>;
+let isCommutable = isComm in
+def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
+}
 
 } // MxBiArOp_RF
 
@@ -318,7 +334,7 @@ defm XOR : MxBiArOp_DF_EAd<"eor", MxXor, 0xB, 0xA>;
 let Defs = [CCR] in {
 class MxCmp_RR<MxType TYPE>
     : MxInst<(outs), (ins TYPE.ROp:$lhs, TYPE.ROp:$rhs),
-      "cmp."#TYPE.Size#"\t$lhs, $rhs",
+      "cmp."#TYPE.Prefix#"\t$lhs, $rhs",
      [(set CCR, (MxCmp TYPE.VT:$lhs, TYPE.VT:$rhs))],
      MxArithEncoding<MxBead4Bits<0xB>,
                     !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#"dEA"),
@@ -327,7 +343,7 @@ class MxCmp_RR<MxType TYPE>
 class MxCmp_RI<MxType TYPE>
     : MxInst<(outs), (ins TYPE.IOp:$imm, TYPE.ROp:$reg),
       "cmpi."#TYPE.Prefix#"\t$imm, $reg",
-      [(set CCR, (MxCmp TYPE.VT:$reg, TYPE.IPat:$imm))],
+      [(set CCR, (MxCmp TYPE.IPat:$imm, TYPE.VT:$reg))],
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                        MxEncEAd_1, MxExtEmpty,
                        !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
@@ -351,20 +367,20 @@ class MxCmp_BI<MxType TYPE>
 
 class MxCmp_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                MxEncEA EA, MxEncExt EXT>
-    : MxInst<(outs), (ins MEMOpd:$mem, TYPE.ROp:$reg),
+    : MxInst<(outs), (ins TYPE.ROp:$reg, MEMOpd:$mem),
       "cmp."#TYPE.Prefix#"\t$mem, $reg",
       [(set CCR, (MxCmp (load MEMPat:$mem), TYPE.ROp:$reg))],
       MxArithEncoding<MxBead4Bits<0xB>,
                     !cast<MxEncOpMode>("MxOpMode"#TYPE.Size#"dEA"),
-                    MxBeadReg<1>, EA, EXT>>;
+                    MxBeadReg<0>, EA, EXT>>;
 } // let mayLoad = 1
 
 } // let Defs = [CCR]
 
 multiclass MMxCmp_MR<MxType TYPE> {
-def NAME#TYPE.JOp.Letter : MxCmp_MR<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_0, MxExtEmpty>;
-def NAME#TYPE.POp.Letter : MxCmp_MR<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_0, MxExtI16_0>;
-def NAME#TYPE.FOp.Letter : MxCmp_MR<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_0, MxExtBrief_0>;
+def NAME#TYPE.JOp.Letter : MxCmp_MR<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_1, MxExtEmpty>;
+def NAME#TYPE.POp.Letter : MxCmp_MR<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_1, MxExtI16_1>;
+def NAME#TYPE.FOp.Letter : MxCmp_MR<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_1, MxExtBrief_1>;
 }
 
 multiclass MMxCmp_MI<MxType TYPE> {
