@@ -61,7 +61,7 @@ class MxCMove<MxType TYPE>
 
 def CMOV8d  : MxCMove<MxType8d>;
 def CMOV16d : MxCMove<MxType16d>;
-def CMOV32d : MxCMove<MxType32d>;
+def CMOV32r : MxCMove<MxType32r>;
 
 
 //===----------------------------------------------------------------------===//

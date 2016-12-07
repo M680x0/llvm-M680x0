@@ -2117,12 +2117,13 @@ LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
       // (select (x != 0), -1, 0) -> neg & sbb
       // (select (x == 0), 0, -1) -> neg & sbb
       if (isNullConstant(Y) &&
-            (isAllOnesConstant(Op1) == (CondCode == M680x0::COND_NE))) {
+         (isAllOnesConstant(Op1) == (CondCode == M680x0::COND_NE))) {
+
           SDVTList VTs = DAG.getVTList(CmpOp0.getValueType(), MVT::i32);
+
           SDValue Neg = DAG.getNode(M680x0ISD::SUB, DL, VTs,
-                                    DAG.getConstant(0, DL,
-                                                    CmpOp0.getValueType()),
-                                    CmpOp0);
+                        DAG.getConstant(0, DL, CmpOp0.getValueType()), CmpOp0);
+
           SDValue Res = DAG.getNode(M680x0ISD::SETCC_CARRY, DL, Op.getValueType(),
                                     DAG.getConstant(M680x0::COND_CS, DL, MVT::i8),
                                     SDValue(Neg.getNode(), 1));
@@ -2800,8 +2801,10 @@ const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case M680x0ISD::OR:             return "M680x0ISD::OR";
   case M680x0ISD::XOR:            return "M680x0ISD::XOR";
   case M680x0ISD::AND:            return "M680x0ISD::AND";
-  case M680x0ISD::BT:             return "M680x0ISD::BT";
   case M680x0ISD::CMP:            return "M680x0ISD::CMP";
+  case M680x0ISD::BT:             return "M680x0ISD::BT";
+  case M680x0ISD::SELECT:         return "M680x0ISD::SELECT";
+  case M680x0ISD::CMOV:           return "M680x0ISD::CMOV";
   case M680x0ISD::BRCOND:         return "M680x0ISD::BRCOND";
   case M680x0ISD::SETCC:          return "M680x0ISD::SETCC";
   case M680x0ISD::SETCC_CARRY:    return "M680x0ISD::SETCC_CARRY";
@@ -2842,7 +2845,7 @@ isCMOVPseudo(MachineInstr &MI) {
   switch (MI.getOpcode()) {
   case M680x0::CMOV8d:
   case M680x0::CMOV16d:
-  case M680x0::CMOV32d:
+  case M680x0::CMOV32r:
     return true;
 
   default:
@@ -3164,13 +3167,12 @@ EmitLoweredSelect(MachineInstr &MI, MachineBasicBlock *BB) const {
 }
 
 MachineBasicBlock * M680x0TargetLowering::
-EmitInstrWithCustomInserter(MachineInstr &MI,
-                                               MachineBasicBlock *BB) const {
+EmitInstrWithCustomInserter(MachineInstr &MI, MachineBasicBlock *BB) const {
   switch (MI.getOpcode()) {
   default: llvm_unreachable("Unexpected instr type to insert");
   case M680x0::CMOV8d:
   case M680x0::CMOV16d:
-  case M680x0::CMOV32d:
+  case M680x0::CMOV32r:
     return EmitLoweredSelect(MI, BB);
 
   }
@@ -3180,11 +3182,11 @@ EmitInstrWithCustomInserter(MachineInstr &MI,
 // DAG Combine
 //===----------------------------------------------------------------------===//
 
-SDValue M680x0TargetLowering::
-PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const {
-  // SelectionDAG &DAG = DCI.DAG;
-  // switch (N->getOpcode()) {
-  // }
-  //
-  return SDValue();
-}
+// SDValue M680x0TargetLowering::
+// PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const {
+//   SelectionDAG &DAG = DCI.DAG;
+//   switch (N->getOpcode()) {
+//   }
+//
+//   return SDValue();
+// }
