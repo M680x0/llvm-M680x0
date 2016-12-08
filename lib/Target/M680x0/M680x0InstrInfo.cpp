@@ -285,12 +285,12 @@ ExpandPUSH_POP(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
                bool isPush) const {
   MachineBasicBlock::iterator I = MIB.getInstr(); I++;
   MachineBasicBlock &MBB = *MIB->getParent();
-  unsigned Reg = MIB->getOperand(0).getReg();
+  MachineOperand MO = MIB->getOperand(0);
   DebugLoc DL = MIB->getDebugLoc();
   if (isPush) {
-    BuildMI(MBB, I, DL, Desc, RI.getStackRegister()).addReg(Reg);
+    BuildMI(MBB, I, DL, Desc).addReg(RI.getStackRegister()).addOperand(MO);
   } else {
-    BuildMI(MBB, I, DL, Desc, Reg).addReg(RI.getStackRegister());
+    BuildMI(MBB, I, DL, Desc, MO.getReg()).addReg(RI.getStackRegister());
   }
   MIB->eraseFromParent();
   return true;
