@@ -402,10 +402,28 @@ defm CMP32 : MMxCmp_MI<MxType32d>;
 // Ext
 //===----------------------------------------------------------------------===//
 
-let Constraints = "$src = $dst" in {
-  def EXT16 : MxInst<(outs MxDRD16:$dst), (ins MxDRD16:$src), "ext.w\t$src">;
-  def EXT32 : MxInst<(outs MxDRD32:$dst), (ins MxDRD32:$src), "ext.l\t$src">;
-} // $src = $dst
+def MxExtOpmode_wb : MxBead3Bits<0b010>;
+def MxExtOpmode_lw : MxBead3Bits<0b011>;
+def MxExtOpmode_lb : MxBead3Bits<0b111>;
+
+/// ---------------------------------------------------
+///  F  E  D  C  B  A  9 | 8  7  6 | 5  4  3 | 2  1  0
+/// ---------------------------------------------------
+///  0  1  0  0  1  0  0 |  OPMODE | 0  0  0 |   REG
+/// ---------------------------------------------------
+class MxExtEncoding<MxBead3Bits OPMODE>
+    : MxEncoding<MxBeadReg<0>, MxBead3Bits<0b000>, OPMODE,
+                 MxBead3Bits<0b100>, MxBead4Bits<0b0100>>;
+
+let Defs = [CCR] in
+let Constraints = "$src = $dst" in
+class MxExt<MxType TO, MxType FROM>
+    : MxInst<(outs TO.ROp:$dst), (ins TO.ROp:$src),
+              "ext."#TO.Prefix#"\t$src", [],
+              MxExtEncoding<!cast<MxBead3Bits>("MxExtOpmode_"#TO.Prefix#FROM.Prefix)>>;
+
+def EXT16 : MxExt<MxType16d, MxType8d>;
+def EXT32 : MxExt<MxType32d, MxType16d>;
 
 def : Pat<(sext_inreg i16:$src, i8),  (EXT16 $src)>;
 def : Pat<(sext_inreg i32:$src, i16), (EXT32 $src)>;
