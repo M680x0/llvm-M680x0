@@ -125,9 +125,9 @@ entry:
 }
 
 ; x00-LABEL: test13:
-; x00: move.w (6,%sp)
-; x00: and.w #8
-; x00: cmpi.w #0
+; x00: move.b (7,%sp)
+; x00: and.b #8
+; x00: cmpi.b #0
 define i32 @test13(i32 %mask, i32 %base, i32 %intra) {
   %and = and i32 %mask, 8
   %tobool = icmp ne i32 %and, 0
@@ -183,7 +183,7 @@ define i8 @test18(i64 %L) {
   ret i8 %not
 }
 
-@d = global i8 0, align 2
+@d = global i8 0, align 1
 
 
 ; x00-LABEL: test20
@@ -202,9 +202,9 @@ define void @test20(i32 %bf.load, i8 %x1, i8* %b_addr) {
   %add = add nuw nsw i32 %conv, %conv6
   %tobool7 = icmp ne i32 %add, 0
   %frombool = zext i1 %tobool7 to i8
-  store i8 %frombool, i8* %b_addr, align 2
+  store i8 %frombool, i8* %b_addr, align 1
   %tobool14 = icmp ne i32 %bf.shl, 0
   %frombool15 = zext i1 %tobool14 to i8
-  store i8 %frombool15, i8* @d, align 2
+  store i8 %frombool15, i8* @d, align 1
   ret void
 }

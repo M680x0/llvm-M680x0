@@ -44,7 +44,7 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   Ret += "-p:32:32";
 
   // M680x0 requires i8 to align on 2 byte boundry
-  Ret += "-i8:16:16-i16:16:16-i32:32:32";
+  Ret += "-i8:8:8-i16:16:16-i32:32:32";
 
   // FIXME no floats at the moment
 
