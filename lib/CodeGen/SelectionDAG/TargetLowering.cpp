@@ -1545,19 +1545,12 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
           cast<ConstantSDNode>(N0.getOperand(1))->getAPIntValue();
         for (unsigned width = origWidth / 2; width>=8; width /= 2) {
           APInt newMask = APInt::getLowBitsSet(maskWidth, width);
-          unsigned Alignment =
-            DAG.getDataLayout().getABIIntegerTypeAlignment(width);
           for (unsigned offset=0; offset<origWidth/width; offset++) {
             if ((newMask & Mask) == Mask) {
               if (isLittle) {
                 bestOffset = (uint64_t)offset * (width/8);
               } else {
-                // BE is trickier since accessing LSB will require an odd offset,
-                // e.g. 3, which might not be allowed for some targets.
-                unsigned newOffset = (origWidth/width - offset - 1) * (width/8);
-                if (newOffset % Alignment)
-                  break;
-                bestOffset = newOffset;
+                bestOffset = (origWidth/width - offset - 1) * (width/8);
               }
               bestMask = Mask.lshr(offset * (width/8) * 8);
               bestWidth = width;
