@@ -615,6 +615,18 @@ def: Pat<(MxSExtLoadi16i8 MxCP_ARID:$src),
 def: Pat<(MxSExtLoadi16i8 MxCP_ARII:$src),
           (EXTRACT_SUBREG (MOVSXd32f8 MxARII8:$src), MxSubRegIndex16Lo)>;
 
+// i32 <- sext i8
+def: Pat<(i32 (sext i8:$src)), (MOVSXd32d8 MxDRD8:$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARI :$src), (MOVSXd32j8 MxARI8 :$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARID:$src), (MOVSXd32p8 MxARID8:$src)>;
+def: Pat<(MxSExtLoadi32i8 MxCP_ARII:$src), (MOVSXd32f8 MxARII8:$src)>;
+
+// i32 <- sext i16
+def: Pat<(i32 (sext i16:$src)), (MOVSXd32d16 MxDRD16:$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARI :$src), (MOVSXd32j16 MxARI16 :$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARID:$src), (MOVSXd32p16 MxARID16:$src)>;
+def: Pat<(MxSExtLoadi32i16 MxCP_ARII:$src), (MOVSXd32f16 MxARII16:$src)>;
+
 // i16 <- zext i8
 def: Pat<(i16 (zext i8:$src)),
           (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
@@ -625,29 +637,39 @@ def: Pat<(MxZExtLoadi16i8 MxCP_ARID:$src),
 def: Pat<(MxZExtLoadi16i8 MxCP_ARII:$src),
           (EXTRACT_SUBREG (MOVZXd32f8 MxARII8:$src), MxSubRegIndex16Lo)>;
 
-// i32 <- sext i8
-def: Pat<(i32 (sext i8:$src)), (MOVSXd32d8 MxDRD8:$src)>;
-def: Pat<(MxSExtLoadi32i8 MxCP_ARI :$src), (MOVSXd32j8 MxARI8 :$src)>;
-def: Pat<(MxSExtLoadi32i8 MxCP_ARID:$src), (MOVSXd32p8 MxARID8:$src)>;
-def: Pat<(MxSExtLoadi32i8 MxCP_ARII:$src), (MOVSXd32f8 MxARII8:$src)>;
-
 // i32 <- zext i8
 def: Pat<(i32 (zext i8:$src)), (MOVZXd32d8 MxDRD8:$src)>;
 def: Pat<(MxZExtLoadi32i8 MxCP_ARI :$src), (MOVZXd32j8 MxARI8 :$src)>;
 def: Pat<(MxZExtLoadi32i8 MxCP_ARID:$src), (MOVZXd32p8 MxARID8:$src)>;
 def: Pat<(MxZExtLoadi32i8 MxCP_ARII:$src), (MOVZXd32f8 MxARII8:$src)>;
 
-// i32 <- sext i16
-def: Pat<(i32 (sext i16:$src)), (MOVSXd32d16 MxDRD16:$src)>;
-def: Pat<(MxSExtLoadi32i16 MxCP_ARI :$src), (MOVSXd32j16 MxARI16 :$src)>;
-def: Pat<(MxSExtLoadi32i16 MxCP_ARID:$src), (MOVSXd32p16 MxARID16:$src)>;
-def: Pat<(MxSExtLoadi32i16 MxCP_ARII:$src), (MOVSXd32f16 MxARII16:$src)>;
-
 // i32 <- zext i16
 def: Pat<(i32 (zext i16:$src)), (MOVZXd32d16 MxDRD16:$src)>;
 def: Pat<(MxZExtLoadi32i16 MxCP_ARI :$src), (MOVZXd32j16 MxARI16 :$src)>;
 def: Pat<(MxZExtLoadi32i16 MxCP_ARID:$src), (MOVZXd32p16 MxARID16:$src)>;
 def: Pat<(MxZExtLoadi32i16 MxCP_ARII:$src), (MOVZXd32f16 MxARII16:$src)>;
+
+// i16 <- anyext i8
+def: Pat<(i16 (anyext i8:$src)),
+          (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxExtLoadi16i8 MxCP_ARI:$src),
+          (EXTRACT_SUBREG (MOVZXd32j8 MxARI8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxExtLoadi16i8 MxCP_ARID:$src),
+          (EXTRACT_SUBREG (MOVZXd32p8 MxARID8:$src), MxSubRegIndex16Lo)>;
+def: Pat<(MxExtLoadi16i8 MxCP_ARII:$src),
+          (EXTRACT_SUBREG (MOVZXd32f8 MxARII8:$src), MxSubRegIndex16Lo)>;
+
+// i32 <- anyext i8
+def: Pat<(i32 (anyext i8:$src)), (MOVZXd32d8 MxDRD8:$src)>;
+def: Pat<(MxExtLoadi32i8 MxCP_ARI :$src), (MOVZXd32j8 MxARI8 :$src)>;
+def: Pat<(MxExtLoadi32i8 MxCP_ARID:$src), (MOVZXd32p8 MxARID8:$src)>;
+def: Pat<(MxExtLoadi32i8 MxCP_ARII:$src), (MOVZXd32f8 MxARII8:$src)>;
+
+// i32 <- anyext i16
+def: Pat<(i32 (anyext i16:$src)), (MOVZXd32d16 MxDRD16:$src)>;
+def: Pat<(MxExtLoadi32i16 MxCP_ARI :$src), (MOVZXd32j16 MxARI16 :$src)>;
+def: Pat<(MxExtLoadi32i16 MxCP_ARID:$src), (MOVZXd32p16 MxARID16:$src)>;
+def: Pat<(MxExtLoadi32i16 MxCP_ARII:$src), (MOVZXd32f16 MxARII16:$src)>;
 
 // trunc patterns
 def : Pat<(i16 (trunc i32:$src)),
@@ -656,16 +678,3 @@ def : Pat<(i8  (trunc i32:$src)),
           (EXTRACT_SUBREG MxXRD32:$src, MxSubRegIndex8Lo)>;
 def : Pat<(i8  (trunc i16:$src)),
           (EXTRACT_SUBREG MxXRD16:$src, MxSubRegIndex8Lo)>;
-
-
-// anyext. Define these to do an explicit zero-extend to
-// avoid partial-register updates.
-def : Pat<(i16 (anyext MxDRD8 :$src)),
-          (EXTRACT_SUBREG (MOVZXd32d8 MxDRD8:$src), MxSubRegIndex16Lo)>;
-
-def : Pat<(i32 (anyext MxDRD8 :$src)),
-          (MOVZXd32d8  MxDRD8 :$src)>;
-
-// Except for i16 -> i32 since isel expect i16 ops to be promoted to i32.
-def : Pat<(i32 (anyext MxXRD16:$src)),
-          (INSERT_SUBREG (i32 (IMPLICIT_DEF)), MxXRD16:$src, MxSubRegIndex16Lo)>;
