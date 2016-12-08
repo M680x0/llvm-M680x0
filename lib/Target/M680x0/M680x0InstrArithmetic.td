@@ -353,7 +353,7 @@ class MxCmp_BI<MxType TYPE>
       MxArithImmEncoding<MxBead4Bits<0xC>, !cast<MxEncSize>("MxEncSize"#TYPE.Size),
                        MxEncEAB, MxExtI32_1, !cast<MxEncExt>("MxExtI"#TYPE.Size#"_0")>>;
 
-class MxCmp_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
+class MxCmp_RM<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs), (ins TYPE.ROp:$reg, MEMOpd:$mem),
       "cmp."#TYPE.Prefix#"\t$mem, $reg",
@@ -365,10 +365,12 @@ class MxCmp_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
 
 } // let Defs = [CCR]
 
-multiclass MMxCmp_MR<MxType TYPE> {
-def NAME#TYPE.JOp.Letter : MxCmp_MR<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_1, MxExtEmpty>;
-def NAME#TYPE.POp.Letter : MxCmp_MR<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_1, MxExtI16_1>;
-def NAME#TYPE.FOp.Letter : MxCmp_MR<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_1, MxExtBrief_1>;
+multiclass MMxCmp_RM<MxType TYPE> {
+def NAME#TYPE.KOp.Letter : MxCmp_RM<TYPE, TYPE.KOp, TYPE.KPat, MxEncEAk,   MxExtBrief_1>;
+def NAME#TYPE.QOp.Letter : MxCmp_RM<TYPE, TYPE.QOp, TYPE.QPat, MxEncEAq,   MxExtI16_1>;
+def NAME#TYPE.POp.Letter : MxCmp_RM<TYPE, TYPE.POp, TYPE.PPat, MxEncEAp_1, MxExtI16_1>;
+def NAME#TYPE.FOp.Letter : MxCmp_RM<TYPE, TYPE.FOp, TYPE.FPat, MxEncEAf_1, MxExtBrief_1>;
+def NAME#TYPE.JOp.Letter : MxCmp_RM<TYPE, TYPE.JOp, TYPE.JPat, MxEncEAj_1, MxExtEmpty>;
 }
 
 multiclass MMxCmp_MI<MxType TYPE> {
@@ -386,9 +388,9 @@ def CMP#S#bi : MxCmp_BI<!cast<MxType>("MxType"#S#"d")>;
 } // foreach
 
 // cmp mem, Dn
-defm CMP8d  : MMxCmp_MR<MxType8d>;
-defm CMP16d : MMxCmp_MR<MxType16d>;
-defm CMP32d : MMxCmp_MR<MxType32d>;
+defm CMP8d  : MMxCmp_RM<MxType8d>;
+defm CMP16d : MMxCmp_RM<MxType16d>;
+defm CMP32d : MMxCmp_RM<MxType32d>;
 
 // cmp #imm, mem
 defm CMP8  : MMxCmp_MI<MxType8d>;

@@ -1,0 +1,123 @@
+# RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
+# RUN:  | extract-section .text                                                \
+# RUN:  | FileCheck %s -check-prefixes=CMP8kf,CMP32kf,CMP8qp,CMP32qp,CMP8df,CMP32df,\
+# RUN:CMP8dp,CMP32dp,CMP8dj,CMP32dj
+
+#------------------------------------------------------------------------------
+# MxCMP_RM class used for compare operations and operates on memory data and
+# register. It uses MxArithEncoding encoding class.
+# NOTE: CMP is calculated by subtracting LHS(Mem) from RHS(Reg)
+#------------------------------------------------------------------------------
+
+--- # PCI
+#               ---------------+-----------+-----------+-----------+-----------
+#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
+#               ---------------+-----------+-----------+-----------+-----------
+#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
+#               ---------------+-----------+-----------+-----------+-----------
+# CMP8dk:        1   0   1   1   0   0   0   0 . 0   0   1   1   1   0   1   1
+# CMP8dk-SAME:   0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP8dk-SAME:   1   0   1   1   0   0   0   0 . 0   0   1   1   1   0   1   1
+# CMP8dk-SAME:   0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP32dk-SAME:  1   0   1   1   0   0   0   0 . 1   0   1   1   1   0   1   1
+# CMP32dk-SAME:  0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---+-----------+---+-------+---+-------------------------------
+#        BRIEF  DA |    REG    | L | SCALE | 0 |          DISPLACEMENT
+#               ---+-----------+---+-------+---+-------------------------------
+#
+# NOTE Immediates for pc-rel instructions use relocations and addendum is encoded
+# inside the relocation record thus there are 0s instead of the value.
+name: MxBiArOp_RFRM_PCI
+body: |
+  bb.0:
+    CMP8dk  %bd0, 0,  %d1, implicit-def %ccr
+    CMP8dk  %bd0, -1, %d1, implicit-def %ccr
+    CMP32dk %d0, 0,  %d1, implicit-def %ccr
+
+...
+--- # PCD
+#               ---------------+-----------+-----------+-----------+-----------
+#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
+#               ---------------+-----------+-----------+-----------+-----------
+#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
+#               ---------------+-----------+-----------+-----------+-----------
+# CMP8dq-SAME:   1   0   1   1   0   0   0   0 . 0   0   1   1   1   0   1   0
+# CMP8dq-SAME:   0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP32dq-SAME:  1   0   1   1   0   0   0   0 . 1   0   1   1   1   0   1   0
+# CMP32dq-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#
+# NOTE Immediates for pc-rel instructions use relocations and addendum is encoded
+# inside the relocation record thus there are 0s instead of the value.
+name: MxBiArOp_RFRM_PCD
+body: |
+  bb.0:
+    CMP8dq  %bd0, 0,  implicit-def %ccr
+    CMP32dq %d0, -1, implicit-def %ccr
+
+...
+--- # ARII
+#               ---------------+-----------+-----------+-----------+-----------
+#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
+#               ---------------+-----------+-----------+-----------+-----------
+#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
+#               ---------------+-----------+-----------+-----------+-----------
+# CMP8df:        1   0   1   1   0   0   0   0 . 0   0   1   1   0   0   0   0
+# CMP8df-SAME:   0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP8df-SAME:   1   0   1   1   0   0   0   0 . 0   0   1   1   0   0   0   0
+# CMP8df-SAME:   0   0   0   1   1   0   0   0 . 1   1   1   1   1   1   1   1
+#               ---------------------------------------------------------------
+# CMP32df-SAME:  1   0   1   1   0   0   0   0 . 1   0   1   1   0   0   0   1
+# CMP32df-SAME:  0   0   0   1   1   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP32df-SAME:  1   0   1   1   0   0   1   0 . 1   0   1   1   0   0   1   0
+# CMP32df-SAME:  1   0   1   0   1   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---+-----------+---+-------+---+-------------------------------
+#        BRIEF  DA |    REG    | L | SCALE | 0 |          DISPLACEMENT
+#               ---+-----------+---+-------+---+-------------------------------
+name: MxCMP_RM_ARII
+body: |
+  bb.0:
+    CMP8df  %bd0, 0,  %a0, %d1, implicit-def %ccr
+    CMP8df  %bd0, -1, %a0, %d1, implicit-def %ccr
+    CMP32df  %d0, 0,  %a1, %d1, implicit-def %ccr
+    CMP32df  %d1, 0,  %a2, %a2, implicit-def %ccr
+
+...
+--- # ARID
+#               ---------------+-----------+-----------+-----------+-----------
+#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
+#               ---------------+-----------+-----------+-----------+-----------
+#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
+#               ---------------+-----------+-----------+-----------+-----------
+# CMP8dp-SAME:   1   0   1   1   0   0   0   0 . 0   0   1   0   1   0   0   0
+# CMP8dp-SAME:   0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP32dp-SAME:  1   0   1   1   0   0   0   0 . 1   0   1   0   1   0   0   1
+# CMP32dp-SAME:  1   1   1   1   1   1   1   1 . 1   1   1   1   1   1   1   1
+name: MxCMP_RM_ARID
+body: |
+  bb.0:
+    CMP8dp  %bd0, 0,  %a0, implicit-def %ccr
+    CMP32dp  %d0, -1, %a1, implicit-def %ccr
+
+...
+--- # ARI
+#               ---------------+-----------+-----------+-----------+-----------
+#                F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
+#               ---------------+-----------+-----------+-----------+-----------
+#       OPWORD   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
+#               ---------------+-----------+-----------+-----------+-----------
+# CMP8dj-SAME:   1   0   1   1   0   0   0   0 . 0   0   0   1   0   0   0   0
+#               ---------------------------------------------------------------
+# CMP32dj-SAME:  1   0   1   1   0   1   1   0 . 1   0   0   1   0   0   0   1
+name: MxCMP_RM_ARI
+body: |
+  bb.0:
+    CMP8dj  %bd0, %a0, implicit-def %ccr
+    CMP32dj  %d3, %a1, implicit-def %ccr
+
+...
