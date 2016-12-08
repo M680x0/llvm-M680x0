@@ -113,8 +113,8 @@ entry:
 ;
 ; x00:       move.l (4,%sp), %a0
 ; x00-NEXT:  lea (-1,%a0), %a0
-; x00-NEXT:  move.l %a0, %a1
-; x00-NEXT:  sub.l #12, %a1
+; x00-NEXT:  move.l %a0, %d0
+; x00-NEXT:  sub.l #12, %d0
 ; x00-NEXT:  bhi .LBB{{.*}}_14
 ; x00:       lsl.l #2, %d0
 ; x00-NEXT:  lea (.LJTI{{.*}}_0,%pc), %a0
