@@ -354,10 +354,18 @@ LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
   else
     ValVT = VA.getValVT();
 
+  // Because we are dealing with BE architecture we need to offset loading of
+  // partial types
+  int Offset = VA.getLocMemOffset();
+  if (VA.getValVT() == MVT::i8) {
+    Offset += 3;
+  } else if (VA.getValVT() == MVT::i16) {
+    Offset += 2;
+  }
+
   // Calculate SP offset of interrupt parameter, re-arrange the slot normally
   // taken by a return address.
   // TODO interrupts
-  // int Offset = 0;
   // if (CallConv == CallingConv::M680x0_INTR) {
   //   const M680x0Subtarget& Subtarget =
   //       static_cast<const M680x0Subtarget&>(DAG.getSubtarget());
@@ -379,7 +387,7 @@ LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
   if (Flags.isByVal()) {
     unsigned Bytes = Flags.getByValSize();
     if (Bytes == 0) Bytes = 1; // Don't create zero-sized stack objects.
-    int FI = MFI.CreateFixedObject(Bytes, VA.getLocMemOffset(), isImmutable);
+    int FI = MFI.CreateFixedObject(Bytes, Offset, isImmutable);
     // Adjust SP offset of interrupt parameter.
     // TODO interrupts
     // if (CallConv == CallingConv::M680x0_INTR) {
@@ -387,8 +395,7 @@ LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
     // }
     return DAG.getFrameIndex(FI, getPointerTy(DAG.getDataLayout()));
   } else {
-    int FI = MFI.CreateFixedObject(ValVT.getSizeInBits()/8,
-                                   VA.getLocMemOffset(), isImmutable);
+    int FI = MFI.CreateFixedObject(ValVT.getSizeInBits()/8, Offset, isImmutable);
 
     // Set SExt or ZExt flag.
     if (VA.getLocInfo() == CCValAssign::ZExt) {
