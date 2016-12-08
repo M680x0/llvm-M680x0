@@ -161,7 +161,7 @@ define zeroext i1 @test15(i32 %bf.load, i32 %n) {
 
 ; x00-LABEL: test16:
 ; x00:       move.w #15
-; x00:       move.w (4,%sp), %d0
+; x00:       move.w (6,%sp), %d0
 ; x00:       lsr.w
 ; x00:       eori.b #1
 define i8 @test16(i16 signext %L) {

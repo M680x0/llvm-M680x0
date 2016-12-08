@@ -25,7 +25,7 @@ entry:
 
 
 ; x00-LABEL: test3:
-; x00:       move.b (8
+; x00:       move.b (11
 ; x00-NEXT:  and.l #255
 ; x00-NEXT:  muls #171
 ; x00-NEXT:  move.w #9
