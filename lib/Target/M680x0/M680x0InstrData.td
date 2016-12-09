@@ -143,13 +143,15 @@ class MxMove_MM<string SIZE, PatFrag LOAD,
 multiclass MMxMove_MM<MxType TYPE, MxOperand DSTOpd, ComplexPattern DSTPat,
                       MxMoveSize SIZE, MxEncEA EA_0, MxEncExt EXT_0> {
 
-/* // MEM <- (An)+ */
-/* def NAME#TYPE.OOp.Letter#TYPE.Postfix */
-/*   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat>; */
-/*  */
-/* // MEM <- -(An) */
-/* def NAME#TYPE.EOp.Letter#TYPE.Postfix */
-/*   : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat>; */
+// MEM <- (An)+
+def NAME#TYPE.OOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.OOp, TYPE.OPat,
+              SIZE, MxEncEAo_1, MxExtEmpty, EA_0, EXT_0>;
+
+// MEM <- -(An)
+def NAME#TYPE.EOp.Letter#TYPE.Postfix
+  : MxMove_MM<TYPE.Prefix, TYPE.Load, DSTOpd, DSTPat, TYPE.EOp, TYPE.EPat,
+              SIZE, MxEncEAe_1, MxExtEmpty, EA_0, EXT_0>;
 
 // MEM <- (i,An)
 def NAME#TYPE.POp.Letter#TYPE.Postfix
@@ -414,6 +416,20 @@ defm MOV16b : MMxMove_MM<MxType16,     MxType16.BOp, MxType16.BPat,
                          MxMoveSize16, MxEncEAb,     MxExtI32_0>;
 defm MOV32b : MMxMove_MM<MxType32,     MxType32.BOp, MxType32.BPat,
                          MxMoveSize32, MxEncEAb,     MxExtI32_0>;
+
+defm MOV8e  : MMxMove_MM<MxType8,      MxType8.EOp,  MxType8.EPat,
+                         MxMoveSize8,  MxEncEAe_0,   MxExtEmpty>;
+defm MOV16e : MMxMove_MM<MxType16,     MxType16.EOp, MxType16.EPat,
+                         MxMoveSize16, MxEncEAe_0,   MxExtEmpty>;
+defm MOV32e : MMxMove_MM<MxType32,     MxType32.EOp, MxType32.EPat,
+                         MxMoveSize32, MxEncEAe_0,   MxExtEmpty>;
+
+defm MOV8o  : MMxMove_MM<MxType8,      MxType8.OOp,  MxType8.OPat,
+                         MxMoveSize8,  MxEncEAo_0,   MxExtEmpty>;
+defm MOV16o : MMxMove_MM<MxType16,     MxType16.OOp, MxType16.OPat,
+                         MxMoveSize16, MxEncEAo_0,   MxExtEmpty>;
+defm MOV32o : MMxMove_MM<MxType32,     MxType32.OOp, MxType32.OPat,
+                         MxMoveSize32, MxEncEAo_0,   MxExtEmpty>;
 
 defm MOV8j  : MMxMove_MM<MxType8,      MxType8.JOp,  MxType8.JPat,
                          MxMoveSize8,  MxEncEAj_0,   MxExtEmpty>;

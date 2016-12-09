@@ -1,7 +1,7 @@
 # RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
 # RUN:  | extract-section .text                                                \
 # RUN:  | FileCheck %s -check-prefixes=MOV8dk,MOV32rk,MOV8dq,MOV32rq,MOV8df,MOV32rf,\
-# RUN:MOV8dp,MOV32rp,MOV8dj,MOV32rj,MOV8do,MOV32ro,MOV8de,MOV32re,MOV8db,MOV32db
+# RUN:MOV8dp,MOV32rp,MOV8dj,MOV32rj,MOV8do,MOV32ro,MOV8de,MOV32re,MOV8db,MOV32rb
 
 #------------------------------------------------------------------------------
 # MxMove_RM is used for moving data from memory to register

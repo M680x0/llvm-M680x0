@@ -138,17 +138,23 @@ EncodeReg(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
 
   return Written;
 }
-/// intDoesFit - Checks if an integer fits into the given bit width.
+/// uintDoesFit - Checks if an unsigned integer fits into the given bit width.
 /// non-templated version
-LLVM_CONSTEXPR static inline bool intDoesFit(unsigned N, uint64_t x) {
+LLVM_CONSTEXPR static inline bool uintDoesFit(unsigned N, uint64_t x) {
   return N >= 64 || x <= (UINT64_MAX >> (64-N));
+}
+
+/// uintDoesFit - Checks if an integer fits into the given bit width.
+/// non-templated version
+LLVM_CONSTEXPR static inline bool intDoesFit(unsigned N, int64_t x) {
+  return N >= 64 || (-(INT64_C(1)<<(N-1)) <= x && x < (INT64_C(1)<<(N-1)));
 }
 
 static unsigned
 EmitConstant(uint64_t Val, unsigned Size, unsigned Pad, uint64_t &Buffer, unsigned Offset) {
   assert (Size && (Size == 8 || Size == 16 || Size == 32));
   assert (Size + Offset <= 64 && "Value does not fit");
-  assert (intDoesFit(Size, Val));
+  assert (uintDoesFit(Size, Val));
 
   // Pad the instruction with zeros if any
   // FIXME Actually emit zeros, since there might be trash in the buffer.
@@ -226,7 +232,8 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
       return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
   }
-    
+
+  assert (intDoesFit(Size, MCO.getImm()));
   uint64_t Imm = MCO.getImm();
 
   // 32 bit Imm requires HI16 first then LO16
