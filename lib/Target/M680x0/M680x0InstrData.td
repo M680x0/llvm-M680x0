@@ -113,7 +113,7 @@ def NAME#REG.QOp.Letter#REG.Postfix : MxMove_RM<REG, REG.QOp, REG.QPat,
 
 // REG <- (i,An,Xn)
 def NAME#REG.FOp.Letter#REG.Postfix : MxMove_RM<REG, REG.FOp, REG.FPat,
-    SIZE, MxEncEAp_1, MxExtBrief_1, EA_0, MxExtEmpty>;
+    SIZE, MxEncEAf_1, MxExtBrief_1, EA_0, MxExtEmpty>;
 
 // REG <- (i,An)
 def NAME#REG.POp.Letter#REG.Postfix : MxMove_RM<REG, REG.POp, REG.PPat,

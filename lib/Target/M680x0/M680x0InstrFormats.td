@@ -223,8 +223,7 @@ def MxEncEAe_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b10>, MxBead1Bit<0>>;
 def MxEncEAp_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b10>, MxBead1Bit<1>>;
 def MxEncEAf_2: MxEncEA<MxBeadReg<2>, MxBead2Bits<0b11>, MxBead1Bit<0>>;
 
-def MxEncEAb : MxEncEA<MxBead3Bits<0b000>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
-def MxEncEAB : MxEncEA<MxBead3Bits<0b001>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
+def MxEncEAb : MxEncEA<MxBead3Bits<0b001>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAq : MxEncEA<MxBead3Bits<0b010>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAk : MxEncEA<MxBead3Bits<0b011>, MxBead2Bits<0b11>, MxBead1Bit<1>>;
 def MxEncEAi : MxEncEA<MxBead3Bits<0b100>, MxBead2Bits<0b11>, MxBead1Bit<1>>;

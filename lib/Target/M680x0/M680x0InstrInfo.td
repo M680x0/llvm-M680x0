@@ -294,9 +294,9 @@ def MxAS32     : MxMemOp<(ops OtherVT), MxSize32, "B", "printAS32Mem">;
 // order part of the address is the second extension word. The reference is
 // classified as a data reference with the exception of the jump and jump
 // to-subroutine instructions.
-def MxAL8      : MxMemOp<(ops OtherVT), MxSize8,  "B", "printAL8Mem">;
-def MxAL16     : MxMemOp<(ops OtherVT), MxSize16, "B", "printAL16Mem">;
-def MxAL32     : MxMemOp<(ops OtherVT), MxSize32, "B", "printAL32Mem">;
+def MxAL8      : MxMemOp<(ops OtherVT), MxSize8,  "b", "printAL8Mem">;
+def MxAL16     : MxMemOp<(ops OtherVT), MxSize16, "b", "printAL16Mem">;
+def MxAL32     : MxMemOp<(ops OtherVT), MxSize32, "b", "printAL32Mem">;
 
 let OperandType = "OPERAND_PCREL" in {
 // PROGRAM COUNTER WITH DISPLACEMENT. This addressing mode requires one word of

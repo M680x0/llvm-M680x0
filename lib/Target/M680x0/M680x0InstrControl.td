@@ -186,7 +186,7 @@ let Uses = [SP] in {
 
 def CALLk : MxInst<(outs), (ins MxPCI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAk,   MxExtBrief_0>>;
 def CALLq : MxInst<(outs), (ins MxPCD32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
-def CALLB : MxInst<(outs), (ins MxAL32 :$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAB,   MxExtI32_0>>;
+def CALLb : MxInst<(outs), (ins MxAL32 :$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAb,   MxExtI32_0>>;
 def CALLj : MxInst<(outs), (ins MxARI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
 
 } // let Uses = [SP]
@@ -195,9 +195,9 @@ def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>,  Requires
 def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>, Requires<[IsPIC]>;
 def : Pat<(MxCall (i32 imm:$dst)),          (CALLq imm:$dst)>,          Requires<[IsPIC]>;
 
-def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLB tglobaladdr:$dst)>,  Requires<[IsNotPIC]>;
-def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLB texternalsym:$dst)>, Requires<[IsNotPIC]>;
-def : Pat<(MxCall (i32 imm:$dst)),          (CALLB imm:$dst)>,          Requires<[IsNotPIC]>;
+def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLb tglobaladdr:$dst)>,  Requires<[IsNotPIC]>;
+def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLb texternalsym:$dst)>, Requires<[IsNotPIC]>;
+def : Pat<(MxCall (i32 imm:$dst)),          (CALLb imm:$dst)>,          Requires<[IsNotPIC]>;
 
 def : Pat<(MxCall iPTR:$dst), (CALLj MxARI32:$dst)>;
 
