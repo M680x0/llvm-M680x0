@@ -399,7 +399,7 @@ defm CMP32 : MMxCmp_MI<MxType32d>;
 
 
 //===----------------------------------------------------------------------===//
-// Ext
+// EXT
 //===----------------------------------------------------------------------===//
 
 def MxExtOpmode_wb : MxBead3Bits<0b010>;
@@ -433,36 +433,51 @@ def : Pat<(sext_inreg i32:$src, i8),
 
 //===----------------------------------------------------------------------===//
 // DIV/MUL
-//
-// TODO encoding
 //===----------------------------------------------------------------------===//
 
+def MxSDiMuOpmode : MxBead3Bits<0b111>;
+def MxUDiMuOpmode : MxBead3Bits<0b011>;
+
+/// Word operation:
+/// ----------------------------------------------------
+///  F  E  D  C | B  A  9 | 8  7  6 | 5  4  3 | 2  1  0
+/// ----------------------------------------------------
+///             |         |         | EFFECTIVE ADDRESS
+///  x  x  x  x |   REG   | OP MODE |   MODE  |   REG
+/// ----------------------------------------------------
+class MxDiMuEncoding<MxBead4Bits CMD, MxBead3Bits OPMODE, MxEncEA EA, MxEncExt EXT>
+    : MxEncoding<EA.Reg, EA.DA, EA.Mode, OPMODE, MxBeadReg<0>, CMD,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 // $reg <- $reg op $reg
-class MxDiMuOp_DD<string MN, MxOperand DST, MxOperand OPD>
-    : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd),
-           MN#"\t$opd, $dst", []>;
+class MxDiMuOp_DD<string MN, bits<4> CMD, MxBead3Bits OPMODE,
+                  MxOperand DST, MxOperand OPD>
+    : MxInst<(outs DST:$dst), (ins DST:$src, OPD:$opd), MN#"\t$opd, $dst", [],
+      MxDiMuEncoding<MxBead4Bits<CMD>, OPMODE, MxEncEAd_2, MxExtEmpty>>;
 
 // $reg <- $reg op $imm
-class MxDiMuOp_DI<string MN, MxOperand DST, MxOperand OPD>
-    : MxInst<(outs DST:$dst), (ins DST:$src, unknown:$opd),
-           MN#"\t$opd, $dst", []>;
+class MxDiMuOp_DI<string MN, bits<4> CMD, MxBead3Bits OPMODE,
+                  MxOperand DST, MxOperand OPD>
+    : MxInst<(outs DST:$dst), (ins DST:$src, unknown:$opd), MN#"\t$opd, $dst", [],
+      MxDiMuEncoding<MxBead4Bits<CMD>, OPMODE, MxEncEAi, MxExtI16_2>>;
 } // let Constraints
 } // Defs = [CCR]
 
-multiclass MxDiMuOp<string MN> {
+multiclass MxDiMuOp<string MN, bits<4> CMD, bit isComm = 0> {
 
-def "S"#NAME#"d32d16" : MxDiMuOp_DD<MN#"s", MxDRD32, MxDRD16>;
-def "U"#NAME#"d32d16" : MxDiMuOp_DD<MN#"u", MxDRD32, MxDRD16>;
+let isCommutable = isComm in {
+def "S"#NAME#"d32d16" : MxDiMuOp_DD<MN#"s", CMD, MxSDiMuOpmode, MxDRD32, MxDRD16>;
+def "U"#NAME#"d32d16" : MxDiMuOp_DD<MN#"u", CMD, MxUDiMuOpmode, MxDRD32, MxDRD16>;
+}
 
-def "S"#NAME#"d32i16" : MxDiMuOp_DI<MN#"s", MxDRD32, Mxi16imm>;
-def "U"#NAME#"d32i16" : MxDiMuOp_DI<MN#"u", MxDRD32, Mxi16imm>;
+def "S"#NAME#"d32i16" : MxDiMuOp_DI<MN#"s", CMD, MxSDiMuOpmode, MxDRD32, Mxi16imm>;
+def "U"#NAME#"d32i16" : MxDiMuOp_DI<MN#"u", CMD, MxUDiMuOpmode, MxDRD32, Mxi16imm>;
 
 }
 
-defm DIV : MxDiMuOp<"div">;
+defm DIV : MxDiMuOp<"div", 0x8>;
 
 // RR i8
 def : Pat<(sdiv i8:$dst, i8:$opd),
@@ -550,8 +565,7 @@ def : Pat<(urem i16:$dst, MximmSExt16:$opd),
              MxSubRegIndex16Lo)>;
 
 
-let isCommutable = 1 in
-defm MUL : MxDiMuOp<"mul">;
+defm MUL : MxDiMuOp<"mul", 0xC, 1>;
 
 // RR
 def : Pat<(mul i16:$dst, i16:$opd),

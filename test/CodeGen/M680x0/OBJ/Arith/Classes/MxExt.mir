@@ -16,7 +16,7 @@
 # EXT16-SAME:    0   1   0   0   1   0   0   0 . 1   0   0   0   0   0   1   1
 # EXT32-SAME:    0   1   0   0   1   0   0   0 . 1   1   0   0   0   0   0   0
 # EXT32-SAME:    0   1   0   0   1   0   0   0 . 1   1   0   0   0   1   1   1
-name: MxCMP_RR
+name: MxEXT
 body: |
   bb.0:
     %wd0 = EXT16 %wd0, implicit-def %ccr
