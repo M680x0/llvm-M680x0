@@ -190,7 +190,7 @@ def MOV8dd
 def MOV8fd : MxMove_MR<MxType8.FOp, MxType8.FPat, MxType8d,
                        MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
-                            /*dst*/   MxEncEAj_0, MxExtBrief_0>>;
+                            /*dst*/   MxEncEAf_0, MxExtBrief_0>>;
 
 def MOV8pd : MxMove_MR<MxType8.POp, MxType8.PPat, MxType8d,
                        MxMoveEncoding<MxMoveSize8,
@@ -206,16 +206,6 @@ def MOV8od : MxMove_MR<MxType8.OOp, MxType8.OPat, MxType8d,
                        MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAo_0, MxExtEmpty>>;
-
-def MOV8kd : MxMove_MR<MxType8.KOp, MxType8.KPat, MxType8d,
-                       MxMoveEncoding<MxMoveSize8,
-                            /*src*/   MxEncEAd_1, MxExtEmpty,
-                            /*dst*/   MxEncEAk,   MxExtBrief_0>>;
-
-def MOV8qd : MxMove_MR<MxType8.QOp, MxType8.QPat, MxType8d,
-                       MxMoveEncoding<MxMoveSize8,
-                            /*src*/   MxEncEAd_1, MxExtEmpty,
-                            /*dst*/   MxEncEAq,   MxExtI16_0>>;
 
 def MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d,
                        MxMoveEncoding<MxMoveSize8,
