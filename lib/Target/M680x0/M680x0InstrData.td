@@ -300,7 +300,7 @@ foreach S = [16, 32] in {
       !cast<MxType>("MxType"#S#D),
         MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
                        MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
-                       !cast<MxEncEA>("MxEncEA"#D#"_0"), MxExtEmpty>>;
+                       !cast<MxEncEA>("MxEncEA"#D#"_0_reflected"), MxExtEmpty>>;
   }
 }
 
