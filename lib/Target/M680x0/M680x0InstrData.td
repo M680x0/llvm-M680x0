@@ -408,20 +408,6 @@ defm MOV16f : MMxMove_MM<MxType16,     MxType16.FOp, MxType16.FPat,
 defm MOV32f : MMxMove_MM<MxType32,     MxType32.FOp, MxType32.FPat,
                          MxMoveSize32, MxEncEAf_0,   MxExtBrief_0>;
 
-defm MOV8k  : MMxMove_MM<MxType8,      MxType8.KOp,  MxType8.KPat,
-                         MxMoveSize8,  MxEncEAk,     MxExtBrief_0>;
-defm MOV16k : MMxMove_MM<MxType16,     MxType16.KOp, MxType16.KPat,
-                         MxMoveSize16, MxEncEAk,     MxExtBrief_0>;
-defm MOV32k : MMxMove_MM<MxType32,     MxType32.KOp, MxType32.KPat,
-                         MxMoveSize32, MxEncEAk,     MxExtBrief_0>;
-
-defm MOV8q  : MMxMove_MM<MxType8,      MxType8.QOp,  MxType8.QPat,
-                         MxMoveSize8,  MxEncEAq,     MxExtI16_0>;
-defm MOV16q : MMxMove_MM<MxType16,     MxType16.QOp, MxType16.QPat,
-                         MxMoveSize16, MxEncEAq,     MxExtI16_0>;
-defm MOV32q : MMxMove_MM<MxType32,     MxType32.QOp, MxType32.QPat,
-                         MxMoveSize32, MxEncEAq,     MxExtI16_0>;
-
 defm MOV8b  : MMxMove_MM<MxType8,      MxType8.BOp,  MxType8.BPat,
                          MxMoveSize8,  MxEncEAb,     MxExtI32_0>;
 defm MOV16b : MMxMove_MM<MxType16,     MxType16.BOp, MxType16.BPat,

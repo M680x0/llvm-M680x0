@@ -9,7 +9,7 @@
 ; x00-LABEL: test0:
 ; x00:       lea (dst,%pc), %a0
 ; x00-NEXT:  move.l %a0, (ptr,%pc)
-; x00-NEXT:  move.l (src,%pc), (dst,%pc)
+; x00-NEXT:  move.l (src,%pc), (%a0)
 ; x00-NEXT:  rts
 define void @test0() nounwind {
 entry:
