@@ -427,7 +427,8 @@ def EXT32 : MxExt<MxType32d, MxType16d>;
 
 def : Pat<(sext_inreg i16:$src, i8),  (EXT16 $src)>;
 def : Pat<(sext_inreg i32:$src, i16), (EXT32 $src)>;
-/* def : Pat<(sext_inreg i32:$src, i8),  (EXT32 (EXT16 $src))>; */
+def : Pat<(sext_inreg i32:$src, i8),
+      (EXT32 (MOVXd32d16 (EXT16 (EXTRACT_SUBREG $src, MxSubRegIndex16Lo))))>;
 
 
 //===----------------------------------------------------------------------===//
