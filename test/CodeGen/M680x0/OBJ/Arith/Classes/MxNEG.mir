@@ -1,0 +1,39 @@
+# RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
+# RUN:  | extract-section .text                                                \
+# RUN:  | FileCheck %s -check-prefixes=NEG8d,NEG32d,NEGX8d,NEGX32d
+
+#------------------------------------------------------------------------------
+# MxNEG is used to negate a number
+#------------------------------------------------------------------------------
+
+
+--- # NEG
+#               ---------------+---------------+-------+-----------+-----------
+#                F   E   D   C | B   A   9   8 | 7   6 | 5   4   3 | 2   1   0
+#               ---------------+---------------+-------+-----------------------
+#                0   1   0   0 | x   x   x   x | SIZE  |    MODE   |    REG
+#               ---------------+---------------+-------+-----------+-----------
+# NEG8d:         0   1   0   0   0   1   0   0 . 0   0   0   0   0   0   0   0
+# NEG32d-SAME:   0   1   0   0   0   1   0   0 . 1   0   0   0   0   0   0   1
+name: MxNEG
+body: |
+  bb.0:
+    %bd0 = NEG8d  %bd0, implicit-def %ccr
+    %d1  = NEG32d  %d0, implicit-def %ccr
+
+...
+--- # NEGX
+#               ---------------+---------------+-------+-----------+-----------
+#                F   E   D   C | B   A   9   8 | 7   6 | 5   4   3 | 2   1   0
+#               ---------------+---------------+-------+-----------------------
+#                0   1   0   0 | x   x   x   x | SIZE  |    MODE   |    REG
+#               ---------------+---------------+-------+-----------+-----------
+# NEGX8d-SAME:   0   1   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+# NEGX32d-SAME:  0   1   0   0   0   0   0   0 . 1   0   0   0   0   0   0   1
+name: MxNEGX
+body: |
+  bb.0:
+    %bd0 = NEGX8d  %bd0, implicit %ccr, implicit-def %ccr
+    %d1  = NEGX32d  %d0, implicit %ccr, implicit-def %ccr
+
+...
