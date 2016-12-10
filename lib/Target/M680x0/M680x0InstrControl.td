@@ -191,24 +191,27 @@ def : Pat<(br bb:$target), (BRA8 MxBrTarget8:$target)>;
 // Call
 //===----------------------------------------------------------------------===//
 
-class MxCallEncoding<MxEncEA EA, MxEncExt EXT>
-    : MxEncoding<EA.Reg, EA.DA, EA.Mode,
-                 MxBead2Bits<0b10>, MxBead4Bits<0b1110>, MxBead4Bits<0b0100>,
-                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
-
-let isCall = 1 in
 // All calls clobber the non-callee saved registers. %SP is marked as
 // a use to prevent stack-pointer assignments that appear immediately
 // before calls from potentially appearing dead. Uses for argument
 // registers are added manually.
-let Uses = [SP] in {
+let Uses = [SP] in
+let isCall = 1 in
+///------------------------------+---------+---------
+/// F  E  D  C  B  A  9  8  7  6 | 5  4  3 | 2  1  0
+///------------------------------+---------+---------
+/// 0  1  0  0  1  1  1  0  1  0 |  MODE   |   REG
+///------------------------------+---------+---------
+class MxCall<MxOperand LOCOp, MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins LOCOp:$dst), "jsr\t$dst", [],
+      MxEncoding<EA.Reg, EA.DA, EA.Mode,
+                 MxBead2Bits<0b10>, MxBead4Bits<0b1110>, MxBead4Bits<0b0100>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
 
-def CALLk : MxInst<(outs), (ins MxPCI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAk,   MxExtBrief_0>>;
-def CALLq : MxInst<(outs), (ins MxPCD32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAq,   MxExtI16_0>>;
-def CALLb : MxInst<(outs), (ins MxAL32 :$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAb,   MxExtI32_0>>;
-def CALLj : MxInst<(outs), (ins MxARI32:$dst), "jsr\t$dst", [], MxCallEncoding<MxEncEAj_0, MxExtEmpty>>;
-
-} // let Uses = [SP]
+def CALLk : MxCall<MxPCI32, MxEncEAk,   MxExtBrief_0>;
+def CALLq : MxCall<MxPCD32, MxEncEAq,   MxExtI16_0>;
+def CALLb : MxCall<MxAL32,  MxEncEAb,   MxExtI32_0>;
+def CALLj : MxCall<MxARI32, MxEncEAj_0, MxExtEmpty>;
 
 def : Pat<(MxCall (i32 tglobaladdr:$dst)),  (CALLq tglobaladdr:$dst)>,  Requires<[IsPIC]>;
 def : Pat<(MxCall (i32 texternalsym:$dst)), (CALLq texternalsym:$dst)>, Requires<[IsPIC]>;
