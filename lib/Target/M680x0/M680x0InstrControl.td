@@ -152,11 +152,11 @@ foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
                "cs", "pl", "gt", "hi", "vc", "le", "vs"] in {
 def B#cc#"8"
   : MxBcc<cc, MxBrTarget8, MxType8,
-    MxEncoding<MxBead8Disp<1>, !cast<MxBead4Bits>("MxCC"#cc), MxBead4Bits<0x6>>>;
+    MxEncoding<MxBead8Disp<0>, !cast<MxBead4Bits>("MxCC"#cc), MxBead4Bits<0x6>>>;
 def B#cc#"16"
   : MxBcc<cc, MxBrTarget16, MxType16,
     MxEncoding<MxBead4Bits<0x0>, MxBead4Bits<0x0>, !cast<MxBead4Bits>("MxCC"#cc),
-               MxBead4Bits<0x6>, MxBead16Imm<1>>>;
+               MxBead4Bits<0x6>, MxBead16Imm<0>>>;
 }
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "ne", "ge",
