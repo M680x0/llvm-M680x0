@@ -90,13 +90,13 @@ class MxSccEncoding<MxEncEA EA, MxEncExt EXT, MxBead4Bits CC>
 let Uses = [CCR] in {
 class MxSccR<string CC>
     : MxInst<(outs MxDRD8:$dst), (ins), "s"#CC#"\t$dst",
-      [(set i8:$dst, (MxSetCC !cast<PatLeaf>("MxCOND"#cc), CCR))],
+      [(set i8:$dst, (MxSetCC !cast<PatLeaf>("MxCOND"#CC), CCR))],
       MxSccEncoding<MxEncEAd_0, MxExtEmpty, !cast<MxBead4Bits>("MxCC"#CC)>>;
 
 class MxSccM<string CC, MxOperand MEMOpd, ComplexPattern MEMPat,
              MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs), (ins MEMOpd:$dst), "s"#CC#"\t$dst",
-      [(store (MxSetCC !cast<PatLeaf>("MxCOND"#cc), CCR), MEMPat:$dst)],
+      [(store (MxSetCC !cast<PatLeaf>("MxCOND"#CC), CCR), MEMPat:$dst)],
       MxSccEncoding<EA, EXT, !cast<MxBead4Bits>("MxCC"#CC)>>;
 }
 
@@ -111,18 +111,25 @@ def SET#"p8"#cc : MxSccM<cc, MxType8.POp, MxType8.PPat, MxEncEAp_0, MxExtI16_0>;
 // Jumps
 //===----------------------------------------------------------------------===//
 
-let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
+///------------------------------+---------+---------
+/// F  E  D  C  B  A  9  8  7  6 | 5  4  3 | 2  1  0
+///------------------------------+---------+---------
+/// 0  1  0  0  1  1  1  0  1  1 |  MODE   |   REG
+///------------------------------+---------+---------
+let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in
+class MxJMP<MxOperand LOCOp, ComplexPattern LOCPat, MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins LOCOp:$dst), "jmp\t$dst", [(brind iPTR:$dst)],
+      MxEncoding<EA.Reg, EA.DA, EA.Mode, MxBead2Bits<0b11>,
+                 MxBead4Bits<0b1110>, MxBead4Bits<0b0100>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
+
+def JMP32j : MxJMP<MxARI32, MxCP_ARI, MxEncEAj_0, MxExtEmpty>;
+
+
 // FIXME M680x0 does not allow 16 bit indirect jumps use sext operands
 /* def JMP16r     : MxInst<(outs), (ins M680x0_ARI16:$dst), */
 /*                             "jmp\t$dst", */
 /*                             [(brind AR16:$dst)]>; */
-
-// jmp (An)
-def JMP32j
-  : MxInst<(outs), (ins MxARI32:$dst), "jmp\t$dst", [(brind iPTR:$dst)]>;
-
-}
-
 
 //===----------------------------------------------------------------------===//
 // Branches
