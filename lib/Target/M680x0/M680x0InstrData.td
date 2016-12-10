@@ -511,16 +511,16 @@ def MOV8dc : MxMoveFromCCRPseudo<(ins MxType8d.ROp:$dst, CCRC:$src)>;
 /// ----------------------------------------------------
 ///  0  1  0  0 | DST REG | 1  1  1 |   MODE  |   REG
 /// ----------------------------------------------------
-class LEA32<MxOperand SRCOpd, ComplexPattern SRCPat, MxEncEA EA, MxEncExt EXT>
+class MxLEA<MxOperand SRCOpd, ComplexPattern SRCPat, MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs MxARD32:$dst), (ins SRCOpd:$src),
              "lea\t$src, $dst", [(set i32:$dst, SRCPat:$src)],
              MxEncoding<EA.Reg, EA.DA, EA.Mode,
                         MxBead3Bits<0b111>, MxBeadReg<0>, MxBead4Bits<0x4>,
                         EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>>;
 
-def LEA32p : LEA32<MxARID32, MxCP_ARID, MxEncEAp_1, MxExtI16_1>;
-def LEA32f : LEA32<MxARII32, MxCP_ARII, MxEncEAf_1, MxExtBrief_1>;
-def LEA32q : LEA32<MxPCD32,  MxCP_PCD,  MxEncEAq,   MxExtI16_1>;
+def LEA32p : MxLEA<MxARID32, MxCP_ARID, MxEncEAp_1, MxExtI16_1>;
+def LEA32f : MxLEA<MxARII32, MxCP_ARII, MxEncEAf_1, MxExtBrief_1>;
+def LEA32q : MxLEA<MxPCD32,  MxCP_PCD,  MxEncEAq,   MxExtI16_1>;
 
 
 //===----------------------------------------------------------------------===//
