@@ -1,0 +1,128 @@
+# RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
+# RUN:  | extract-section .text                                                \
+# RUN:  | FileCheck %s -check-prefixes=SETd8cc,SETd8ls,SETd8lt,SETd8eq,SETd8mi,\
+# RUN:SETd8f,SETd8ne,SETd8ge,SETd8cs,SETd8pl,SETd8gt,SETd8t,SETd8hi,SETd8vc,\
+# RUN:SETd8le,SETd8vs,SETp8cc,SETp8ls,SETp8lt,SETp8eq,SETp8mi,SETp8f,SETp8ne,\
+# RUN:SETp8ge,SETp8cs,SETp8pl,SETp8gt,SETp8t,SETp8hi,SETp8vc,SETp8le,SETp8vs
+
+#------------------------------------------------------------------------------
+# MxScc sets byte filled with 1s or 0s based on cc condition
+#------------------------------------------------------------------------------
+
+--- # MxScc_D
+#               ---------------+---------------+-------+-----------+-----------
+#                F   E   D   C | B   A   9   8 | 7   6 | 5   4   3 | 2   1   0
+#               ---------------+---------------+-------+-----------+-----------
+#                0   1   0   1 |   CONDITION   | 1   1 |    MODE   |    REG
+#               ---------------+---------------+-------+-----------+-----------
+# SETd8t:        0   1   0   1   0   0   0   0 . 1   1   0   0   0   0   0   0
+# SETd8f-SAME:   0   1   0   1   0   0   0   1 . 1   1   0   0   0   0   0   1
+# SETd8hi-SAME:  0   1   0   1   0   0   1   0 . 1   1   0   0   0   0   1   0
+# SETd8ls-SAME:  0   1   0   1   0   0   1   1 . 1   1   0   0   0   0   1   1
+# SETd8cc-SAME:  0   1   0   1   0   1   0   0 . 1   1   0   0   0   1   0   0
+# SETd8cs-SAME:  0   1   0   1   0   1   0   1 . 1   1   0   0   0   1   0   1
+# SETd8ne-SAME:  0   1   0   1   0   1   1   0 . 1   1   0   0   0   1   1   0
+# SETd8eq-SAME:  0   1   0   1   0   1   1   1 . 1   1   0   0   0   1   1   1
+# SETd8vc-SAME:  0   1   0   1   1   0   0   0 . 1   1   0   0   0   0   0   0
+# SETd8vs-SAME:  0   1   0   1   1   0   0   1 . 1   1   0   0   0   0   0   0
+# SETd8pl-SAME:  0   1   0   1   1   0   1   0 . 1   1   0   0   0   0   0   0
+# SETd8mi-SAME:  0   1   0   1   1   0   1   1 . 1   1   0   0   0   0   0   0
+# SETd8ge-SAME:  0   1   0   1   1   1   0   0 . 1   1   0   0   0   0   0   0
+# SETd8lt-SAME:  0   1   0   1   1   1   0   1 . 1   1   0   0   0   0   0   0
+# SETd8gt-SAME:  0   1   0   1   1   1   1   0 . 1   1   0   0   0   0   0   0
+# SETd8le-SAME:  0   1   0   1   1   1   1   1 . 1   1   0   0   0   0   0   0
+name: MxScc_D
+body: |
+  bb.0:
+      %bd0 = SETd8t  implicit %ccr
+      %bd1 = SETd8f  implicit %ccr
+      %bd2 = SETd8hi implicit %ccr
+      %bd3 = SETd8ls implicit %ccr
+      %bd4 = SETd8cc implicit %ccr
+      %bd5 = SETd8cs implicit %ccr
+      %bd6 = SETd8ne implicit %ccr
+      %bd7 = SETd8eq implicit %ccr
+      %bd0 = SETd8vc implicit %ccr
+      %bd0 = SETd8vs implicit %ccr
+      %bd0 = SETd8pl implicit %ccr
+      %bd0 = SETd8mi implicit %ccr
+      %bd0 = SETd8ge implicit %ccr
+      %bd0 = SETd8lt implicit %ccr
+      %bd0 = SETd8gt implicit %ccr
+      %bd0 = SETd8le implicit %ccr
+
+...
+--- # MxScc_ARID
+#               ---------------+---------------+-------+-----------+-----------
+#                F   E   D   C | B   A   9   8 | 7   6 | 5   4   3 | 2   1   0
+#               ---------------+---------------+-------+-----------+-----------
+#                0   1   0   1 |   CONDITION   | 1   1 |    MODE   |    REG
+#               ---------------+---------------+-------+-----------+-----------
+# SETp8t-SAME:   0   1   0   1   0   0   0   0 . 1   1   1   0   1   0   0   0
+# SETp8t-SAME:   1   1   1   1   1   1   1   1 . 1   1   1   1   1   1   1   1
+#               ---------------------------------------------------------------
+# SETp8f-SAME:   0   1   0   1   0   0   0   1 . 1   1   1   0   1   0   0   1
+# SETp8f-SAME:   0   0   0   0   0   0   0   0 . 0   0   1   0   1   0   1   0
+#               ---------------------------------------------------------------
+# SETp8hi-SAME:  0   1   0   1   0   0   1   0 . 1   1   1   0   1   0   1   0
+# SETp8hi-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8ls-SAME:  0   1   0   1   0   0   1   1 . 1   1   1   0   1   0   1   1
+# SETp8ls-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8cc-SAME:  0   1   0   1   0   1   0   0 . 1   1   1   0   1   1   0   0
+# SETp8cc-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8cs-SAME:  0   1   0   1   0   1   0   1 . 1   1   1   0   1   1   0   1
+# SETp8cs-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8ne-SAME:  0   1   0   1   0   1   1   0 . 1   1   1   0   1   1   1   0
+# SETp8ne-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8eq-SAME:  0   1   0   1   0   1   1   1 . 1   1   1   0   1   0   0   0
+# SETp8eq-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8vc-SAME:  0   1   0   1   1   0   0   0 . 1   1   1   0   1   0   0   0
+# SETp8vc-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8vs-SAME:  0   1   0   1   1   0   0   1 . 1   1   1   0   1   0   0   0
+# SETp8vs-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8pl-SAME:  0   1   0   1   1   0   1   0 . 1   1   1   0   1   0   0   0
+# SETp8pl-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8mi-SAME:  0   1   0   1   1   0   1   1 . 1   1   1   0   1   0   0   0
+# SETp8mi-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8ge-SAME:  0   1   0   1   1   1   0   0 . 1   1   1   0   1   0   0   0
+# SETp8ge-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8lt-SAME:  0   1   0   1   1   1   0   1 . 1   1   1   0   1   0   0   0
+# SETp8lt-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8gt-SAME:  0   1   0   1   1   1   1   0 . 1   1   1   0   1   0   0   0
+# SETp8gt-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+#               ---------------------------------------------------------------
+# SETp8le-SAME:  0   1   0   1   1   1   1   1 . 1   1   1   0   1   0   0   0
+# SETp8le-SAME:  0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
+name: MxScc_ARID
+body: |
+  bb.0:
+      SETp8t  -1, %a0, implicit %ccr
+      SETp8f  42, %a1, implicit %ccr
+      SETp8hi  0, %a2, implicit %ccr
+      SETp8ls  0, %a3, implicit %ccr
+      SETp8cc  0, %a4, implicit %ccr
+      SETp8cs  0, %a5, implicit %ccr
+      SETp8ne  0, %a6, implicit %ccr
+      SETp8eq  0, %a0, implicit %ccr
+      SETp8vc  0, %a0, implicit %ccr
+      SETp8vs  0, %a0, implicit %ccr
+      SETp8pl  0, %a0, implicit %ccr
+      SETp8mi  0, %a0, implicit %ccr
+      SETp8ge  0, %a0, implicit %ccr
+      SETp8lt  0, %a0, implicit %ccr
+      SETp8gt  0, %a0, implicit %ccr
+      SETp8le  0, %a0, implicit %ccr
+
+...

@@ -78,21 +78,33 @@ def MxCClt : MxBead4Bits<0b1101>;
 def MxCCgt : MxBead4Bits<0b1110>;
 def MxCCle : MxBead4Bits<0b1111>;
 
-let Uses = [CCR] in {
-class MxSccR<string CC, PatLeaf OPNODE>
-    : MxInst<(outs MxDRD8:$dst), (ins), "s"#CC#"\t$dst",
-      [(set i8:$dst, (MxSetCC OPNODE, CCR))]>;
+/// --------------------------------+---------+---------
+///  F  E  D  C | B  A  9  8 | 7  6 | 5  4  3 | 2  1  0
+/// --------------------------------+---------+---------
+///  0  1  0  1 | CONDITION  | 1  1 |   MODE  |   REG
+/// ----------------------------------------------------
+class MxSccEncoding<MxEncEA EA, MxEncExt EXT, MxBead4Bits CC>
+    : MxEncoding<EA.Reg, EA.DA, EA.Mode, MxBead2Bits<0b11>, CC, MxBead4Bits<0b0101>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
 
-class MxSccM<string CC, PatLeaf OPNODE, MxOperand MEMOpd, ComplexPattern MEMPat>
+let Uses = [CCR] in {
+class MxSccR<string CC>
+    : MxInst<(outs MxDRD8:$dst), (ins), "s"#CC#"\t$dst",
+      [(set i8:$dst, (MxSetCC !cast<PatLeaf>("MxCOND"#cc), CCR))],
+      MxSccEncoding<MxEncEAd_0, MxExtEmpty, !cast<MxBead4Bits>("MxCC"#CC)>>;
+
+class MxSccM<string CC, MxOperand MEMOpd, ComplexPattern MEMPat,
+             MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs), (ins MEMOpd:$dst), "s"#CC#"\t$dst",
-      [(store (MxSetCC OPNODE, CCR), MEMPat:$dst)]>;
+      [(store (MxSetCC !cast<PatLeaf>("MxCOND"#cc), CCR), MEMPat:$dst)],
+      MxSccEncoding<EA, EXT, !cast<MxBead4Bits>("MxCC"#CC)>>;
 }
 
 foreach cc = [ "cc", "ls", "lt", "eq", "mi", "f", "ne", "ge",
                "cs", "pl", "gt", "t", "hi", "vc", "le", "vs"] in {
-def SET#"d8"#cc : MxSccR<cc, !cast<PatLeaf>("MxCOND"#cc)>;
-def SET#"j8"#cc : MxSccM<cc, !cast<PatLeaf>("MxCOND"#cc), MxType8.JOp, MxType8.JPat>;
-def SET#"p8"#cc : MxSccM<cc, !cast<PatLeaf>("MxCOND"#cc), MxType8.POp, MxType8.PPat>;
+def SET#"d8"#cc : MxSccR<cc>;
+def SET#"j8"#cc : MxSccM<cc, MxType8.JOp, MxType8.JPat, MxEncEAj_0, MxExtEmpty>;
+def SET#"p8"#cc : MxSccM<cc, MxType8.POp, MxType8.PPat, MxEncEAp_0, MxExtI16_0>;
 }
 
 //===----------------------------------------------------------------------===//
