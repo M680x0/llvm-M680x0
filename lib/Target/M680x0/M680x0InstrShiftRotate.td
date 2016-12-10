@@ -24,39 +24,62 @@
 //
 //===----------------------------------------------------------------------===//
 
+def MxRODI_R : MxBead1Bit<0>;
+def MxRODI_L : MxBead1Bit<1>;
+
+def MxROOP_AS  : MxBead2Bits<0b00>;
+def MxROOP_LS  : MxBead2Bits<0b01>;
+def MxROOP_ROX : MxBead2Bits<0b10>;
+def MxROOP_RO  : MxBead2Bits<0b11>;
+
+/// ------------+---------+---+------+---+------+---------
+///  F  E  D  C | B  A  9 | 8 | 7  6 | 5 | 4  3 | 2  1  0
+/// ------------+---------+---+------+---+------+---------
+///  1  1  1  0 | REG/IMM | D | SIZE |R/I|  OP  |   REG
+/// ------------+---------+---+------+---+------+---------
+class MxSREncoding_R<MxBead1Bit DIRECTION, MxBead2Bits ROOP, MxEncSize SIZE>
+    : MxEncoding<MxBeadReg<0>, ROOP, MxBead1Bit<1>, SIZE, DIRECTION,
+                 MxBeadReg<2>, MxBead4Bits<0b1110>>;
+
+class MxSREncoding_I<MxBead1Bit DIRECTION, MxBead2Bits ROOP, MxEncSize SIZE>
+    : MxEncoding<MxBeadReg<0>, ROOP, MxBead1Bit<0>, SIZE, DIRECTION,
+                 MxBead3Imm<2, 1>, MxBead4Bits<0b1110>>;
+
 // $reg <- $reg op $reg
-class MxSROp_DD<string mnemonic, MxType TYPE, SDNode node>
+class MxSR_DD<string MN, MxType TYPE, SDNode NODE, MxBead1Bit RODI, MxBead2Bits ROOP>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, TYPE.ROp:$opd),
-           mnemonic#"."#TYPE.Prefix#"\t$opd, $dst",
-           [(set TYPE.VT:$dst, (node TYPE.VT:$src, TYPE.VT:$opd))]>;
+           MN#"."#TYPE.Prefix#"\t$opd, $dst",
+           [(set TYPE.VT:$dst, (NODE TYPE.VT:$src, TYPE.VT:$opd))],
+      MxSREncoding_R<RODI, ROOP, !cast<MxEncSize>("MxEncSize"#TYPE.Size)>>;
 
 // $reg <- $reg op $imm
-class MxSROp_DI<string mnemonic, MxType TYPE, SDNode node>
+class MxSR_DI<string MN, MxType TYPE, SDNode NODE, MxBead1Bit RODI, MxBead2Bits ROOP>
     : MxInst<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$src, !cast<Operand>("Mxi"#TYPE.Size#"imm"):$opd),
-           mnemonic#"."#TYPE.Prefix#"\t$opd, $dst",
-           [(set TYPE.VT:$dst, (node TYPE.VT:$src, !cast<ImmLeaf>("Mximm"#TYPE.Size#"_1to8"):$opd))]>;
+           MN#"."#TYPE.Prefix#"\t$opd, $dst",
+           [(set TYPE.VT:$dst, (NODE TYPE.VT:$src, !cast<ImmLeaf>("Mximm"#TYPE.Size#"_1to8"):$opd))],
+      MxSREncoding_I<RODI, ROOP, !cast<MxEncSize>("MxEncSize"#TYPE.Size)>>;
 
-multiclass MxSROp<string mnemonic, SDNode node> {
+multiclass MxSROp<string MN, SDNode NODE, MxBead1Bit RODI, MxBead2Bits ROOP> {
 
 let Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
 
-def NAME#"8dd"  : MxSROp_DD<mnemonic, MxType8d,  node>;
-def NAME#"16dd" : MxSROp_DD<mnemonic, MxType16d, node>;
-def NAME#"32dd" : MxSROp_DD<mnemonic, MxType32d, node>;
+def NAME#"8dd"  : MxSR_DD<MN, MxType8d,  NODE, RODI, ROOP>;
+def NAME#"16dd" : MxSR_DD<MN, MxType16d, NODE, RODI, ROOP>;
+def NAME#"32dd" : MxSR_DD<MN, MxType32d, NODE, RODI, ROOP>;
 
-def NAME#"8di"  : MxSROp_DI<mnemonic, MxType8d,  node>;
-def NAME#"16di" : MxSROp_DI<mnemonic, MxType16d, node>;
-def NAME#"32di" : MxSROp_DI<mnemonic, MxType32d, node>;
+def NAME#"8di"  : MxSR_DI<MN, MxType8d,  NODE, RODI, ROOP>;
+def NAME#"16di" : MxSR_DI<MN, MxType16d, NODE, RODI, ROOP>;
+def NAME#"32di" : MxSR_DI<MN, MxType32d, NODE, RODI, ROOP>;
 
 } // $src = $dst
 } // Defs = [CCR]
 
 } // MxBiArOp_RF
 
-defm SHL : MxSROp<"lsl", shl>;
-defm LSR : MxSROp<"lsr", srl>;
-defm ASR : MxSROp<"asr", sra>;
+defm SHL : MxSROp<"lsl", shl, MxRODI_L, MxROOP_LS>;
+defm LSR : MxSROp<"lsr", srl, MxRODI_R, MxROOP_LS>;
+defm ASR : MxSROp<"asr", sra, MxRODI_R, MxROOP_AS>;
 
-defm ROL : MxSROp<"rol", rotl>;
-defm ROR : MxSROp<"ror", rotr>;
+defm ROL : MxSROp<"rol", rotl, MxRODI_L, MxROOP_RO>;
+defm ROR : MxSROp<"ror", rotr, MxRODI_R, MxROOP_RO>;

@@ -66,6 +66,7 @@ namespace M680x0Beads {
     Imm8   = 0x9,
     Imm16  = 0xA,
     Imm32  = 0xB,
+    Imm3   = 0xC,
   };
 
   // Ctrl payload

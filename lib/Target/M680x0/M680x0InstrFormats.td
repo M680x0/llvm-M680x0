@@ -101,6 +101,9 @@ class MxBead8Imm   <bits<3> o, bit a = 0> : MxBead<0x9, o{0}, o{1}, o{2}, a>;
 class MxBead16Imm  <bits<3> o, bit a = 0> : MxBead<0xA, o{0}, o{1}, o{2}, a>;
 class MxBead32Imm  <bits<3> o, bit a = 0> : MxBead<0xB, o{0}, o{1}, o{2}, a>;
 
+/// Encodes an immediate 0-7(alt. 1-8) into 3 bit field
+class MxBead3Imm   <bits<3> o, bit a = 0> : MxBead<0xC, o{0}, o{1}, o{2}, a>;
+
 
 class MxEncoding<MxBead n0  = MxBeadTerm, MxBead n1  = MxBeadTerm, 
                  MxBead n2  = MxBeadTerm, MxBead n3  = MxBeadTerm,

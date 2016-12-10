@@ -152,7 +152,7 @@ LLVM_CONSTEXPR static inline bool intDoesFit(unsigned N, int64_t x) {
 
 static unsigned
 EmitConstant(uint64_t Val, unsigned Size, unsigned Pad, uint64_t &Buffer, unsigned Offset) {
-  assert (Size && (Size == 8 || Size == 16 || Size == 32));
+  // assert (Size && (Size == 8 || Size == 16 || Size == 32));
   assert (Size + Offset <= 64 && "Value does not fit");
   assert (uintDoesFit(Size, Val));
 
@@ -173,23 +173,33 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
   unsigned Pad = 0;
   unsigned FixOffset = 0;
   int64_t  ExprAdd = 0;
-  switch (Bead & 0xF) {
+  bool NoExpr = false;
+
+  unsigned Type = Bead & 0xF;
+  unsigned Op = (Bead & 0x70) >> 4;
+  bool Alt = (Bead & 0x80);
+
+  switch (Type) {
     // Disp8 requires +1 byte offset since it is not padded and the target is BE
-    // This will be fixed within the expression itself.
+    // and the bytes inside the word will be switched. This will be fixed within
+    // the expression itself.
     // ??? what happens if it is not byte aligned
     // ??? is it even possible
+    // FIXME explain this better, hard to understand after a month...
     case M680x0Beads::Disp8:  Size = 8;  Pad = 0; FixOffset = ThisByte + 1; ExprAdd = -1; break;
     case M680x0Beads::Imm8:   Size = 8;  Pad = 8; FixOffset = ThisByte; break;
     case M680x0Beads::Imm16:  Size = 16; Pad = 0; FixOffset = ThisByte; break;
     case M680x0Beads::Imm32:  Size = 32; Pad = 0; FixOffset = ThisByte; break;
+    case M680x0Beads::Imm3:   Size = 3;  Pad = 0; NoExpr = true; break;
   }
-  unsigned Op = (Bead & 0x70) >> 4;
-  bool Alt = (Bead & 0x80);
-  DEBUG(dbgs() << "\tEncodeImm"
-               << " Op: " << Op
-               << ", Size: " << Size
-               << ", Alt: " << Alt
-               << "\n");
+
+  DEBUG(dbgs()
+      << "\tEncodeImm"
+      << " Op: " << Op
+      << ", Size: " << Size
+      << ", Alt: " << Alt
+      << "\n");
+
   assert (Op < Desc.NumMIOperands);
   MIOperandInfo MIO = Desc.MIOpInfo[Op];
   MCOperand MCO;
@@ -202,6 +212,7 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
       if (MCO.isImm()) {
         Expr = MCConstantExpr::create(MCO.getImm(), Ctx);
       } else {
+        assert(!NoExpr && "Cannot use expression here");
         Expr = MCO.getExpr();
       }
 
@@ -216,9 +227,10 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
       return EmitConstant(0, Size, Pad, Buffer, Offset);
     }
   } else {
-    assert (!Alt && "You cannot use Alt immediate with a simple operand");
+    // assert (!Alt && "You cannot use Alt immediate with a simple operand");
     MCO = MI.getOperand(MIO.MINo);
     if (MCO.isExpr()) {
+      assert(!NoExpr && "Cannot use expression here");
       const MCExpr *Expr = MCO.getExpr();
 
       if (ExprAdd != 0) {
@@ -233,8 +245,17 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
     }
   }
 
-  assert (intDoesFit(Size, MCO.getImm()));
-  uint64_t Imm = MCO.getImm();
+  int64_t I = MCO.getImm();
+
+  // Store 8 as 0, thus making range 1-8
+  if (Type == M680x0Beads::Imm3 && Alt) {
+    assert(I && "Cannot encode Alt Imm3 zero value");
+    I %= 8;
+  } else {
+    assert (intDoesFit(Size, I));
+  }
+
+  uint64_t Imm = I;
 
   // 32 bit Imm requires HI16 first then LO16
   if (Size == 32) {
@@ -299,6 +320,7 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
       case M680x0Beads::Imm8:
       case M680x0Beads::Imm16:
       case M680x0Beads::Imm32:
+      case M680x0Beads::Imm3:
         Offset += EncodeImm(ThisByte, Bead, MI, Desc, Buffer, Offset, Fixups, STI);
         break;
     }

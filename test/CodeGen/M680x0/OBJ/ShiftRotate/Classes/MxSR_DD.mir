@@ -1,0 +1,41 @@
+# RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj -o - \
+# RUN:  | extract-section .text                                                \
+# RUN:  | FileCheck %s -check-prefixes=SHL8dd,SHL32dd,LSR8dd,LSR32dd,ASR8dd,ASR32dd,\
+# RUN:ROL8dd,ROL32dd,ROR8dd,ROR32dd
+
+#------------------------------------------------------------------------------
+# MxSR_DD encodes shift or rotate instructions; shift count is in register
+#------------------------------------------------------------------------------
+
+#               ---------------+-----------+---+-------+---+-------+-----------
+#                F   E   D   C | B   A   9 | 8 | 7   6 | 5 | 4   3 | 2   1   0
+#               ---------------+-----------+---+-------+---+-------+-----------
+#                1   1   1   0 |     Dx    | D |  SIZE | 1 |  OP   |    Dy  
+#               ---------------+-----------+---+-------+---+-------+-----------
+# SHL8dd:        1   1   1   0   0   0   0   1 . 0   0   1   0   1   0   0   1
+# SHL32dd-SAME:  1   1   1   0   0   0   1   1 . 1   0   1   0   1   0   1   0
+#               ---------------+-----------+---+-------+---+-------+-----------
+# LSR8dd-SAME:   1   1   1   0   0   1   0   0 . 0   0   1   0   1   0   1   1
+# LSR32dd-SAME:  1   1   1   0   0   1   1   0 . 1   0   1   0   1   1   0   0
+#               ---------------+-----------+---+-------+---+-------+-----------
+# ASR8dd-SAME:   1   1   1   0   1   0   0   0 . 0   0   1   0   0   1   0   1
+# ASR32dd-SAME:  1   1   1   0   1   0   1   0 . 1   0   1   0   0   1   1   0
+#               ---------------+-----------+---+-------+---+-------+-----------
+# ROL8dd-SAME:   1   1   1   0   1   1   0   1 . 0   0   1   1   1   1   1   1
+# ROL32dd-SAME:  1   1   1   0   1   1   1   1 . 1   0   1   1   1   0   0   1
+#               ---------------+-----------+---+-------+---+-------+-----------
+# ROR8dd-SAME:   1   1   1   0   0   0   0   0 . 0   0   1   1   1   0   0   1
+# ROR32dd-SAME:  1   1   1   0   0   0   0   0 . 1   0   1   1   1   0   0   1
+name: MxSR_DD
+body: |
+  bb.0:
+     %bd1 = SHL8dd  %bd1, %bd0, implicit-def %ccr
+     %d2  = SHL32dd  %d2,  %d1, implicit-def %ccr
+     %bd3 = LSR8dd  %bd3, %bd2, implicit-def %ccr
+     %d4  = LSR32dd  %d4,  %d3, implicit-def %ccr
+     %bd5 = ASR8dd  %bd5, %bd4, implicit-def %ccr
+     %d6  = ASR32dd  %d6,  %d5, implicit-def %ccr
+     %bd7 = ROL8dd  %bd7, %bd6, implicit-def %ccr
+     %d1  = ROL32dd  %d1,  %d7, implicit-def %ccr
+     %bd1 = ROR8dd  %bd1, %bd0, implicit-def %ccr
+     %d1  = ROR32dd  %d1,  %d0, implicit-def %ccr
