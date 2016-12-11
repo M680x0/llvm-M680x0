@@ -8,7 +8,8 @@
 
 ; x00-LABEL: test0:
 ; x00:       lea (dst,%pc), %a0
-; x00-NEXT:  move.l %a0, (ptr,%pc)
+; x00:       lea (ptr,%pc), %a1
+; x00-NEXT:  move.l %a0, (%a1)
 ; x00-NEXT:  move.l (src,%pc), (%a0)
 ; x00-NEXT:  rts
 define void @test0() nounwind {
@@ -53,7 +54,8 @@ declare void(...)* @afoo(...)
 ; x00-LABEL: test3:
 ; x00:       jsr afoo
 ; x00-NEXT:  move.l %d0, %a0
-; x00-NEXT:  move.l %a0, (pfoo,%pc)
+; x00-NEXT:  lea (pfoo,%pc), %a1
+; x00-NEXT:  move.l %a0, (%a1)
 ; x00-NEXT:  jsr (%a0)
 define void @test3() nounwind {
 entry:

@@ -264,22 +264,6 @@ foreach S = [16, 32] in {
                      !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
                      MxEncEAo_0, MxExtEmpty>>;
 
-    def MOV#S#"k"#D : MxMove_MR<
-      !cast<MxType>("MxType"#S).KOp,
-      !cast<MxType>("MxType"#S).KPat,
-      !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                     !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
-                     MxEncEAk, MxExtBrief_0>>;
-
-    def MOV#S#"q"#D : MxMove_MR<
-      !cast<MxType>("MxType"#S).QOp,
-      !cast<MxType>("MxType"#S).QPat,
-      !cast<MxType>("MxType"#S#D),
-      MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                     !cast<MxEncEA>("MxEncEA"#D#"_1"), MxExtEmpty,
-                     MxEncEAq, MxExtI16_0>>;
-
     def MOV#S#"b"#D : MxMove_MR<
       !cast<MxType>("MxType"#S).BOp,
       !cast<MxType>("MxType"#S).BPat,
@@ -324,22 +308,6 @@ foreach S = [8, 16, 32] in {
                    MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
                    MxEncEAp_0, MxExtI16_0>>;
 
-  def MOV#S#"k"#"i" : MxMove_MI<
-    !cast<MxType>("MxType"#S).KOp,
-    !cast<MxType>("MxType"#S).KPat,
-    !cast<MxType>("MxType"#S),
-    MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
-                   MxEncEAk, MxExtBrief_0>>;
-
-  def MOV#S#"q"#"i" : MxMove_MI<
-    !cast<MxType>("MxType"#S).QOp,
-    !cast<MxType>("MxType"#S).QPat,
-    !cast<MxType>("MxType"#S),
-    MxMoveEncoding<!cast<MxMoveSize>("MxMoveSize"#S),
-                   MxEncEAi, !cast<MxEncExt>("MxExtI"#S#"_1"),
-                   MxEncEAq, MxExtI16_0>>;
-
   def MOV#S#"b"#"i" : MxMove_MI<
     !cast<MxType>("MxType"#S).BOp,
     !cast<MxType>("MxType"#S).BPat,
@@ -363,12 +331,6 @@ def : Pat<(store   MxType32.BPat :$src, MxType32.PPat :$dst),
 
 def : Pat<(store   MxType32.BPat :$src, MxType32.FPat :$dst),
           (MOV32fi MxType32.FOp  :$dst, MxType32.IOp  :$src)>;
-
-def : Pat<(store   MxType32.BPat :$src, MxType32.KPat :$dst),
-          (MOV32ki MxType32.KOp  :$dst, MxType32.IOp  :$src)>;
-
-def : Pat<(store   MxType32.BPat :$src, MxType32.QPat :$dst),
-          (MOV32qi MxType32.QOp  :$dst, MxType32.IOp  :$src)>;
 
 def : Pat<(store   MxType32.BPat :$src, MxType32.BPat :$dst),
           (MOV32bi MxType32.BOp  :$dst, MxType32.IOp  :$src)>;
