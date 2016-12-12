@@ -169,6 +169,7 @@ unsigned M680x0MCCodeEmitter::
 EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &Desc,
           uint64_t &Buffer, unsigned Offset, SmallVectorImpl<MCFixup> &Fixups,
           const MCSubtargetInfo &STI) const {
+  unsigned ThisWord = ThisByte / 2;
   unsigned Size = 0;
   unsigned Pad = 0;
   unsigned FixOffset = 0;
@@ -179,10 +180,21 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
   unsigned Op = (Bead & 0x70) >> 4;
   bool Alt = (Bead & 0x80);
 
+  assert (Op < Desc.NumMIOperands);
+  MIOperandInfo MIO = Desc.MIOpInfo[Op];
+  bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
+
+  // The PC value upon instruction reading of a short jump will point to the
+  // next instruction, thus we need to compensate 2 bytes, which is the diff
+  // between the patch point and the PC.
+  if (isPCRel && ThisWord == 0) {
+    Addendum -= 2;
+  }
+
   switch (Type) {
     // ??? what happens if it is not byte aligned
     // ??? is it even possible
-    case M680x0Beads::Disp8:  Size = 8;  Pad = 0; FixOffset = ThisByte + 1; Addendum = 1; break;
+    case M680x0Beads::Disp8:  Size = 8;  Pad = 0; FixOffset = ThisByte + 1; Addendum += 1; break;
     case M680x0Beads::Imm8:   Size = 8;  Pad = 8; FixOffset = ThisByte; break;
     case M680x0Beads::Imm16:  Size = 16; Pad = 0; FixOffset = ThisByte; break;
     case M680x0Beads::Imm32:  Size = 32; Pad = 0; FixOffset = ThisByte; break;
@@ -196,10 +208,7 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
       << ", Alt: " << Alt
       << "\n");
 
-  assert (Op < Desc.NumMIOperands);
-  MIOperandInfo MIO = Desc.MIOpInfo[Op];
   MCOperand MCO;
-  bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
   if (MIO.isTargetType()) {
 
     if (isPCRel) {
