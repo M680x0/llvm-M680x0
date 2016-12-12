@@ -16,13 +16,11 @@
 # LEA32q-SAME:   0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
 #               ---------------------------------------------------------------
 # LEA32q-SAME:   0   1   0   0   0   0   0   1 . 1   1   1   1   1   0   1   0
-# LEA32q-SAME:   0   0   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
-#
-# NOTE PC-Rel displacememnt goes into relocation record
+# LEA32q-SAME:   1   1   1   1   1   1   1   1 . 1   1   1   1   1   1   1   1
 name: MxLEA_PCD
 body: |
   bb.0:
-     %a0 = LEA32q -1, implicit-def %ccr
+     %a0 = LEA32q  0, implicit-def %ccr
      %a0 = LEA32q -1, implicit-def %ccr
 
 ...

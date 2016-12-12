@@ -201,33 +201,34 @@ EncodeImm(unsigned ThisByte, uint8_t Bead, const MCInst &MI, const MCInstrDesc &
   MCOperand MCO;
   bool isPCRel = M680x0II::isPCRelOpd(MIO.Type);
   if (MIO.isTargetType()) {
+
     if (isPCRel) {
       assert(!Alt && "You cannot use ALT operand with PCRel");
       MCO = MI.getOperand(MIO.MINo + M680x0::PCRelDisp);
     } else {
       MCO = MI.getOperand(MIO.MINo + (Alt ? M680x0::MemOuter : M680x0::MemDisp));
     }
-    const MCExpr *Expr = nullptr;
-    if (MCO.isImm()) {
-      Expr = MCConstantExpr::create(MCO.getImm(), Ctx);
-    } else {
+
+    if (MCO.isExpr()) {
       assert(!NoExpr && "Cannot use expression here");
-      Expr = MCO.getExpr();
-    }
+      const MCExpr *Expr = MCO.getExpr();
 
-    // This only makes sense for PCRel instructions since PC points to the
-    // extension word and Disp8 for example is right justified and requires
-    // correction. E.g. R_M680x0_PC32 is calculated as S + A - P, P for Disp8
-    // will be EXTENSION_WORD + 1 thus we need to have A equal to 1 to compensate.
-    if (isPCRel && Addendum != 0) {
-      Expr = MCBinaryExpr::createAdd(Expr,
-               MCConstantExpr::create(Addendum, Ctx), Ctx);
-    }
+      // This only makes sense for PCRel instructions since PC points to the
+      // extension word and Disp8 for example is right justified and requires
+      // correction. E.g. R_M680x0_PC32 is calculated as S + A - P, P for Disp8
+      // will be EXTENSION_WORD + 1 thus we need to have A equal to 1 to compensate.
+      // TODO count extension words
+      if (isPCRel && Addendum != 0) {
+        Expr = MCBinaryExpr::createAdd(Expr,
+                 MCConstantExpr::create(Addendum, Ctx), Ctx);
+      }
 
-    Fixups.push_back(
-        MCFixup::create(FixOffset, Expr, getFixupForSize(Size, isPCRel), MI.getLoc()));
-    // Write zeros
-    return EmitConstant(0, Size, Pad, Buffer, Offset);
+      Fixups.push_back(MCFixup::create(FixOffset, Expr,
+                       getFixupForSize(Size, isPCRel),
+                       MI.getLoc()));
+      // Write zeros
+      return EmitConstant(0, Size, Pad, Buffer, Offset);
+    }
 
   } else {
     // assert (!Alt && "You cannot use Alt immediate with a simple operand");

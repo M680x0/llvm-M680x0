@@ -32,12 +32,6 @@ using namespace llvm;
 
 namespace {
 
-class M680x0ELFObjectWriter : public MCELFObjectTargetWriter {
-public:
-  M680x0ELFObjectWriter(uint8_t OSABI, uint16_t EMachine, bool foobar)
-    : MCELFObjectTargetWriter(false, OSABI, EMachine, true) {}
-};
-
 class M680x0AsmBackend : public MCAsmBackend {
   const StringRef CPU;
 public:
