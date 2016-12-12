@@ -41,9 +41,8 @@ M680x0ELFObjectWriter::~M680x0ELFObjectWriter()
 
 enum M680x0RelType { RT_32, RT_16, RT_8 };
 
-static M680x0RelType getType(unsigned Kind,
-                             MCSymbolRefExpr::VariantKind &Modifier,
-                             bool &IsPCRel) {
+static M680x0RelType
+getType(unsigned Kind, MCSymbolRefExpr::VariantKind &Modifier, bool &IsPCRel) {
   switch (Kind) {
   default:
     llvm_unreachable("Unimplemented");
@@ -78,7 +77,6 @@ getRelocType(MCContext &Ctx, const MCValue &Target,
     case RT_8:
       return IsPCRel ? ELF::R_M680x0_PC8  : ELF::R_M680x0_8;
     }
-  // ??? Can we drop this?
   // case MCSymbolRefExpr::VK_GOT:
   //   switch (Type) {
   //   case RT_32:
