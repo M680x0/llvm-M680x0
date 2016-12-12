@@ -6,7 +6,8 @@
 # Read object file from stdin, extract named section and print its bit-pattern
 #-------------------------------------------------------------------------------
 
-SECTION="\s$1"
+SECTION="\s$1"; shift;
+BASE=${1:-'-b'};
 
 DIR=/tmp/extract-section
 TEMP=$DIR/$(uuidgen).o
@@ -15,6 +16,7 @@ TEMP=$DIR/$(uuidgen).o
 
 cat > $TEMP
 
+if [[ $BASE == '-b' ]]; then
 llvm-readobj -elf-output-style=GNU --sections $TEMP                           \
     | grep $SECTION                                                           \
     | awk '{print "dd if='$TEMP' bs=1 count=$[0x" $7 "] skip=$[0x" $6 "]"}'   \
@@ -23,6 +25,14 @@ llvm-readobj -elf-output-style=GNU --sections $TEMP                           \
     | cut -d " " -f 2                                                         \
     | tr  -d "\n"                                                             \
     | fold -w8 | paste -sd'.' -                                               \
-    | fold -w1 | paste -sd' ' -                                               \
+    | fold -w1 | paste -sd' ' -
+elif [[ $BASE == '-h' ]]; then
+llvm-readobj -elf-output-style=GNU --sections $TEMP                           \
+    | grep $SECTION                                                           \
+    | awk '{print "dd if='$TEMP' bs=1 count=$[0x" $7 "] skip=$[0x" $6 "]"}'   \
+    | bash 2> /dev/null                                                       \
+    | xxd -p                                                                  \
+    | fold -w4 | paste -sd' ' -
+fi
 
 rm $TEMP
