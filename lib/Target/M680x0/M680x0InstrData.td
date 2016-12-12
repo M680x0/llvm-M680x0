@@ -483,6 +483,7 @@ class MxLEA<MxOperand SRCOpd, ComplexPattern SRCPat, MxEncEA EA, MxEncExt EXT>
 def LEA32p : MxLEA<MxARID32, MxCP_ARID, MxEncEAp_1, MxExtI16_1>;
 def LEA32f : MxLEA<MxARII32, MxCP_ARII, MxEncEAf_1, MxExtBrief_1>;
 def LEA32q : MxLEA<MxPCD32,  MxCP_PCD,  MxEncEAq,   MxExtI16_1>;
+def LEA32b : MxLEA<MxAL32,   MxCP_AL,   MxEncEAb,   MxExtI32_1>;
 
 
 //===----------------------------------------------------------------------===//
