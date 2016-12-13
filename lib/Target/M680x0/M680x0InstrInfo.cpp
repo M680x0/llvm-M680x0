@@ -556,7 +556,7 @@ namespace {
 
       // Generate lea (__GLOBAL_OFFSET_TABLE_,%PC), %A5
       BuildMI(FirstMBB, MBBI, DL, TII->get(M680x0::LEA32q), GlobalBaseReg)
-        .addExternalSymbol("_GLOBAL_OFFSET_TABLE_", M680x0II::MO_GOTPC);
+        .addExternalSymbol("_GLOBAL_OFFSET_TABLE_", M680x0II::MO_GOTPCREL);
 
       return true;
     }

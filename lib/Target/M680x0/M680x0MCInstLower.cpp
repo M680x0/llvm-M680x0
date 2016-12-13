@@ -76,7 +76,6 @@ LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const {
   case M680x0II::MO_ABSOLUTE_ADDRESS:
   case M680x0II::MO_PC_RELATIVE_ADDRESS: break;
   case M680x0II::MO_GOTPCREL:  RefKind = MCSymbolRefExpr::VK_GOTPCREL; break;
-  case M680x0II::MO_GOTPC:     RefKind = MCSymbolRefExpr::VK_GOTPC;    break;
   case M680x0II::MO_GOT:       RefKind = MCSymbolRefExpr::VK_GOT;      break;
   case M680x0II::MO_GOTOFF:    RefKind = MCSymbolRefExpr::VK_GOTOFF;   break;
   case M680x0II::MO_PLT:       RefKind = MCSymbolRefExpr::VK_PLT;      break;
