@@ -514,6 +514,24 @@ getGlobalBaseReg(MachineFunction *MF) const {
   return GlobalBaseReg;
 }
 
+std::pair<unsigned, unsigned> M680x0InstrInfo::
+decomposeMachineOperandsTargetFlags(unsigned TF) const {
+  return std::make_pair(TF, 0u);
+}
+
+ArrayRef<std::pair<unsigned, const char *>> M680x0InstrInfo::
+getSerializableDirectMachineOperandTargetFlags() const {
+  using namespace M680x0II;
+  static const std::pair<unsigned, const char *> TargetFlags[] = {
+      {MO_ABSOLUTE_ADDRESS,    "M680x0-absolute"},
+      {MO_PC_RELATIVE_ADDRESS, "M680x0-pcrel"},
+      {MO_GOT,                 "M680x0-got"},
+      {MO_GOTOFF,              "M680x0-gotoff"},
+      {MO_GOTPCREL,            "M680x0-gotpcrel"},
+      {MO_PLT,                 "M680x0-plt"}};
+  return makeArrayRef(TargetFlags);
+}
+
 namespace {
   /// Create Global Base Reg pass. This initializes the PIC global base register
   struct CGBR : public MachineFunctionPass {
