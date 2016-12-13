@@ -30,7 +30,6 @@
   define void @PCI()      { entry: ret void }
   define void @PCD()      { entry: ret void }
   define void @FORWARD()  { entry: ret void }
-  define void @ABS()      { entry: ret void }
 
 ...
 --- # BACKWARD
