@@ -145,6 +145,10 @@ bool M680x0AsmBackend::
 fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                      const MCRelaxableFragment *DF,
                      const MCAsmLayout &Layout) const {
+  // TODO Newer CPU can use 32 bit offsets, so check for this when ready
+  if (int64_t(Value) != int64_t(int16_t(Value))) {
+    llvm_unreachable("Cannot relax the instruction, value does not fit");
+  }
   // Relax if the value is too big for a (signed) i8. This means that byte-wide
   // instructions have to matched by default
   //
