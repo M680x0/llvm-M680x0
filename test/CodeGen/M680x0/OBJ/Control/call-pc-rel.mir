@@ -10,20 +10,20 @@
 
 #
 # <BACKWARD>
-# 00  x00: 4e71
-# 02  x00: 4e75
+# 00  x00:      4e71
+# 02  x00-SAME: 4e75
 #
 # <PCI>
-# 04  x00: 4ebb 08fa
-# 08  x00: 4ebb 080a
+# 04  x00-SAME: 4ebb 08fa
+# 08  x00-SAME: 4ebb 080a
 #
 # <PCD>
-# 0c  x00: 4eba fff2
-# 10  x00: 4eba 0002
+# 0c  x00-SAME: 4eba fff2
+# 10  x00-SAME: 4eba 0002
 #
 # <FORWARD>
-# 14  x00: 4e71
-# 16  x00: 4e75
+# 14  x00-SAME: 4e71
+# 16  x00-SAME: 4e75
 --- |
 
   define void @BACKWARD() { entry: ret void }

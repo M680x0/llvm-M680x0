@@ -1,0 +1,116 @@
+# RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=obj      \
+# RUN:  -code-model=small -relocation-model=pic -o -                           \
+# RUN:  | extract-section .text -h                                             \
+# RUN:  | FileCheck %s -check-prefixes=x00
+
+#------------------------------------------------------------------------------
+# Test branch relaxation. By default codegen choses smallest branch instruction,
+# during object code generation it might get clear that offset does not fit and
+# bigger instruction is required.
+#------------------------------------------------------------------------------
+
+
+--- # TIGHT
+# The offset for the small branch is from the PC value, which points to the
+# next instruction, because there is no extension word here.
+# 000  x00:      6078
+# 002  x00-SAME: 23f9 0000 0000 0000 0000
+# 00C  x00-SAME: 23f9 0000 0000 0000 0000
+# 016  x00-SAME: 23f9 0000 0000 0000 0000
+# 020  x00-SAME: 23f9 0000 0000 0000 0000
+# 02A  x00-SAME: 23f9 0000 0000 0000 0000
+# 034  x00-SAME: 23f9 0000 0000 0000 0000
+# 03E  x00-SAME: 23f9 0000 0000 0000 0000
+# 048  x00-SAME: 23f9 0000 0000 0000 0000
+# 052  x00-SAME: 23f9 0000 0000 0000 0000
+# 05C  x00-SAME: 23f9 0000 0000 0000 0000
+# 066  x00-SAME: 23f9 0000 0000 0000 0000
+# 070  x00-SAME: 23f9 0000 0000 0000 0000
+# 07A  x00-SAME: d0bc 0000 0000
+# 080  x00-SAME: 4e75
+# 082  x00-SAME: 4e71
+name: TIGHT
+body: |
+  bb.0:
+      successors: %bb.1,%bb.2
+
+      BRA8 %bb.2
+  bb.1:
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+  bb.2:
+      %d0 = ADD32ri %d0, 0, implicit-def %ccr
+      RET 0, %d0
+
+...
+--- # RELAXED
+# 084  x00-SAME  6000 0084
+# 088  x00-SAME: 23f9 0000 0000 0000 0000
+# 092  x00-SAME: 23f9 0000 0000 0000 0000
+# 09C  x00-SAME: 23f9 0000 0000 0000 0000
+# 0A6  x00-SAME: 23f9 0000 0000 0000 0000
+# 0B0  x00-SAME: 23f9 0000 0000 0000 0000
+# 0BA  x00-SAME: 23f9 0000 0000 0000 0000
+# 0C4  x00-SAME: 23f9 0000 0000 0000 0000
+# 0CE  x00-SAME: 23f9 0000 0000 0000 0000
+# 0D8  x00-SAME: 23f9 0000 0000 0000 0000
+# 0E2  x00-SAME: 23f9 0000 0000 0000 0000
+# 0EC  x00-SAME: 23f9 0000 0000 0000 0000
+# 0F6  x00-SAME: 23f9 0000 0000 0000 0000
+# 100  x00-SAME: 23f9 0000 0000 0000 0000
+# 10A  x00-SAME: d0bc 0000 0000
+# 110  x00-SAME: 4e75
+# 112  x00-SAME: 4e71
+name: RELAXED
+body: |
+  bb.0:
+      successors: %bb.1,%bb.2
+
+      BRA8 %bb.2
+  bb.1:
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+      MOV32bb 0, 0, implicit-def %ccr
+  bb.2:
+      %d0 = ADD32ri %d0, 0, implicit-def %ccr
+      RET 0, %d0
+
+...
+--- # ZERO
+# Because of the way M680x0 encodes branches it is not possible to encode 0
+# offset with the smallest insruction(0 in the offset field means exension word
+# is used) thus we switch to the wider instruction.
+# 114  x00-SAME: 6000 0002
+# 118  x00-SAME: d0bc 0000 0000
+# 11E  x00-SAME: 4e75
+name: ZERO
+body: |
+  bb.0:
+      successors: %bb.1
+
+      BRA8 %bb.1
+  bb.1:
+      %d0 = ADD32ri %d0, 0, implicit-def %ccr
+      RET 0, %d0
+
+...
