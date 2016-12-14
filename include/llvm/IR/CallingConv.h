@@ -193,6 +193,9 @@ namespace CallingConv {
     /// Calling convention for AMDGPU code object kernels.
     AMDGPU_KERNEL = 91,
 
+    /// M680x0_INTR - Calling convention used for M680x0 interrupt routines.
+    M680x0_INTR = 92,
+
     /// The highest possible calling convention ID. Must be some 2^k - 1.
     MaxID = 1023
   };
