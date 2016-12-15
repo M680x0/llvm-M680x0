@@ -890,7 +890,6 @@ SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
   }
 
   if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
-    assert(!AM.Disp && "Should not be any displacement");
     DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
