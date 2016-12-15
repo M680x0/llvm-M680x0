@@ -130,7 +130,10 @@ getSetCCResultType(const DataLayout &DL, LLVMContext& Context, EVT VT) const {
 
 MVT M680x0TargetLowering::
 getScalarShiftAmountTy(const DataLayout &DL, EVT Ty) const {
-  return Ty.getSimpleVT();
+  if (Ty.isSimple()) {
+    return Ty.getSimpleVT();
+  }
+  return MVT::getIntegerVT(8 * DL.getPointerSize(0));
 }
 
 #include "M680x0GenCallingConv.inc"
@@ -458,7 +461,7 @@ LowerCall(TargetLowering::CallLoweringInfo &CLI,
   StructReturnType SR = callIsStructReturn(Outs);
   bool IsSibcall      = false;
   M680x0MachineFunctionInfo *MFI = MF.getInfo<M680x0MachineFunctionInfo>();
-  const M680x0RegisterInfo *TRI = Subtarget.getRegisterInfo();
+  // const M680x0RegisterInfo *TRI = Subtarget.getRegisterInfo();
 
   // TODO interrupts
   // if (CallConv == CallingConv::M680x0_INTR)
