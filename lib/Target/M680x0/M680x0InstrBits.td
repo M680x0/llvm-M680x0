@@ -61,13 +61,13 @@ class MxBTST_RI<MxType TYPE>
 class MxBTST_MR<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                 MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs), (ins MEMOpd:$dst, TYPE.ROp:$bitno), "btst\t$bitno, $dst",
-             [(set CCR, (MxBt (load MEMPat:$dst), TYPE.VT:$bitno))],
+             [(set CCR, (MxBt (TYPE.Load MEMPat:$dst), TYPE.VT:$bitno))],
              MxBTSTEnc_R<MxBeadReg<1>, EA, EXT>>;
 
 class MxBTST_MI<MxType TYPE, MxOperand MEMOpd, ComplexPattern MEMPat,
                 MxEncEA EA, MxEncExt EXT>
     : MxInst<(outs), (ins MEMOpd:$dst, TYPE.IOp:$bitno), "btst\t$bitno, $dst",
-             [(set CCR, (MxBt (load MEMPat:$dst), TYPE.IPat:$bitno))],
+             [(set CCR, (MxBt (TYPE.Load MEMPat:$dst), TYPE.IPat:$bitno))],
              MxBTSTEnc_I<MxBead8Imm<1>, EA, EXT>>;
 } // Defs = [CCR]
 
