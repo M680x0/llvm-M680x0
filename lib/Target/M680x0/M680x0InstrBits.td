@@ -30,11 +30,11 @@
 /// ------------+---------+---------+---------+---------
 ///  F  E  D  C | B  A  9 | 8  7  6 | 5  4  3 | 2  1  0
 /// ------------+---------+---------+---------+---------
-///             |         |         | EFFECTIVE ADDRESS
 ///  0  0  0  0 |   REG   | 1  0  0 |   MODE  |   REG
-/// ------------+-------------------+---------+---------
+/// ------------+---------+---------+---------+---------
 class MxBTSTEnc_R<MxBeadReg REG, MxEncEA EA, MxEncExt EXT>
-    : MxEncoding<EA.Reg, EA.DA, EA.Mode, MxBead3Bits<0b100>, REG, MxBead4Bits<0b0000>>;
+    : MxEncoding<EA.Reg, EA.DA, EA.Mode, MxBead3Bits<0b100>, REG, MxBead4Bits<0b0000>,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
 
 /// -------------------------------+---------+---------
 ///  F  E  D  C  B  A  9  8 . 7  6 | 5  4  3 | 2  1  0
@@ -45,7 +45,8 @@ class MxBTSTEnc_R<MxBeadReg REG, MxEncEA EA, MxEncExt EXT>
 /// ------------------------+--------------------------
 class MxBTSTEnc_I<MxBead8Imm IMM, MxEncEA EA, MxEncExt EXT>
     : MxEncoding<EA.Reg, EA.DA, EA.Mode, MxBead2Bits<0b00>,
-                 MxBead4Bits<0b1000>, MxBead4Bits<0b0000>, IMM>;
+                 MxBead4Bits<0b1000>, MxBead4Bits<0b0000>, IMM,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
 
 let Defs = [CCR] in {
 class MxBTST_RR<MxType TYPE>
