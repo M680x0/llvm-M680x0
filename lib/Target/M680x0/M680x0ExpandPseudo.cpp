@@ -20,6 +20,7 @@
 #include "M680x0Subtarget.h"
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/Passes.h" // For IDs of passes that are preserved.
 #include "llvm/IR/GlobalValue.h"
@@ -71,6 +72,8 @@ char M680x0ExpandPseudo::ID = 0;
 bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator MBBI) {
   MachineInstr &MI = *MBBI;
+  MachineFunction *MF = MBB.getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
   MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
   unsigned Opcode = MI.getOpcode();
   DebugLoc DL = MBBI->getDebugLoc();
@@ -207,12 +210,28 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     if (StackAdj == 0) {
       MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::RTS));
     } else if (isUInt<16>(StackAdj)) {
-      assert(false &&
-             "not implemented, RTD is available since M68020 i think");
-      // MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::RTD)).addImm(StackAdj);
+
+      if (STI->isM68020()) {
+        llvm_unreachable("RTD is not implemented");
+        // MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::RTD)).addImm(StackAdj);
+      } else {
+        // Copy PC from stack to a free address(A0 or A1) register
+        // TODO check if it is really free
+        BuildMI(MBB, MBBI, DL, TII->get(M680x0::MOV32aj), M680x0::A1)
+          .addReg(M680x0::SP);
+
+        // Adjust SP
+        FL->emitSPUpdate(MBB, MBBI, StackAdj, /*InEpilogue=*/true);
+
+        // Put the return address on stack
+        BuildMI(MBB, MBBI, DL, TII->get(M680x0::MOV32ja))
+          .addReg(M680x0::SP).addReg(M680x0::A1);
+
+        // RTS
+        BuildMI(MBB, MBBI, DL, TII->get(M680x0::RTS));
+      }
     } else {
-      assert(false &&
-             "not implemented, RTD is available since M68020 i think");
+      assert(false && "Oh really? You need to pop that much?");
       // RTD can only handle immediates as big as 2**16-1.  If we need to pop
       // off bytes before the return address, we must do it manually.
       //
