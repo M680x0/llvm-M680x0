@@ -612,6 +612,7 @@ def MxType32r_TC : MxType32Class<"r", MxXRD32_TC>;
 
 include "M680x0InstrData.td"
 include "M680x0InstrShiftRotate.td"
+include "M680x0InstrBits.td"
 include "M680x0InstrArithmetic.td"
 include "M680x0InstrControl.td"
 

@@ -1529,9 +1529,7 @@ getBitTestCondition(SDValue Src, SDValue BitNo, ISD::CondCode CC,
                     const SDLoc &DL, SelectionDAG &DAG) {
   // If Src is i8, promote it to i32 with any_extend.  There is no i8 BT
   // instruction.  Since the shift amount is in-range-or-undefined, we know
-  // that doing a bittest on the i32 value is ok.  We extend to i32 because
-  // the encoding for the i16 version is larger than the i32 version.
-  // Also promote i16 to i32 for performance / code size reason.
+  // that doing a bittest on the i32 value is ok.
   if (Src.getValueType() == MVT::i8 || Src.getValueType() == MVT::i16)
     Src = DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i32, Src);
 
@@ -1541,7 +1539,9 @@ getBitTestCondition(SDValue Src, SDValue BitNo, ISD::CondCode CC,
     BitNo = DAG.getNode(ISD::ANY_EXTEND, DL, Src.getValueType(), BitNo);
 
   SDValue BT = DAG.getNode(M680x0ISD::BT, DL, MVT::i32, Src, BitNo);
-  M680x0::CondCode Cond = CC == ISD::SETEQ ? M680x0::COND_CC : M680x0::COND_CS;
+
+  // NOTE BTST sets CCR.Z flag
+  M680x0::CondCode Cond = CC == ISD::SETEQ ? M680x0::COND_NE : M680x0::COND_EQ;
   return DAG.getNode(M680x0ISD::SETCC, DL, MVT::i8,
                      DAG.getConstant(Cond, DL, MVT::i8), BT);
 }
