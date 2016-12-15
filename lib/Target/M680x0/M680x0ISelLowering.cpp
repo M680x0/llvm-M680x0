@@ -63,6 +63,14 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   for (auto VT : MVT::integer_valuetypes())
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
 
+  // We don't accept any truncstore of integer registers.
+  setTruncStoreAction(MVT::i64, MVT::i32, Expand);
+  setTruncStoreAction(MVT::i64, MVT::i16, Expand);
+  setTruncStoreAction(MVT::i64, MVT::i8 , Expand);
+  setTruncStoreAction(MVT::i32, MVT::i16, Expand);
+  setTruncStoreAction(MVT::i32, MVT::i8 , Expand);
+  setTruncStoreAction(MVT::i16, MVT::i8,  Expand);
+
   setOperationAction(ISD::MUL, MVT::i8,  Legal);
   setOperationAction(ISD::MUL, MVT::i16, Legal);
   setOperationAction(ISD::MUL, MVT::i32, Custom);
