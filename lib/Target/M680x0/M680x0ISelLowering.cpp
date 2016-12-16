@@ -124,6 +124,11 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   setOperationAction(ISD::ExternalSymbol  , MVT::i32, Custom);
   setOperationAction(ISD::BlockAddress    , MVT::i32, Custom);
 
+  setOperationAction(ISD::VASTART, MVT::Other, Custom);
+  setOperationAction(ISD::VAEND,   MVT::Other, Expand);
+  setOperationAction(ISD::VAARG,   MVT::Other, Expand);
+  setOperationAction(ISD::VACOPY,  MVT::Other, Expand);
+
   computeRegisterProperties(STI.getRegisterInfo());
 
   setMinFunctionAlignment(2); // 2^2 bytes // ??? can it be just 2^1?
@@ -1400,6 +1405,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::ExternalSymbol:     return LowerExternalSymbol(Op, DAG);
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
+  case ISD::VASTART:            return LowerVASTART(Op, DAG);
   }
 }
 
@@ -3194,6 +3200,22 @@ EmitInstrWithCustomInserter(MachineInstr &MI, MachineBasicBlock *BB) const {
     return EmitLoweredSelect(MI, BB);
 
   }
+}
+
+SDValue M680x0TargetLowering::
+LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  auto PtrVT = getPointerTy(MF.getDataLayout());
+  M680x0MachineFunctionInfo *FuncInfo = MF.getInfo<M680x0MachineFunctionInfo>();
+
+  const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
+  SDLoc DL(Op);
+
+  // vastart just stores the address of the VarArgsFrameIndex slot into the
+  // memory location argument.
+  SDValue FR = DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(), PtrVT);
+  return DAG.getStore(Op.getOperand(0), DL, FR, Op.getOperand(1),
+                      MachinePointerInfo(SV));
 }
 
 //===----------------------------------------------------------------------===//
