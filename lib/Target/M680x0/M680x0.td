@@ -46,7 +46,7 @@ include "M680x0Schedule.td"
 class Proc<string Name, list<SubtargetFeature> Features>
     : ProcessorModel<Name, GenericM680x0Model, Features>;
 
-def : Proc<"generic", [ FeatureISAx20 ]>;
+def : Proc<"generic", [ FeatureISAx00 ]>;
 def : Proc<"M68000",  [ FeatureISAx00 ]>;
 def : Proc<"M68010",  [ FeatureISAx10 ]>;
 def : Proc<"M68020",  [ FeatureISAx20 ]>;
