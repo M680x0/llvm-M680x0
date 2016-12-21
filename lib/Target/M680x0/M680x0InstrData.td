@@ -209,6 +209,11 @@ def MOV8od : MxMove_MR<MxType8.OOp, MxType8.OPat, MxType8d,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
                             /*dst*/   MxEncEAo_0, MxExtEmpty>>;
 
+def MOV8bd : MxMove_MR<MxType8.BOp, MxType8.BPat, MxType8d,
+                       MxMoveEncoding<MxMoveSize8,
+                            /*src*/   MxEncEAd_1, MxExtEmpty,
+                            /*dst*/   MxEncEAb,   MxExtI32_0>>;
+
 def MOV8jd : MxMove_MR<MxType8.JOp, MxType8.JPat, MxType8d,
                        MxMoveEncoding<MxMoveSize8,
                             /*src*/   MxEncEAd_1, MxExtEmpty,
