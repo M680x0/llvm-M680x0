@@ -122,7 +122,8 @@ entry:
 ; x00-NEXT:  bhi .LBB{{.*}}_14
 ; x00:       (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a1
 ; x00:       lsl.l #2, %d0
-; x00:       add.l (.LJTI{{.*}}_0@GOTOFF,%a1,%d0), %a1
+; x00:       add.l #.LJTI{{.*}}_0@GOTOFF, %a0
+; x00:       add.l (0,%a0,%d0), %a1
 ; x00-NEXT:  jmp (%a1)
 ;
 ; x00:       .LBB{{.*}}_2:

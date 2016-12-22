@@ -7,7 +7,8 @@
 
 ; x00-LABEL: my_access_global_a:
 ; x00:       lea (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a0
-; x00:       move.l (a@GOTOFF,%a0), %d0
+; x00:       move.l #a@GOTOFF, %d0
+; x00:       move.l (0,%a0,%d0), %d0
 ; x00-NEXT:  rts
 define i32 @my_access_global_a() #0 {
 entry:
@@ -20,7 +21,8 @@ entry:
 
 ; x00-LABEL: my_access_global_b:
 ; x00:       lea (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a0
-; x00-NEXT:  move.l (b@GOTOFF,%a0), %d0
+; x00-NEXT:  move.l #b@GOTOFF, %d0
+; x00-NEXT:  move.l (0,%a0,%d0), %d0
 define i32 @my_access_global_b() #0 {
 entry:
  %0 = load i32, i32* @b, align 4
@@ -32,7 +34,8 @@ entry:
 
 ; x00-LABEL: my_access_global_c:
 ; x00:       lea (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a0
-; x00-NEXT:  move.l (c@GOTOFF,%a0), %d0
+; x00-NEXT:  move.l #c@GOTOFF, %d0
+; x00-NEXT:  move.l (0,%a0,%d0), %d0
 define i32 @my_access_global_c() #0 {
 entry:
  %0 = load i32, i32* @c, align 4
@@ -85,7 +88,7 @@ entry:
 
 ; x00-LABEL: my_access_fp_bar:
 ; x00:       lea (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a0
-; x00-NEXT:  lea (bar@GOTOFF,%a0), %a0
+; x00-NEXT:  add.l #bar@GOTOFF, %a0
 ; x00-NEXT:  move.l %a0, (%sp)
 ; x00-NEXT:  jsr (access_fp@PLT,%pc)
 define i32 @my_access_fp_bar() #0 {

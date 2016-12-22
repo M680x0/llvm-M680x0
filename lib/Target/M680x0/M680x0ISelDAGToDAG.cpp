@@ -102,17 +102,12 @@ struct M680x0ISelAddressMode {
     return BaseType == RegBase && IndexReg.getNode() != nullptr;
   }
 
-  bool hasDisp() const {
-    return Disp != 0;
-  }
-
   /// True if address mode type supports displacement
   bool isDispAddrType() const {
     return AM == ARII || AM == PCI || AM == ARID || AM == PCD || AM == AL;
   }
 
   int getDispSize() const {
-    assert(isDispAddrType() && "Address mode does not support displacement");
     switch (AM) {
       default: return 0;
       case ARII:
@@ -122,14 +117,16 @@ struct M680x0ISelAddressMode {
       case ARID:
       case PCD:
         return 16;
-      case AL: // FIXME though really depends on code model
+      case AL:
         return 32;
     }
   }
 
-  bool isDisp8()   { return getDispSize() == 8;  }
-  bool isDisp16()  { return getDispSize() == 16; }
-  bool isDisp32()  { return getDispSize() == 32; }
+
+  bool hasDisp()  const { return getDispSize() != 0;  }
+  bool isDisp8()  const { return getDispSize() == 8;  }
+  bool isDisp16() const { return getDispSize() == 16; }
+  bool isDisp32() const { return getDispSize() == 32; }
 
 
   /// Return true if this addressing mode is already PC-relative.
@@ -539,14 +536,16 @@ matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
 
   M680x0ISelAddressMode Backup = AM;
   if (matchAddressRecursively(N.getOperand(0), AM, Depth+1) &&
-      matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1))
-    return true;
+      matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1)) {
+      return true;
+  }
   AM = Backup;
 
   // Try again after commuting the operands.
   if (matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1) &&
-      matchAddressRecursively(Handle.getValue().getOperand(0), AM, Depth+1))
-    return true;
+      matchAddressRecursively(Handle.getValue().getOperand(0), AM, Depth+1)) {
+      return true;
+  }
   AM = Backup;
 
   // If we couldn't fold both operands into the address at the same time,
@@ -622,6 +621,11 @@ matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
     return true;
   }
 
+  // This wrapper requires 32bit disp/imm field for Medium CM
+  if (!AM.isDisp32()) {
+    return false;
+  }
+
   if (N.getOpcode() == M680x0ISD::Wrapper) {
     if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(N0)) {
       AM.GV = G->getGlobal();
@@ -680,42 +684,6 @@ void M680x0DAGToDAGISel::Select(SDNode *Node) {
 }
 
 bool M680x0DAGToDAGISel::
-SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
-  DEBUG(dbgs() << "Selecting ARI: ");
-  M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARI);
-
-  if (!matchAddress(N, AM)) {
-    DEBUG(dbgs() << "REJECT: Match failed\n");
-    return false;
-  }
-
-  if (AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
-    return false;
-  }
-
-  // ARI does not use these
-  if (AM.hasIndexReg() || AM.Disp != 0) {
-    DEBUG(dbgs() << "REJECT: Cannot match Index or Disp\n");
-    return false;
-  }
-
-  // Must be matched by AL
-  if (AM.hasSymbolicDisplacement()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Symbolic Disp\n");
-    return false;
-  }
-
-  if (AM.hasBaseReg()) {
-    Base = AM.BaseReg;
-    DEBUG(dbgs() << "SUCCESS\n");
-    return true;
-  }
-
-  return false;
-}
-
-bool M680x0DAGToDAGISel::
 SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
   DEBUG(dbgs() << "Selecting ARIPI: ");
   DEBUG(dbgs() << "NOT IMPLEMENTED\n");
@@ -748,14 +716,18 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
     return true;
   }
 
+  if (AM.hasIndexReg()) {
+    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
+    return false;
+  }
+
   if (!AM.hasBaseReg()) {
     DEBUG(dbgs() << "REJECT: No Base reg\n");
     return false;
   }
 
-  // If this is a frame index, grab it
   if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
-    Base = AM.BaseReg;
+    assert(!AM.Disp && "Should not be any displacement");
     DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
@@ -771,6 +743,26 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
 
   DEBUG(dbgs() << "SUCCESS\n");
   return true;
+}
+
+static bool
+isAddressBase(const SDValue &N) {
+  unsigned Op = N.getOpcode();
+  if (Op == M680x0ISD::Wrapper ||
+      Op == M680x0ISD::WrapperPC ||
+      Op == M680x0ISD::GlobalBaseReg) {
+    return true;
+  }
+
+  if (Op == ISD::ADD || ISD::ADDC) {
+    for (unsigned i = 0; i < N.getNumOperands(); ++i) {
+      if (isAddressBase(N.getOperand(i))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 bool M680x0DAGToDAGISel::
@@ -797,22 +789,17 @@ SelectARII(SDNode *Parent, SDValue N,
     return false;
   }
 
-  // If we have a symbol(or something that acts like an address base) as index,
-  // make it the base
-  unsigned Opcode = AM.IndexReg.getOpcode();
-  if (Opcode == M680x0ISD::WrapperPC || Opcode == M680x0ISD::Wrapper ||
-      Opcode == M680x0ISD::GlobalBaseReg) {
+  if (!isAddressBase(AM.BaseReg) && isAddressBase(AM.IndexReg)) {
     Base = AM.IndexReg;
     Index = AM.BaseReg;
   } else {
-    Index = AM.IndexReg;
     Base = AM.BaseReg;
+    Index = AM.IndexReg;
   }
 
-  if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
-    assert(!AM.Disp && "Should not be any displacement");
-    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
-    return true;
+  if (AM.hasSymbolicDisplacement()) {
+    DEBUG(dbgs() << "REJECT, Cannot match symbolic displacement\n");
+    return false;
   }
 
   // The idea here is that we want to use ARII without displacement only if
@@ -885,7 +872,7 @@ SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
   }
 
   if (AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: Not PC relative\n");
+    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
     return false;
   }
 
@@ -914,7 +901,7 @@ SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Index) {
   }
 
   if (!AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
+    DEBUG(dbgs() << "REJECT: No Index\n");
     return false;
   }
 
@@ -930,4 +917,40 @@ SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Index) {
 
   DEBUG(dbgs() << "SUCCESS\n");
   return true;
+}
+
+bool M680x0DAGToDAGISel::
+SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
+  DEBUG(dbgs() << "Selecting ARI: ");
+  M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARI);
+
+  if (!matchAddress(N, AM)) {
+    DEBUG(dbgs() << "REJECT: Match failed\n");
+    return false;
+  }
+
+  if (AM.isPCRelative()) {
+    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    return false;
+  }
+
+  // ARI does not use these
+  if (AM.hasIndexReg() || AM.Disp != 0) {
+    DEBUG(dbgs() << "REJECT: Cannot match Index or Disp\n");
+    return false;
+  }
+
+  // Must be matched by AL
+  if (AM.hasSymbolicDisplacement()) {
+    DEBUG(dbgs() << "REJECT: Cannot match Symbolic Disp\n");
+    return false;
+  }
+
+  if (AM.hasBaseReg()) {
+    Base = AM.BaseReg;
+    DEBUG(dbgs() << "SUCCESS\n");
+    return true;
+  }
+
+  return false;
 }

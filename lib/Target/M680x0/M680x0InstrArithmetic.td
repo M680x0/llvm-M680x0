@@ -233,6 +233,7 @@ def NAME#"32dd" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32d, CMD>;
 
 } // MxBiArOp_DF
 
+
 // These special snowflakes allowed to match address registers but since *A
 // operations do not produce CCR we should not match them against Mx nodes that
 // produce it.
@@ -256,6 +257,7 @@ defm ADD : MxBiArOp_DF<"add", MxAdd, 1, 0xD, 0x6>;
 defm ADD : MxBiArOp_AF<"add", MxAdd, 1, 0xD, 0x6>;
 defm SUB : MxBiArOp_DF<"sub", MxSub, 0, 0x9, 0x4>;
 defm SUB : MxBiArOp_AF<"sub", MxSub, 0, 0x9, 0x4>;
+
 
 let Uses = [CCR], Defs = [CCR] in {
 let Constraints = "$src = $dst" in {
@@ -699,11 +701,25 @@ def : Pat<(store (!cast<SDNode>(node) (load MxType16.JPat:$dst), MxType16.IPat:$
 def : Pat<(store (!cast<SDNode>(node) (load MxType32.JPat:$dst), MxType32.IPat:$opd), MxType32.JPat:$dst),
           (ADD32ji MxType32.JOp:$dst, imm:$opd)>;
 
+// These patterns treat AL value as immediate
+/* def : Pat<(!cast<SDNode>(node) MxType32r.ROp:$src, MxType32r.BPat:$opd), */
+/*           (ADD32ri MxXRD32:$src, MxType32r.IOp:$opd)>; */
+/*  */
+/* def : Pat<(store (!cast<SDNode>(node) (load MxType32.FPat:$dst), MxType32.BPat:$opd), MxType32.FPat:$dst), */
+/*           (ADD32ji MxType8.FOp:$dst, MxType32.IOp:$opd)>; */
+/*  */
+/* def : Pat<(store (!cast<SDNode>(node) (load MxType32.PPat:$dst), MxType32.BPat:$opd), MxType32.PPat:$dst), */
+/*           (ADD32ji MxType8.POp:$dst, MxType32.IOp:$opd)>; */
+/*  */
+/* def : Pat<(store (!cast<SDNode>(node) (load MxType32.JPat:$dst), MxType32.BPat:$opd), MxType32.JPat:$dst), */
+/*           (ADD32ji MxType8.JOp:$dst, MxType32.IOp:$opd)>; */
+
 } // foreach add, addc
 
 def : Pat<(adde i8 :$src, i8 :$opd), (ADDX8dd  MxDRD8 :$src, MxDRD8 :$opd)>;
 def : Pat<(adde i16:$src, i16:$opd), (ADDX16dd MxDRD16:$src, MxDRD16:$opd)>;
 def : Pat<(adde i32:$src, i32:$opd), (ADDX32dd MxDRD32:$src, MxDRD32:$opd)>;
+
 
 
 foreach node = ["sub", "subc"] in {

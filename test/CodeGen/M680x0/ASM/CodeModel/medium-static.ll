@@ -115,8 +115,8 @@ entry:
 ; x00-NEXT:  sub.l #12, %d0
 ; x00-NEXT:  bhi .LBB{{.*}}_14
 ; x00:       lsl.l #2, %d0
-; x00:       move.l %d0, %a0
-; x00-NEXT:  move.l (.LJTI{{.*}}_0,%a0), %a0
+; x00-NEXT:  move.l #.LJTI{{.*}}_0, %a0
+; x00-NEXT:  move.l (0,%a0,%d0), %a0
 ; x00-NEXT:  jmp (%a0)
 ;
 ; x00:       .LBB{{.*}}_2:
