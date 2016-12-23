@@ -12,11 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-class MxReg<string n, bits<16> enc, list<Register> subregs = []>
-    : Register<n> {
-  let Namespace = "M680x0";
-  let HWEncoding = enc;
-  let SubRegs    = subregs;
+class MxReg<string N, bits<16> ENC,
+            list<Register> SUBREGS = [], list<SubRegIndex> SUBIDX,
+            list<int> DWREGS = []>
+    : Register<N>, DwarfRegNum<DWREGS> {
+  let Namespace     = "M680x0";
+  let HWEncoding    = ENC;
+  let SubRegs       = SUBREGS;
+  let SubRegIndices = SUBIDX;
 }
 
 // Subregister indices.
@@ -25,54 +28,42 @@ let Namespace = "M680x0" in {
   def MxSubRegIndex16Lo : SubRegIndex<16, 0>;
 }
 
-// Data Registers
-class MxDataReg<string n, bits<16> enc, list<Register> subregs = []>
-    : MxReg<n, enc, subregs>;
-
 // Generate Data registers and theirs smaller variants
 foreach Index = 0-7 in {
-  def "BD"#Index : MxDataReg<"d"#Index, #Index>;
+  def "BD"#Index : MxReg<"d"#Index, #Index, [], [], [Index]>;
 
-  let SubRegIndices = [ MxSubRegIndex8Lo ] in {
-    def "WD"#Index
-      : MxDataReg<"d"#Index, #Index, [ !cast<Register>("BD"#Index) ]>,
-        DwarfRegNum<[Index]>;
-  }
+  def "WD"#Index
+    : MxReg<"d"#Index, #Index,
+            [!cast<Register>("BD"#Index)], [MxSubRegIndex8Lo],
+            [Index]>;
 
-  let SubRegIndices = [ MxSubRegIndex16Lo ] in {
-    def "D"#Index
-      : MxDataReg<"d"#Index, #Index, [ !cast<Register>("WD"#Index) ]>,
-        DwarfRegNum<[Index]>;
-  }
+  def "D"#Index
+    : MxReg<"d"#Index, #Index,
+            [!cast<Register>("WD"#Index)], [MxSubRegIndex16Lo],
+            [Index]>;
 
 } // foreach
-
-// Address Registers
-class MxAddressReg<string n, bits<16> enc, list<Register> subregs = []>
-    : MxReg<n, enc, subregs>;
 
 // Generate Address registers and theirs smaller variants
 foreach Index = 0-7 in {
   def "WA"#Index
-     : MxDataReg<"a"#Index, #Index>,
-       DwarfRegNum<[!add(8,Index)]>;
+     : MxReg<"a"#Index, #Index, [], [], [!add(8,Index)]>;
 
-  let SubRegIndices = [ MxSubRegIndex16Lo ] in {
-    def "A"#Index
-       : MxAddressReg<"a"#Index, #Index, [ !cast<Register>("WA"#Index) ]>,
-         DwarfRegNum<[!add(8,Index)]>;
-  }
+  def "A"#Index
+     : MxReg<"a"#Index, #Index,
+             [!cast<Register>("WA"#Index)], [MxSubRegIndex16Lo],
+             [!add(8,Index)]>;
 }
 
 // Alias Registers
-class MxAliasReg<string n, MxReg reg>
-    : MxReg<n, reg.HWEncoding> {
-  let Aliases = [reg];
+class MxAliasReg<string N, MxReg REG>
+    : MxReg<N, REG.HWEncoding, [], [], REG.DwarfNumbers> {
+  let Aliases = [REG];
 }
 
 // def BP  : MxAliasReg<"bp",  A5>;
 // def FP  : MxAliasReg<"fp",  A6>;
-def SP  : MxAliasReg<"sp",  A7>;
+def SP : MxAliasReg<"sp", A7>;
 
 // def USP : MxAliasReg<"usp", A7>;
 // def SSP : MxAliasReg<"ssp", A7>;
@@ -83,16 +74,13 @@ def SP  : MxAliasReg<"sp",  A7>;
 // register.
 
 // Pseudo Registers
-class MxPseudoReg<string n, list<Register> subregs = []>
-    : MxReg<n, 0, subregs>;
+class MxPseudoReg<string N, list<Register> SUBREGS = [], list<SubRegIndex> SUBIDX = []>
+    : MxReg<N, 0, SUBREGS, SUBIDX>;
 
 def CCR : MxPseudoReg<"ccr">;
+def SR  : MxPseudoReg<"sr", [], []>;
 
-let SubRegIndices = [MxSubRegIndex8Lo] in {
-  def SR : MxPseudoReg<"sr", [CCR]>;
-}
-
-def PC : MxPseudoReg<"pc">;
+def PC  : MxPseudoReg<"pc">;
 
 //===----------------------------------------------------------------------===//
 // Register Classes
