@@ -22,6 +22,7 @@ void M680x0ELFMCAsmInfo::anchor() { }
 // TODO get back to it when it comes to printing
 M680x0ELFMCAsmInfo::M680x0ELFMCAsmInfo(const Triple &T) {
   PointerSize = 4;
+  CalleeSaveStackSlotSize = 4;
 
   IsLittleEndian = false;
 
