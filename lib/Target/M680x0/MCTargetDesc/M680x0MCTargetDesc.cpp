@@ -83,10 +83,11 @@ createM680x0MCAsmInfo(const MCRegisterInfo &MRI, const Triple &TT) {
     nullptr, MRI.getDwarfRegNum(M680x0::SP, true), -stackGrowth);
   MAI->addInitialFrameState(Inst);
 
-  // Add return address to move list
-  MCCFIInstruction Inst2 = MCCFIInstruction::createOffset(
-    nullptr, MRI.getDwarfRegNum(M680x0::PC, true), stackGrowth);
-  MAI->addInitialFrameState(Inst2);
+  //??? Do i need this?
+  // // Add return address to move list
+  // MCCFIInstruction Inst2 = MCCFIInstruction::createOffset(
+  //   nullptr, MRI.getDwarfRegNum(M680x0::PC, true), stackGrowth);
+  // MAI->addInitialFrameState(Inst2);
 
   return MAI;
 }
