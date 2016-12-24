@@ -537,17 +537,17 @@ foreach EXT = ["S", "Z"] in {
 
     let mayLoad = 1 in {
 
-      def MOV#EXT#Xd16j8   : MxPseudoMove_RM<MxType16r,  MxType8.JOp>;
-      def MOV#EXT#Xd32j8   : MxPseudoMove_RM<MxType32r,  MxType8.JOp>;
-      def MOV#EXT#Xd32j16  : MxPseudoMove_RM<MxType32r, MxType16.JOp>;
+      def MOV#EXT#Xd16j8   : MxPseudoMove_RM<MxType16d,  MxType8.JOp>;
+      def MOV#EXT#Xd32j8   : MxPseudoMove_RM<MxType32d,  MxType8.JOp>;
+      def MOV#EXT#Xd32j16  : MxPseudoMove_RM<MxType32d, MxType16.JOp>;
 
-      def MOV#EXT#Xd16p8   : MxPseudoMove_RM<MxType16r,  MxType8.POp>;
-      def MOV#EXT#Xd32p8   : MxPseudoMove_RM<MxType32r,  MxType8.POp>;
-      def MOV#EXT#Xd32p16  : MxPseudoMove_RM<MxType32r, MxType16.POp>;
+      def MOV#EXT#Xd16p8   : MxPseudoMove_RM<MxType16d,  MxType8.POp>;
+      def MOV#EXT#Xd32p8   : MxPseudoMove_RM<MxType32d,  MxType8.POp>;
+      def MOV#EXT#Xd32p16  : MxPseudoMove_RM<MxType32d, MxType16.POp>;
 
-      def MOV#EXT#Xd16f8   : MxPseudoMove_RM<MxType16r,  MxType8.FOp>;
-      def MOV#EXT#Xd32f8   : MxPseudoMove_RM<MxType32r,  MxType8.FOp>;
-      def MOV#EXT#Xd32f16  : MxPseudoMove_RM<MxType32r, MxType16.FOp>;
+      def MOV#EXT#Xd16f8   : MxPseudoMove_RM<MxType16d,  MxType8.FOp>;
+      def MOV#EXT#Xd32f8   : MxPseudoMove_RM<MxType32d,  MxType8.FOp>;
+      def MOV#EXT#Xd32f16  : MxPseudoMove_RM<MxType32d, MxType16.FOp>;
 
     }
   }

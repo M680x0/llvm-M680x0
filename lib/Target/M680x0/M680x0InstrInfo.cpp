@@ -249,7 +249,7 @@ bool M680x0InstrInfo::
 ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
               const MCInstrDesc &Desc,
               MVT MVTDst, MVT MVTSrc) const {
-  DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV and ");
+  DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to LOAD and ");
 
   unsigned Dst = MIB->getOperand(0).getReg();
 
@@ -260,6 +260,7 @@ ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
   // pressure on cache and memory so no.
   unsigned SubDst = RI.getSubReg(Dst,
       MVTSrc == MVT::i8 ? M680x0::MxSubRegIndex8Lo : M680x0::MxSubRegIndex16Lo);
+  assert (SubDst && "No viable SUB register available");
 
   // Make this a plain move
   MIB->setDesc(Desc);
