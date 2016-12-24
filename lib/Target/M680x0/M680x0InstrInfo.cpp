@@ -118,7 +118,13 @@ void M680x0InstrInfo::
 AddSExt(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, DebugLoc DL,
         unsigned Reg, MVT From, MVT To) const {
   if (From == MVT::i8) {
-    BuildMI(MBB, I, DL, get(M680x0::EXT16), Reg).addReg(Reg);
+    unsigned R = Reg;
+    // EXT16 requires i16 register
+    if (To == MVT::i32) {
+      R = RI.getSubReg(Reg, M680x0::MxSubRegIndex16Lo);
+      assert (R && "No viable SUB register available");
+    }
+    BuildMI(MBB, I, DL, get(M680x0::EXT16), R).addReg(R);
   }
 
   if (To == MVT::i32) {
