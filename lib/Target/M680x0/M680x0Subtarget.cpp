@@ -74,7 +74,12 @@ initializeSubtargetDependencies(StringRef CPU, StringRef FS,
   std::string CPUName = selectM680x0CPU(TargetTriple, CPU);
 
   // Parse features string.
-  ParseSubtargetFeatures(CPUName, FS);
+  // FIXME There is weird behaviour, features parsed sometimes wrongly with the
+  // same argument string
+  // ParseSubtargetFeatures(CPUName, FS);
+  // The only CPU supported thus far
+  IsM68000 = true;
+
   // Initialize scheduling itinerary for the specified CPU.
   InstrItins = getInstrItineraryForCPU(CPUName);
 
