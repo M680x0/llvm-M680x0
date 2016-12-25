@@ -253,6 +253,7 @@ def NAME#"32rr" : MxBiArOp_RFRR_xEA<MN, NODE, MxType32r, CMD>;
 } // MxBiArOp_AF
 
 // NOTE These naturally produce CCR
+
 defm ADD : MxBiArOp_DF<"add", MxAdd, 1, 0xD, 0x6>;
 defm ADD : MxBiArOp_AF<"add", MxAdd, 1, 0xD, 0x6>;
 defm SUB : MxBiArOp_DF<"sub", MxSub, 0, 0x9, 0x4>;
@@ -691,7 +692,13 @@ def : Pat<(!cast<SDNode>(node) MxType32.VT:$src, (Mxloadi32 MxType32.FPat:$opd))
 // add reg, imm
 def : Pat<(!cast<SDNode>(node) i8: $src, MximmSExt8:$opd),  (ADD8di  MxDRD8 :$src, imm:$opd)>;
 def : Pat<(!cast<SDNode>(node) i16:$src, MximmSExt16:$opd), (ADD16di MxDRD16:$src, imm:$opd)>;
+
+// LEAp is more complex and thus will be selected over normal ADD32ri but it cannot
+// be used with data registers, here by adding complexity to a simple ADD32ri insts
+// we make sure it will be selected over LEAp
+let AddedComplexity = 15 in {
 def : Pat<(!cast<SDNode>(node) i32:$src, MximmSExt32:$opd), (ADD32ri MxXRD32:$src, imm:$opd)>;
+} // AddedComplexity = 15
 
 // add imm, (An)
 def : Pat<(store (!cast<SDNode>(node) (load MxType8.JPat:$dst), MxType8.IPat:$opd), MxType8.JPat:$dst),

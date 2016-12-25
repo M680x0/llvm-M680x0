@@ -529,7 +529,6 @@ class MxPseudoMove_RM<MxType DST, MxOperand SRCOpd, list<dag> PAT = []>
 /// what registers are allocated for the operands and if they overlap we just
 /// extend the value if the registers are completely different we need to move
 /// first.
-/// TODO What is the CCR behaviour here?
 foreach EXT = ["S", "Z"] in {
   let hasSideEffects = 0 in {
 
