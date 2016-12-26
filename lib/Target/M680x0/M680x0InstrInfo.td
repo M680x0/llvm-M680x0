@@ -349,6 +349,12 @@ def MxBrTarget32 : Operand<OtherVT>;
 
 } // OPERAND_PCREL
 
+// Used with MOVEM
+def MxMoveMask : MxOp<i16, MxSize16, "m"> {
+  let OperandType = "OPERAND_IMMEDIATE";
+  let PrintMethod = "printMoveMask";
+}
+
 
 //===----------------------------------------------------------------------===//
 // Predicates

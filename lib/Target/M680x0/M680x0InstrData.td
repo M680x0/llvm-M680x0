@@ -405,6 +405,55 @@ defm MOV16j : MMxMove_MM<MxType16,     MxType16.JOp, MxType16.JPat,
 defm MOV32j : MMxMove_MM<MxType32,     MxType32.JOp, MxType32.JPat,
                          MxMoveSize32, MxEncEAj_0,   MxExtEmpty>;
 
+//===----------------------------------------------------------------------===//
+// MOVEM
+//
+// The mask is already pre-processed by the save/restore spill hook
+//===----------------------------------------------------------------------===//
+
+// Direction
+def MxMOVEM_MR : MxBead1Bit<0>;
+def MxMOVEM_RM : MxBead1Bit<1>;
+
+// Size
+def MxMOVEM_W  : MxBead1Bit<0>;
+def MxMOVEM_L  : MxBead1Bit<1>;
+
+/// ---------------+-------------+-------------+---------
+///  F  E  D  C  B | A | 9  8  7 | 6 | 5  4  3 | 2  1  0
+/// ---------------+---+---------+---+---------+---------
+///  0  1  0  0  1 | D | 0  0  1 | S |   MODE  |   REG
+/// ---------------+---+---------+---+---------+---------
+///                  REGISTER LIST MASK
+/// -----------------------------------------------------
+/// D - direction(RM,MR)
+/// S - size(W,L)
+class MxMOVEMEncoding<MxEncEA EA, MxEncExt EXT, MxBead1Bit SIZE, MxBead1Bit DIR,
+                      MxBead16Imm IMM>
+    : MxEncoding<EA.Reg, EA.DA, EA.Mode, SIZE, MxBead3Bits<0b001>, DIR,
+                 MxBead1Bit<1>, MxBead4Bits<0b0100>, IMM,
+                 EXT.Imm, EXT.B8, EXT.Scale, EXT.WL, EXT.DAReg>;
+
+let mayStore = 1 in
+class MxMOVEM_MR<MxType TYPE, MxBead1Bit SIZE,
+                 MxOperand MEMOp, MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins MEMOp:$dst, MxMoveMask:$mask),
+             "movem."#TYPE.Prefix#"\t$mask, $dst", [],
+      MxMOVEMEncoding<EA, EXT, SIZE, MxMOVEM_MR, MxBead16Imm<1>>>;
+
+let mayLoad = 1 in
+class MxMOVEM_RM<MxType TYPE, MxBead1Bit SIZE,
+                 MxOperand MEMOp, MxEncEA EA, MxEncExt EXT>
+    : MxInst<(outs), (ins MxMoveMask:$mask, MEMOp:$dst),
+             "movem."#TYPE.Prefix#"\t$dst, $mask", [],
+      MxMOVEMEncoding<EA, EXT, SIZE, MxMOVEM_RM, MxBead16Imm<0>>>;
+
+def MOVM32jm : MxMOVEM_MR<MxType32, MxMOVEM_L, MxType32.JOp, MxEncEAj_0, MxExtEmpty>;
+def MOVM32pm : MxMOVEM_MR<MxType32, MxMOVEM_L, MxType32.POp, MxEncEAp_0, MxExtI16_0>;
+
+def MOVM32mj : MxMOVEM_RM<MxType32, MxMOVEM_L, MxType32.JOp, MxEncEAj_1, MxExtEmpty>;
+def MOVM32mp : MxMOVEM_RM<MxType32, MxMOVEM_L, MxType32.POp, MxEncEAp_1, MxExtI16_1>;
+
 
 //===----------------------------------------------------------------------===//
 // MOVE to/from SR/CCR
@@ -416,7 +465,6 @@ defm MOV32j : MMxMove_MM<MxType32,     MxType32.JOp, MxType32.JPat,
 // ons that will be resolved sometime after RA pass.
 //===----------------------------------------------------------------------===//
 
-/// Move to CCR
 /// --------------------------------------------------
 ///  F  E  D  C  B  A  9  8  7  6 | 5  4  3 | 2  1  0
 /// --------------------------------------------------
