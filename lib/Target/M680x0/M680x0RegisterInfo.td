@@ -125,3 +125,7 @@ def AR32_TC : MxRegClass<[i32], 32, (add A0, A1)>;
 
 def XR16_TC : MxRegClass<[i16], 16, (add DR16_TC, AR16_TC)>;
 def XR32_TC : MxRegClass<[i32], 32, (add DR32_TC, AR32_TC)>;
+
+// These classes provide spill/restore order if used with MOVEM instruction
+def SPILL   : MxRegClass<[i32], 32, (add (add (sequence "D%u", 0, 7), (sequence "A%u", 0, 6)), SP)>;
+def SPILL_R : MxRegClass<[i32], 32, (add SP, (add (sequence "A%u", 6, 0), (sequence "D%u", 7, 0)))>;

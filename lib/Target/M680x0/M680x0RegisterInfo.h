@@ -70,6 +70,12 @@ public:
   /// the right type that contains this physreg.
   const TargetRegisterClass * getMaximalPhysRegClass(unsigned reg, MVT VT) const;
 
+  /// Return index of a register within a register class, otherwise return -1
+  int getRegisterOrder(unsigned Reg, const TargetRegisterClass &TRC) const;
+
+  /// Return spill order index of a register, if there is none then trap
+  int getSpillRegisterOrder(unsigned Reg) const;
+
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;

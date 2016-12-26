@@ -99,6 +99,25 @@ getMaximalPhysRegClass(unsigned reg, MVT VT) const {
   return BestRC;
 }
 
+int M680x0RegisterInfo::
+getRegisterOrder(unsigned Reg, const TargetRegisterClass &TRC) const{
+  for (unsigned i = 0; i < TRC.getNumRegs(); ++i) {
+    if (regsOverlap(Reg, TRC.getRegister(i))) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+int M680x0RegisterInfo::
+getSpillRegisterOrder(unsigned Reg) const{
+  int Result = getRegisterOrder(Reg, *getRegClass(M680x0::SPILLRegClassID));
+  if (Result < 0) {
+    llvm_unreachable("Cannot determine spill order");
+  }
+  return Result;
+}
+
 BitVector M680x0RegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
   const M680x0FrameLowering *TFI = getFrameLowering(MF);
