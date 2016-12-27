@@ -72,6 +72,23 @@ addFrameReference(const MachineInstrBuilder &MIB, int FI, int Offset = 0) {
   return MIB.addImm(Offset).addFrameIndex(FI).addMemOperand(MMO);
 }
 
+static inline const MachineInstrBuilder &
+addMemOperand(const MachineInstrBuilder &MIB, int FI, int Offset = 0) {
+  MachineInstr *MI = MIB;
+  MachineFunction &MF = *MI->getParent()->getParent();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  const MCInstrDesc &MCID = MI->getDesc();
+  auto Flags = MachineMemOperand::MONone;
+  if (MCID.mayLoad())
+    Flags |= MachineMemOperand::MOLoad;
+  if (MCID.mayStore())
+    Flags |= MachineMemOperand::MOStore;
+  MachineMemOperand *MMO = MF.getMachineMemOperand(
+      MachinePointerInfo::getFixedStack(MF, FI, Offset), Flags,
+      MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
+  return MIB.addMemOperand(MMO);
+}
+
 } // end namespace llvm
 
 #endif // LLVM_LIB_TARGET_M6800_M6800INSTRBUILDER_H

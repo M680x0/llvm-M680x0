@@ -72,8 +72,6 @@ char M680x0ExpandPseudo::ID = 0;
 bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator MBBI) {
   MachineInstr &MI = *MBBI;
-  MachineFunction *MF = MBB.getParent();
-  MachineRegisterInfo &MRI = MF->getRegInfo();
   MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
   unsigned Opcode = MI.getOpcode();
   DebugLoc DL = MBBI->getDebugLoc();
@@ -154,6 +152,35 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     return TII->ExpandCCR(MIB, /* isToCCR */ true);
   case M680x0::MOV8dc:
     return TII->ExpandCCR(MIB, /* isToCCR */ false);
+
+
+  case M680x0::MOVM8jm_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32jm), /* isRM */ false);
+  case M680x0::MOVM16jm_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32jm), /* isRM */ false);
+  case M680x0::MOVM32jm_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32jm), /* isRM */ false);
+
+  case M680x0::MOVM8pm_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32pm), /* isRM */ false);
+  case M680x0::MOVM16pm_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32pm), /* isRM */ false);
+  case M680x0::MOVM32pm_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32pm), /* isRM */ false);
+
+  case M680x0::MOVM8mj_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mj), /* isRM */ true);
+  case M680x0::MOVM16mj_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mj), /* isRM */ true);
+  case M680x0::MOVM32mj_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mj), /* isRM */ true);
+
+  case M680x0::MOVM8mp_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mp), /* isRM */ true);
+  case M680x0::MOVM16mp_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mp), /* isRM */ true);
+  case M680x0::MOVM32mp_P:
+    return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mp), /* isRM */ true);
 
 
   case M680x0::TCRETURNq:

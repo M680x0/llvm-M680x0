@@ -314,6 +314,46 @@ ExpandCCR(MachineInstrBuilder &MIB, bool isToCCR) const {
   return true;
 }
 
+bool M680x0InstrInfo::
+ExpandMOVEM(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
+            bool isRM) const{
+  int Reg = 0, Offset = 0, Base = 0;
+  auto XR32 = RI.getRegClass(M680x0::XR32RegClassID);
+  auto DL = MIB->getDebugLoc();
+  auto MI = MIB.getInstr();
+  auto &MBB = *MIB->getParent();
+
+  if (isRM) {
+    Reg = MIB->getOperand(0).getReg();
+    Offset = MIB->getOperand(1).getImm();
+    Base = MIB->getOperand(2).getReg();
+  } else {
+    Offset = MIB->getOperand(0).getImm();
+    Base = MIB->getOperand(1).getReg();
+    Reg = MIB->getOperand(2).getReg();
+  }
+
+  // If the register is not in XR32 then it is smaller than 32 bit, we implicitly
+  // promote it to 32
+  if (!XR32->contains(Reg)) {
+    Reg = RI.getMatchingMegaReg(Reg, XR32);
+    assert(Reg && "Has not meaningful MEGA register");
+  }
+
+  unsigned Mask = 1 << RI.getSpillRegisterOrder(Reg);
+  if (isRM) {
+    BuildMI(MBB, MI, DL, Desc).addImm(Mask).addImm(Offset).addReg(Base)
+      .addReg(Reg, RegState::ImplicitDefine).copyImplicitOps(*MIB);
+  } else {
+    BuildMI(MBB, MI, DL, Desc).addImm(Offset).addReg(Base).addImm(Mask)
+      .addReg(Reg, RegState::Implicit).copyImplicitOps(*MIB);
+  }
+
+  MIB->eraseFromParent();
+
+  return true;
+}
+
 /// Expand a single-def pseudo instruction to a two-addr
 /// instruction with two undef reads of the register being defined.
 /// This is used for mapping:
@@ -436,38 +476,37 @@ copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
   llvm_unreachable("Cannot emit physreg copy instruction");
 }
 
-static unsigned getLoadStoreRegOpcode(unsigned Reg,
-                                      const TargetRegisterClass *RC,
-                                      const M680x0Subtarget &STI,
-                                      bool load) {
+static unsigned
+getLoadStoreRegOpcode(unsigned Reg, const TargetRegisterClass *RC,
+                      const M680x0Subtarget &STI, bool load) {
   switch (RC->getSize()) {
   default:
     llvm_unreachable("Unknown spill size");
   case 1:
     if (M680x0::DR8RegClass.hasSubClassEq(RC)) {
-      return load ? M680x0::MOV8dp : M680x0::MOV8pd;
+      return load ? M680x0::MOVM8mp_P : M680x0::MOVM8pm_P;
     } else if (M680x0::CCRCRegClass.hasSubClassEq(RC)) {
       return load ? M680x0::MOV16cp : M680x0::MOV16pc;
     }
   llvm_unreachable("Unknown 1-byte regclass");
   case 2:
     assert(M680x0::XR16RegClass.hasSubClassEq(RC) && "Unknown 2-byte regclass");
-    return load ? M680x0::MOV16rp : M680x0::MOV16pr;
+    return load ? M680x0::MOVM16mp_P : M680x0::MOVM16pm_P;
   case 4:
     assert(M680x0::XR32RegClass.hasSubClassEq(RC) && "Unknown 4-byte regclass");
-    return load ? M680x0::MOV32rp : M680x0::MOV32pr;
+    return load ? M680x0::MOVM32mp_P : M680x0::MOVM32pm_P;
   }
 }
 
-static unsigned getStoreRegOpcode(unsigned SrcReg,
-                                  const TargetRegisterClass *RC,
-                                  const M680x0Subtarget &STI) {
+static unsigned
+getStoreRegOpcode(unsigned SrcReg, const TargetRegisterClass *RC,
+                  const M680x0Subtarget &STI) {
   return getLoadStoreRegOpcode(SrcReg, RC, STI, false);
 }
 
-static unsigned getLoadRegOpcode(unsigned DstReg,
-                                 const TargetRegisterClass *RC,
-                                 const M680x0Subtarget &STI) {
+static unsigned
+getLoadRegOpcode(unsigned DstReg, const TargetRegisterClass *RC,
+                 const M680x0Subtarget &STI) {
   return getLoadStoreRegOpcode(DstReg, RC, STI, true);
 }
 

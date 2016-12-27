@@ -284,7 +284,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     // If this is a callee-pop calling convention, emit a CFA adjust for
     // the amount the callee popped.
     if (isDestroy && InternalAmt && DwarfCFI && !hasFP(MF))
-      BuildCFI(MBB, I, DL, 
+      BuildCFI(MBB, I, DL,
                MCCFIInstruction::createAdjustCfaOffset(nullptr, -InternalAmt));
 
     // Add Amount to SP to destroy a frame, or subtract to setup.
@@ -851,6 +851,72 @@ assignCalleeSavedSpillSlots(MachineFunction &MF, const TargetRegisterInfo *TRI,
     }
   }
 
-  // The rest must be handled as ususal
+  // The rest is fine
   return false;
+}
+
+bool M680x0FrameLowering::
+spillCalleeSavedRegisters(MachineBasicBlock &MBB,
+                          MachineBasicBlock::iterator MI,
+                          const std::vector<CalleeSavedInfo> &CSI,
+                          const TargetRegisterInfo *TRI) const {
+  auto &MRI = *static_cast<const M680x0RegisterInfo*>(TRI);
+  auto DL = MBB.findDebugLoc(MI);
+
+  int FI = 0;
+  unsigned Mask = 0;
+  for (size_t i = 0; i < CSI.size(); ++i) {
+    FI = std::max(FI, CSI[i].getFrameIdx());
+    unsigned Reg = CSI[i].getReg();
+    unsigned Shift = MRI.getSpillRegisterOrder(Reg);
+    Mask |= 1 << Shift;
+  }
+
+  auto I = addFrameReference(BuildMI(MBB, MI, DL, TII.get(M680x0::MOVM32pm)), FI)
+            .addImm(Mask)
+            .setMIFlag(MachineInstr::FrameSetup);
+
+  // Append implicit registers and mem locations
+  const MachineFunction &MF = *MBB.getParent();
+  const MachineRegisterInfo &RI = MF.getRegInfo();
+  for (size_t i = 0; i < CSI.size(); ++i) {
+    unsigned Reg = CSI[i].getReg();
+    bool isLiveIn = RI.isLiveIn(Reg);
+    if (!isLiveIn)
+      MBB.addLiveIn(Reg);
+    I.addReg(Reg, isLiveIn ? RegState::Implicit : RegState::ImplicitKill);
+    addMemOperand(I, CSI[i].getFrameIdx(), 0);
+  }
+        
+  return true;
+}
+
+bool M680x0FrameLowering::
+restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MI,
+                            const std::vector<CalleeSavedInfo> &CSI,
+                            const TargetRegisterInfo *TRI) const {
+  auto &MRI = *static_cast<const M680x0RegisterInfo*>(TRI);
+  auto DL = MBB.findDebugLoc(MI);
+
+  int FI = 0;
+  unsigned Mask = 0;
+  for (size_t i = 0; i < CSI.size(); ++i) {
+    FI = std::max(FI, CSI[i].getFrameIdx());
+    unsigned Reg = CSI[i].getReg();
+    unsigned Shift = MRI.getSpillRegisterOrder(Reg);
+    Mask |= 1 << Shift;
+  }
+
+  auto I = addFrameReference(BuildMI(MBB, MI, DL, TII.get(M680x0::MOVM32mp))
+             .addImm(Mask), FI)
+             .setMIFlag(MachineInstr::FrameDestroy);
+
+  // Append implicit registers and mem locations
+  for (size_t i = 0; i < CSI.size(); ++i) {
+    I.addReg(CSI[i].getReg(), RegState::ImplicitDefine);
+    addMemOperand(I, CSI[i].getFrameIdx(), 0);
+  }
+
+  return true;
 }

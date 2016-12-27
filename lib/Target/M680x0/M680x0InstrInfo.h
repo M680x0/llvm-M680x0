@@ -230,6 +230,10 @@ public:
   // Moves to/from CCR
   bool ExpandCCR(MachineInstrBuilder &MIB, bool isToCCR) const;
 
+  // Expand all MOVEM pseudos into real MOVEMs
+  bool ExpandMOVEM(MachineInstrBuilder &MIB, const MCInstrDesc &Desc,
+                   bool isRM) const;
+
   /// getGlobalBaseReg - Return a virtual register initialized with the
   /// the global base register value. Output instructions required to
   /// initialize the register in the function entry block, if necessary.

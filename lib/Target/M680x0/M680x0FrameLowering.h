@@ -99,24 +99,23 @@ public:
                               const TargetRegisterInfo *TRI,
                               std::vector<CalleeSavedInfo> &CSI) const override;
 
-  // TODO the next two overrides must use MOVEM to save/restore CSRs
   /// spillCalleeSavedRegisters - Issues instruction(s) to spill all callee
   /// saved registers and returns true if it isn't possible / profitable to do
   /// so by issuing a series of store instructions via
   /// storeRegToStackSlot(). Returns false otherwise.
-  // bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
-  //                                MachineBasicBlock::iterator MI,
-  //                                const std::vector<CalleeSavedInfo> &CSI,
-  //                                const TargetRegisterInfo *TRI) const override;
+  bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
+                                 MachineBasicBlock::iterator MI,
+                                 const std::vector<CalleeSavedInfo> &CSI,
+                                 const TargetRegisterInfo *TRI) const override;
 
   /// restoreCalleeSavedRegisters - Issues instruction(s) to restore all callee
   /// saved registers and returns true if it isn't possible / profitable to do
   /// so by issuing a series of load instructions via loadRegToStackSlot().
   /// Returns false otherwise.
-  // bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-  //                                 MachineBasicBlock::iterator MI,
-  //                                 const std::vector<CalleeSavedInfo> &CSI,
-  //                                 const TargetRegisterInfo *TRI) const override;
+  bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator MI,
+                                  const std::vector<CalleeSavedInfo> &CSI,
+                                  const TargetRegisterInfo *TRI) const override;
 
   // hasFP - Return true if the specified function should have a dedicated frame
   // pointer register.  This is true if the function has variable sized allocas,
@@ -140,7 +139,7 @@ public:
   // needsFrameIndexResolution - Do we need to perform FI resolution for
   // this function. Normally, this is required only when the function
   // has any stack objects. However, FI resolution actually has another job,
-  // not apparent from the title - it resolves callframe setup/destroy 
+  // not apparent from the title - it resolves callframe setup/destroy
   // that were not simplified earlier.
   // So, this is required for M680x0 functions that have push sequences even
   // when there are no stack objects.
