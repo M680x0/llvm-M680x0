@@ -444,8 +444,8 @@ class MxMOVEM_MR<MxType TYPE, MxBead1Bit SIZE,
 let mayLoad = 1 in
 class MxMOVEM_RM<MxType TYPE, MxBead1Bit SIZE,
                  MxOperand MEMOp, MxEncEA EA, MxEncExt EXT>
-    : MxInst<(outs), (ins MxMoveMask:$mask, MEMOp:$dst),
-             "movem."#TYPE.Prefix#"\t$dst, $mask", [],
+    : MxInst<(outs), (ins MxMoveMask:$mask, MEMOp:$src),
+             "movem."#TYPE.Prefix#"\t$src, $mask", [],
       MxMOVEMEncoding<EA, EXT, SIZE, MxMOVEM_RM, MxBead16Imm<0>>>;
 
 def MOVM32jm : MxMOVEM_MR<MxType32, MxMOVEM_L, MxType32.JOp, MxEncEAj_0, MxExtEmpty>;
@@ -453,6 +453,34 @@ def MOVM32pm : MxMOVEM_MR<MxType32, MxMOVEM_L, MxType32.POp, MxEncEAp_0, MxExtI1
 
 def MOVM32mj : MxMOVEM_RM<MxType32, MxMOVEM_L, MxType32.JOp, MxEncEAj_1, MxExtEmpty>;
 def MOVM32mp : MxMOVEM_RM<MxType32, MxMOVEM_L, MxType32.POp, MxEncEAp_1, MxExtI16_1>;
+
+// Pseudo versions. These a required by virtual register spill/restore since
+// the mask requires real register to encode. These instruction will be expanded
+// into real MOVEM after RA finishes.
+let mayStore = 1 in
+class MxMOVEM_MR_Pseudo<MxType TYPE, MxOperand MEMOp>
+    : MxPseudo<(outs), (ins MEMOp:$dst, TYPE.ROp:$reg)>;
+let mayLoad = 1 in
+class MxMOVEM_RM_Pseudo<MxType TYPE, MxOperand MEMOp>
+    : MxPseudo<(outs TYPE.ROp:$dst), (ins MEMOp:$src)>;
+
+// Mem <- Reg
+def MOVM8jm_P  : MxMOVEM_MR_Pseudo<MxType8d,  MxType8.JOp>;
+def MOVM16jm_P : MxMOVEM_MR_Pseudo<MxType16r, MxType16.JOp>;
+def MOVM32jm_P : MxMOVEM_MR_Pseudo<MxType32r, MxType32.JOp>;
+
+def MOVM8pm_P  : MxMOVEM_MR_Pseudo<MxType8d,  MxType8.POp>;
+def MOVM16pm_P : MxMOVEM_MR_Pseudo<MxType16r, MxType16.POp>;
+def MOVM32pm_P : MxMOVEM_MR_Pseudo<MxType32r, MxType32.POp>;
+
+// Reg <- Mem
+def MOVM8mj_P  : MxMOVEM_RM_Pseudo<MxType8d,  MxType8.JOp>;
+def MOVM16mj_P : MxMOVEM_RM_Pseudo<MxType16r, MxType16.JOp>;
+def MOVM32mj_P : MxMOVEM_RM_Pseudo<MxType32r, MxType32.JOp>;
+
+def MOVM8mp_P  : MxMOVEM_RM_Pseudo<MxType8d,  MxType8.POp>;
+def MOVM16mp_P : MxMOVEM_RM_Pseudo<MxType16r, MxType16.POp>;
+def MOVM32mp_P : MxMOVEM_RM_Pseudo<MxType32r, MxType32.POp>;
 
 
 //===----------------------------------------------------------------------===//
