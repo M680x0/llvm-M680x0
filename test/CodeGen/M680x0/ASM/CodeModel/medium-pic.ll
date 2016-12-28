@@ -115,16 +115,16 @@ entry:
 ; Test jump table references.
 ;
 ; x00-LABEL: test7:
-; x00:       move.l (4,%sp), %a0
-; x00-NEXT:  lea (-1,%a0), %a0
-; x00-NEXT:  move.l %a0, %d0
-; x00-NEXT:  sub.l #12, %d0
+; x00:       move.l (4,%sp), %d0
+; x00-NEXT:  add.l #-1, %d0
+; x00-NEXT:  move.l %d0, %d1
+; x00-NEXT:  sub.l #12, %d1
 ; x00-NEXT:  bhi .LBB{{.*}}_14
-; x00:       (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a1
+; x00:       lea (_GLOBAL_OFFSET_TABLE_@GOTPCREL,%pc), %a0
 ; x00:       lsl.l #2, %d0
-; x00:       add.l #.LJTI{{.*}}_0@GOTOFF, %a0
-; x00:       add.l (0,%a0,%d0), %a1
-; x00-NEXT:  jmp (%a1)
+; x00:       add.l #.LJTI{{.*}}_0@GOTOFF, %a1
+; x00:       add.l (0,%a1,%d0), %a0
+; x00-NEXT:  jmp (%a0)
 ;
 ; x00:       .LBB{{.*}}_2:
 ; x00-NEXT:  bra foo1@PLT

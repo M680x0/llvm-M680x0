@@ -4,7 +4,8 @@
 
 ; x00-LABEL test:
 ; x00: lea (16,%sp), %a
-; x00: lea (20,%sp), %a
+; x00: add.l #4, %a0
+; x00: move.l %a0, (4,%sp)
 define i32 @test(i32 %X, ...) {
   ; Initialize variable argument processing
   %ap = alloca %struct.va_list

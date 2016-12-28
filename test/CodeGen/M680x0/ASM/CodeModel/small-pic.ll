@@ -116,10 +116,10 @@ entry:
 ;
 ; x00-LABEL: test7:
 ;
-; x00:       move.l (4,%sp), %a0
-; x00-NEXT:  lea (-1,%a0), %a0
-; x00-NEXT:  move.l %a0, %d0
-; x00-NEXT:  sub.l #12, %d0
+; x00:       move.l (4,%sp), %d0
+; x00-NEXT:  add.l #-1, %d0
+; x00-NEXT:  move.l %d0, %d1
+; x00-NEXT:  sub.l #12, %d1
 ; x00-NEXT:  bhi .LBB{{.*}}_14
 ; x00:       lsl.l #2, %d0
 ; x00-NEXT:  lea (.LJTI{{.*}}_0,%pc), %a0
