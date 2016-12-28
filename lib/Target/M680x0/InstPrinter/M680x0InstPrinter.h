@@ -41,6 +41,10 @@ public:
 private:
   void printOperand(const MCInst *MI, unsigned opNum, raw_ostream &O);
   void printImmediate(const MCInst *MI, int opNum, raw_ostream &O);
+  /// printMoveMask - print register mask for MOVEM instruction in order D0-D7,A0-A7
+  void printMoveMask(const MCInst *MI, int opNum, raw_ostream &O);
+  /// printMoveMask - print register mask for MOVEM instruction in order A7-A0,D7-D0
+  void printMoveMaskR(const MCInst *MI, int opNum, raw_ostream &O);
   void printDisp(const MCInst *MI, int opNum, raw_ostream &O);
   void printARIMem(const MCInst *MI, int opNum, raw_ostream &O);
   void printARIPIMem(const MCInst *MI, int opNum, raw_ostream &O);

@@ -74,6 +74,54 @@ printImmediate(const MCInst *MI, int opNum, raw_ostream &O) {
   }
 }
 
+// 
+void M680x0InstPrinter::
+printMoveMask(const MCInst *MI, int opNum, raw_ostream &O) {
+  unsigned Mask = MI->getOperand(opNum).getImm();
+  assert ((Mask & 0xFFFF) == Mask);
+
+  bool InRange = false;
+
+  unsigned HalfMask = Mask & 0x00FF;
+  unsigned Reg;
+  for (int i = 0; i < 8 && HalfMask != 0; ++i) {
+    if ((HalfMask >> i) & 0x01) {
+      HalfMask ^= 1 << i;
+      Reg = M680x0II::getMaskedSpillRegister(i);
+      if (InRange) {
+        if (!HalfMask) {
+          printRegName(O, Reg);
+        }
+      } else {
+        printRegName(O, Reg);
+        if (HalfMask) {
+          O << '-';
+        }
+      }
+    }
+  }
+
+  HalfMask = Mask & 0xFF00;
+  if (HalfMask) { O << ','; }
+
+  for (int i = 8; i < 16 && HalfMask != 0; ++i) {
+    if ((HalfMask >> i) & 0x01) {
+      HalfMask ^= 1 << i;
+      Reg = M680x0II::getMaskedSpillRegister(i);
+      if (InRange) {
+        if (!HalfMask) {
+          printRegName(O, Reg);
+        }
+      } else {
+        printRegName(O, Reg);
+        if (HalfMask) {
+          O << '-';
+        }
+      }
+    }
+  }
+}
+
 void M680x0InstPrinter::
 printDisp(const MCInst *MI, int opNum, raw_ostream &O) {
   const MCOperand &Op = MI->getOperand(opNum);
