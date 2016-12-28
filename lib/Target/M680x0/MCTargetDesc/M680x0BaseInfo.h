@@ -33,7 +33,7 @@ namespace M680x0 {
   // (d,An,Xn)
   // ([bd,An],Xn,od)
   // ([bd,An,Xn],od)
-  enum { 
+  enum {
     MemDisp = 0,
     MemBase = 1,
     MemIndex = 2, //FIXME assumes Scale 1 for now
@@ -45,7 +45,7 @@ namespace M680x0 {
   // (d,PC,Xn)
   // ([bd,PC],Xn,od)
   // ([bd,PC,Xn],od)
-  enum { 
+  enum {
     PCRelDisp = 0,
     PCRelIndex = 1,
     PCRelOuter = 2
@@ -74,7 +74,7 @@ namespace M680x0Beads {
     Term   = 0x0,
     Ignore = 0x1,
   };
-} /* M680x0Beads */ 
+} /* M680x0Beads */
 
 /// M680x0II - This namespace holds all of the target specific flags that
 /// instruction info tracks.
@@ -293,6 +293,29 @@ getDispSize(unsigned Opd) {
     case M680x0::MIOpTypes::MxPCI32:
     case M680x0::MIOpTypes::MxPCI8:
       return 8;
+  }
+}
+
+static inline unsigned
+getMaskedSpillRegister(unsigned order) {
+  switch (order) {
+    default: return 0;
+    case  0: return M680x0::D0;
+    case  1: return M680x0::D1;
+    case  2: return M680x0::D2;
+    case  3: return M680x0::D3;
+    case  4: return M680x0::D4;
+    case  5: return M680x0::D5;
+    case  6: return M680x0::D6;
+    case  7: return M680x0::D7;
+    case  8: return M680x0::A0;
+    case  9: return M680x0::A1;
+    case 10: return M680x0::A2;
+    case 11: return M680x0::A3;
+    case 12: return M680x0::A4;
+    case 13: return M680x0::A5;
+    case 14: return M680x0::A6;
+    case 15: return M680x0::A7;
   }
 }
 
