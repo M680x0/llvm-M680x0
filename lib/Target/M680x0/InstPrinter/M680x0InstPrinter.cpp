@@ -80,43 +80,36 @@ printMoveMask(const MCInst *MI, int opNum, raw_ostream &O) {
   unsigned Mask = MI->getOperand(opNum).getImm();
   assert ((Mask & 0xFFFF) == Mask);
 
-  bool InRange = false;
-
-  unsigned HalfMask = Mask & 0x00FF;
-  unsigned Reg;
-  for (int i = 0; i < 8 && HalfMask != 0; ++i) {
-    if ((HalfMask >> i) & 0x01) {
-      HalfMask ^= 1 << i;
-      Reg = M680x0II::getMaskedSpillRegister(i);
-      if (InRange) {
-        if (!HalfMask) {
-          printRegName(O, Reg);
-        }
-      } else {
-        printRegName(O, Reg);
-        if (HalfMask) {
-          O << '-';
-        }
-      }
+  unsigned HalfMask, Reg;
+  for (int s = 0; s < 8; s+=8) {
+    HalfMask = Mask >> s;
+    if (HalfMask && s != 0) {
+      O << ',';
     }
-  }
 
-  HalfMask = Mask & 0xFF00;
-  if (HalfMask) { O << ','; }
+    for (int i = 0; HalfMask; ++i) {
+      if ((HalfMask >> i) & 0x01) {
+        HalfMask ^= 1 << i;
+        Reg = M680x0II::getMaskedSpillRegister(i + s);
+        printRegName(O, Reg);
 
-  for (int i = 8; i < 16 && HalfMask != 0; ++i) {
-    if ((HalfMask >> i) & 0x01) {
-      HalfMask ^= 1 << i;
-      Reg = M680x0II::getMaskedSpillRegister(i);
-      if (InRange) {
-        if (!HalfMask) {
+        int j = i;
+        while ((HalfMask >> (j + 1)) & 0x01) {
+          HalfMask ^= 1 << ++j;
+        }
+
+        if (j != i) {
+          O << '-';
+          Reg = M680x0II::getMaskedSpillRegister(j + s);
           printRegName(O, Reg);
         }
-      } else {
-        printRegName(O, Reg);
+
+        i = j;
+
         if (HalfMask) {
-          O << '-';
+          O << ',';
         }
+      } else {
       }
     }
   }
