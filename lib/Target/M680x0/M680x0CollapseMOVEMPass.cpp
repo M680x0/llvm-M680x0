@@ -102,7 +102,9 @@ public:
 
   bool Update(int O, int M) {
     UpdateType Type = ClassifyUpdateByMask(M);
-    assert(Type != Intermixed);
+    // assert(Type != Intermixed);
+    if (Type == Intermixed)
+      return false;
     if (Start == INT_MIN) {
       Start = Stop = O;
       UpdateMask(M);
