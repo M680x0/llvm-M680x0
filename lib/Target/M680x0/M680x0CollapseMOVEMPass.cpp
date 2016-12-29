@@ -159,6 +159,7 @@ public:
 
     // No need to delete then add a single instruction
     if (std::next(MI) == End) {
+      State = MOVEMState();
       return;
     }
 
@@ -179,6 +180,8 @@ public:
         .addImm(State.GetFinalOffset()).addReg(State.GetBase())
         .addImm(State.GetMask());
     }
+      
+    State = MOVEMState();
   }
 
   bool ProcessMI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
@@ -197,7 +200,6 @@ public:
         State = Temp;
         State.SetEnd(MI);
         Finish(MBB, State);
-        State = MOVEMState();
         return ProcessMI(MBB, MI, State, Mask, Offset, Reg, IsStore);
       }
     // If this is the first instruction is sequance then initialize the State
@@ -238,7 +240,6 @@ public:
           if (State.HasBase()) {
             State.SetEnd(MI);
             Finish(MBB, State);
-            State = MOVEMState();
             Modified = true;
           }
           break;
