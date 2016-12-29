@@ -515,7 +515,7 @@ getStackSlotRange(const TargetRegisterClass *RC, unsigned SubIdx,
                   unsigned &Size, unsigned &Offset,
                   const MachineFunction &MF) const {
   // The slot size must be the maximum size so we can easily use MOVEM.L
-  Size = RI.getRegClass(M680x0::XR32RegClassID)->getSize();
+  Size = 4;
   Offset = 0;
   return true;
 }
@@ -526,7 +526,7 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                     const TargetRegisterClass *RC,
                     const TargetRegisterInfo *TRI) const {
   const MachineFunction &MF = *MBB.getParent();
-  assert(MF.getFrameInfo().getObjectSize(FI) >= RC->getSize() &&
+  assert(MF.getFrameInfo().getObjectSize(FI) == 4 &&
          "Stack slot too small for store");
   unsigned Opc = getStoreRegOpcode(SrcReg, RC, Subtarget);
   DebugLoc DL = MBB.findDebugLoc(MI);
@@ -540,6 +540,9 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                      unsigned DstReg, int FI,
                      const TargetRegisterClass *RC,
                      const TargetRegisterInfo *TRI) const {
+  const MachineFunction &MF = *MBB.getParent();
+  assert(MF.getFrameInfo().getObjectSize(FI) == 4 &&
+         "Stack slot too small for store");
   unsigned Opc = getLoadRegOpcode(DstReg, RC, Subtarget);
   DebugLoc DL = MBB.findDebugLoc(MI);
   addFrameReference(BuildMI(MBB, MI, DL, get(Opc), DstReg), FI);

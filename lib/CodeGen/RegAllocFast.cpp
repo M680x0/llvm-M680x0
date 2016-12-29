@@ -213,8 +213,14 @@ int RAFast::getStackSpaceFor(unsigned VirtReg, const TargetRegisterClass *RC) {
   if (SS != -1)
     return SS;          // Already has space allocated?
 
+  // We ask backend how it wants to store the spill
+  unsigned SpillSize;
+  unsigned SpillOffset;
+  bool Valid = TII->getStackSlotRange(RC, 0, SpillSize, SpillOffset, *MF);
+  if (!Valid) report_fatal_error("cannot spill a register");
+
   // Allocate a new stack object for this spill location...
-  int FrameIdx = MF->getFrameInfo().CreateSpillStackObject(RC->getSize(),
+  int FrameIdx = MF->getFrameInfo().CreateSpillStackObject(SpillSize,
                                                            RC->getAlignment());
 
   // Assign the slot.

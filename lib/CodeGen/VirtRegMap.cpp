@@ -73,8 +73,15 @@ void VirtRegMap::grow() {
 }
 
 unsigned VirtRegMap::createSpillSlot(const TargetRegisterClass *RC) {
-  int SS = MF->getFrameInfo().CreateSpillStackObject(RC->getSize(),
-                                                     RC->getAlignment());
+  // We ask backend how it wants to store the spill
+  unsigned SpillSize;
+  unsigned SpillOffset;
+  bool Valid = TII->getStackSlotRange(RC, 0, SpillSize, SpillOffset, *MF);
+  if (!Valid) report_fatal_error("cannot spill a register");
+
+  int SS = MF->getFrameInfo()
+    .CreateSpillStackObject(SpillSize, RC->getAlignment());
+
   ++NumSpillSlots;
   return SS;
 }
