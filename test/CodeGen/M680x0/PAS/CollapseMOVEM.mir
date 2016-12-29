@@ -1,0 +1,162 @@
+# RUN: llc %s -mtriple=m680x0 -start-after=prologepilog -O0 -filetype=asm -o - \
+# RUN:  | FileCheck %s -check-prefixes=x00
+
+#------------------------------------------------------------------------------
+# CollapseMOVEM pass finds sequences of MOVEM instructions and collapse them
+# into a single instruciton with merged masks. This only works with stack data
+#------------------------------------------------------------------------------
+
+--- # CollapseMOVEM_RM
+#
+# x00-LABEL: CollapseMOVEM_RM
+# x00:       movem.l (0,%sp), %d0-%d2,%d7,%a1-%a3,%a5
+name: CollapseMOVEM_RM
+body: |
+  bb.0:
+    MOVM32mp 1,     0, %sp
+    MOVM32mp 2,     4, %sp
+    MOVM32mp 4,     8, %sp
+    MOVM32mp 128,  12, %sp
+    MOVM32mp 512,  16, %sp
+    MOVM32mp 1024, 20, %sp
+    MOVM32mp 2048, 24, %sp
+    MOVM32mp 8192, 28, %sp
+
+...
+#
+# x00-LABEL: CollapseMOVEM_RM_Reversed
+# x00:       movem.l (0,%sp), %d0-%d2,%d7,%a1-%a3,%a5
+name: CollapseMOVEM_RM_Reversed
+body: |
+  bb.0:
+    MOVM32mp 8192, 28, %sp
+    MOVM32mp 2048, 24, %sp
+    MOVM32mp 1024, 20, %sp
+    MOVM32mp 512,  16, %sp
+    MOVM32mp 128,  12, %sp
+    MOVM32mp 4,     8, %sp
+    MOVM32mp 2,     4, %sp
+    MOVM32mp 1,     0, %sp
+
+...
+# This async reg/mem order is impossible to store with MOVEM
+# x00-LABEL: CollapseMOVEM_RM_ReversedStoreOrder
+# x00:       movem.l (0,%sp), %a5
+# x00:       movem.l (4,%sp), %a3
+# x00:       movem.l (8,%sp), %a2
+# x00:       movem.l (12,%sp), %a1
+# x00:       movem.l (16,%sp), %d7
+# x00:       movem.l (20,%sp), %d2
+# x00:       movem.l (24,%sp), %d1
+# x00:       movem.l (28,%sp), %d0
+name: CollapseMOVEM_RM_ReversedStoreOrder
+body: |
+  bb.0:
+    MOVM32mp 8192,  0, %sp
+    MOVM32mp 2048,  4, %sp
+    MOVM32mp 1024,  8, %sp
+    MOVM32mp 512,  12, %sp
+    MOVM32mp 128,  16, %sp
+    MOVM32mp 4,    20, %sp
+    MOVM32mp 2,    24, %sp
+    MOVM32mp 1,    28, %sp
+
+...
+--- # CollapseMOVEM_MR
+#
+# x00-LABEL: CollapseMOVEM_MR
+# x00:       movem.l %d0-%d2,%d7,%a1-%a3,%a5, (0,%sp)
+name: CollapseMOVEM_MR
+body: |
+  bb.0:
+    MOVM32pm   0, %sp, 1
+    MOVM32pm   4, %sp, 2
+    MOVM32pm   8, %sp, 4
+    MOVM32pm  12, %sp, 128
+    MOVM32pm  16, %sp, 512
+    MOVM32pm  20, %sp, 1024
+    MOVM32pm  24, %sp, 2048
+    MOVM32pm  28, %sp, 8192
+
+...
+--- # CollapseMOVEM_Mixed
+#
+# x00-LABEL: CollapseMOVEM_Mixed
+# x00:       movem.l %d0-%d1, (0,%sp)
+# x00:       movem.l (8,%sp), %d2,%d7
+# x00:       movem.l %a1-%a2, (16,%sp)
+# x00:       movem.l (24,%sp), %a3
+# x00:       movem.l %a5, (28,%sp)
+name: CollapseMOVEM_Mixed
+body: |
+  bb.0:
+    MOVM32pm  0, %sp, 1
+    MOVM32pm  4, %sp, 2
+    MOVM32mp  4, 8, %sp
+    MOVM32mp  128, 12, %sp
+    MOVM32pm  16, %sp, 512
+    MOVM32pm  20, %sp, 1024
+    MOVM32mp  2048, 24, %sp
+    MOVM32pm  28, %sp, 8192
+
+...
+--- # CollapseMOVEM_Zero
+#
+# x00-LABEL: CollapseMOVEM_Zero
+# x00:       movem.l %d0-%d4, (-8,%sp)
+name: CollapseMOVEM_Zero
+body: |
+  bb.0:
+    MOVM32pm -8, %sp,  1
+    MOVM32pm -4, %sp,  2
+    MOVM32pm  0, %sp,  4
+    MOVM32pm  4, %sp,  8
+    MOVM32pm  8, %sp, 16
+
+...
+#
+# x00-LABEL: CollapseMOVEM_Zero_Mixed
+# x00:       movem.l %d3, (4,%sp)
+# x00:       movem.l %d0-%d2, (-8,%sp)
+# x00:       movem.l %d4, (8,%sp)
+name: CollapseMOVEM_Zero_Mixed
+body: |
+  bb.0:
+    MOVM32pm  4, %sp,  8
+    MOVM32pm -4, %sp,  2
+    MOVM32pm -8, %sp,  1
+    MOVM32pm  0, %sp,  4
+    MOVM32pm  8, %sp, 16
+
+...
+--- # CollapseMOVEM_Zero_Reversed
+#
+# x00-LABEL: CollapseMOVEM_Zero_Reversed
+# x00:       movem.l %d0-%d4, (-8,%sp)
+name: CollapseMOVEM_Zero_Reversed
+body: |
+  bb.0:
+    MOVM32pm  8, %sp, 16
+    MOVM32pm  4, %sp,  8
+    MOVM32pm  0, %sp,  4
+    MOVM32pm -4, %sp,  2
+    MOVM32pm -8, %sp,  1
+
+...
+#
+# x00-LABEL: CollapseMOVEM_Zero_ReversedStoreOrder
+# x00:       movem.l %d0, (8,%sp)
+# x00:       movem.l %d1, (4,%sp)
+# x00:       movem.l %d2, (0,%sp)
+# x00:       movem.l %d3, (-4,%sp)
+# x00:       movem.l %d4, (-8,%sp)
+name: CollapseMOVEM_Zero_ReversedStoreOrder
+body: |
+  bb.0:
+    MOVM32pm  8, %sp,  1
+    MOVM32pm  4, %sp,  2
+    MOVM32pm  0, %sp,  4
+    MOVM32pm -4, %sp,  8
+    MOVM32pm -8, %sp, 16
+
+...

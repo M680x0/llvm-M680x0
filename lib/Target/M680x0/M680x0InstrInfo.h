@@ -189,6 +189,10 @@ public:
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
 
+  bool getStackSlotRange(const TargetRegisterClass *RC, unsigned SubIdx,
+                         unsigned &Size, unsigned &Offset,
+                         const MachineFunction &MF) const override;
+
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MI,
                            unsigned SrcReg, bool isKill, int FrameIndex,

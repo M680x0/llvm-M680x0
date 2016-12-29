@@ -124,6 +124,7 @@ public:
 
   bool addInstSelector() override;
   void addPreSched2() override;
+  void addPreEmitPass() override;
 };
 } // namespace
 
@@ -140,4 +141,9 @@ bool M680x0PassConfig::addInstSelector() {
 
 void M680x0PassConfig::addPreSched2() {
   addPass(createM680x0ExpandPseudoPass());
+}
+
+void M680x0PassConfig::addPreEmitPass() {
+  addPass(createM680x0CollapseMOVEMPass());
+  // addPass(createM680x0ConvertMOVToMOVMPass());
 }

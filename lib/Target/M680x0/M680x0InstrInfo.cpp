@@ -510,6 +510,16 @@ getLoadRegOpcode(unsigned DstReg, const TargetRegisterClass *RC,
   return getLoadStoreRegOpcode(DstReg, RC, STI, true);
 }
 
+bool M680x0InstrInfo::
+getStackSlotRange(const TargetRegisterClass *RC, unsigned SubIdx,
+                  unsigned &Size, unsigned &Offset,
+                  const MachineFunction &MF) const {
+  // The slot size must be the maximum size so we can easily use MOVEM.L
+  Size = RI.getRegClass(M680x0::XR32RegClassID)->getSize();
+  Offset = 0;
+  return true;
+}
+
 void M680x0InstrInfo::
 storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                     unsigned SrcReg, bool isKill, int FI,

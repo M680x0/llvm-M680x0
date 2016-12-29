@@ -36,6 +36,18 @@ FunctionPass * createM680x0ExpandPseudoPass();
 /// This pass initializes a global base register for PIC on M680x0.
 FunctionPass *createM680x0GlobalBaseRegPass();
 
+/// Finds sequential MOVEM instruction and collapse them into a single one. This
+/// pass has to be run after all pseudo expansions and prologue/epilogue emission
+/// so that all possible MOVEM are already in place.
+FunctionPass *createM680x0CollapseMOVEMPass();
+
+/// Finds MOVE instructions before any conditioanl branch instruction and
+/// replaces them with MOVEM instruction. Motorola's MOVEs do trash(V,C) flags
+/// register which prevents branch from taking the correct route. This pass
+/// has to be run after all pseudo expansions and prologue/epilogue emission
+/// so that all possible MOVEs are present.
+FunctionPass *createM680x0ConvertMOVToMOVMPass();
+
 } // End llvm namespace
 
 #endif
