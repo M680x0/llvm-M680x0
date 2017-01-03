@@ -154,6 +154,10 @@ static unsigned getLEArOpcode() {
   return M680x0::LEA32p;
 }
 
+static unsigned getMOVrrOpcode() {
+  return M680x0::MOV32rr;
+}
+
 /// findDeadCallerSavedReg - Return a caller-saved register that isn't live
 /// when it reaches the "return" instruction. We can then pop a stack object
 /// to this register without worry about clobbering it.
@@ -223,14 +227,28 @@ BuildStackAlignAND(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                    const DebugLoc &DL, unsigned Reg, uint64_t MaxAlign) const {
   uint64_t Val = -MaxAlign;
   unsigned AndOp = getANDriOpcode(Val);
-  MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(AndOp), Reg)
-                         .addReg(Reg)
-                         .addImm(Val)
-                         .setMIFlag(MachineInstr::FrameSetup);
+  unsigned MovOp = getMOVrrOpcode();
+
+  // This function is normally used with SP which is Address Register, but AND,
+  // or any other logical instructions in M680x0 do not support ARs so we need
+  // to use a temp Data Register to perform the op.
+  unsigned Tmp = M680x0::D0;
+
+  BuildMI(MBB, MBBI, DL, TII.get(MovOp), Tmp)
+    .addReg(Reg)
+    .setMIFlag(MachineInstr::FrameSetup);
+
+  MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(AndOp), Tmp)
+    .addReg(Tmp)
+    .addImm(Val)
+    .setMIFlag(MachineInstr::FrameSetup);
 
   // The CCR implicit def is dead.
-  // FIXME CCR is not yet present
   MI->getOperand(3).setIsDead();
+
+  BuildMI(MBB, MBBI, DL, TII.get(MovOp), Reg)
+    .addReg(Tmp)
+    .setMIFlag(MachineInstr::FrameSetup);
 }
 
 MachineBasicBlock::iterator M680x0FrameLowering::
@@ -887,7 +905,7 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
     I.addReg(Reg, isLiveIn ? RegState::Implicit : RegState::ImplicitKill);
     addMemOperand(I, CSI[i].getFrameIdx(), 0);
   }
-        
+
   return true;
 }
 
