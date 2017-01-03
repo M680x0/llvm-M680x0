@@ -45,7 +45,12 @@ M680x0TargetLowering::
 M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
     : TargetLowering(TM), Subtarget(STI), TM(TM) {
 
+  MVT PtrVT = MVT::i32;
+
   setBooleanContents(ZeroOrOneBooleanContent);
+
+  auto *RegInfo = Subtarget.getRegisterInfo();
+  setStackPointerRegisterToSaveRestore(RegInfo->getStackRegister());
 
   ValueTypeActions.setTypeAction(MVT::i64, TypeExpandInteger);
 
@@ -128,6 +133,8 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   setOperationAction(ISD::VAEND,   MVT::Other, Expand);
   setOperationAction(ISD::VAARG,   MVT::Other, Expand);
   setOperationAction(ISD::VACOPY,  MVT::Other, Expand);
+
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, PtrVT, Custom);
 
   computeRegisterProperties(STI.getRegisterInfo());
 
@@ -1406,6 +1413,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
   case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
   case ISD::VASTART:            return LowerVASTART(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG);
   }
 }
 
@@ -2810,35 +2818,6 @@ getPICJumpTableRelocBaseExpr(const MachineFunction *MF, unsigned JTI,
   return MCSymbolRefExpr::create(MF->getJTISymbol(JTI, Ctx), Ctx);
 }
 
-const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
-  switch (Opcode) {
-  case M680x0ISD::CALL:           return "M680x0ISD::CALL";
-  case M680x0ISD::TAIL_CALL:      return "M680x0ISD::TAIL_CALL";
-  case M680x0ISD::RET:            return "M680x0ISD::RET";
-  case M680x0ISD::TC_RETURN:      return "M680x0ISD::TC_RETURN";
-  case M680x0ISD::ADD:            return "M680x0ISD::ADD";
-  case M680x0ISD::SUB:            return "M680x0ISD::SUB";
-  case M680x0ISD::ADDX:           return "M680x0ISD::ADDX";
-  case M680x0ISD::SUBX:           return "M680x0ISD::SUBX";
-  case M680x0ISD::SMUL:           return "M680x0ISD::SMUL";
-  case M680x0ISD::UMUL:           return "M680x0ISD::UMUL";
-  case M680x0ISD::OR:             return "M680x0ISD::OR";
-  case M680x0ISD::XOR:            return "M680x0ISD::XOR";
-  case M680x0ISD::AND:            return "M680x0ISD::AND";
-  case M680x0ISD::CMP:            return "M680x0ISD::CMP";
-  case M680x0ISD::BT:             return "M680x0ISD::BT";
-  case M680x0ISD::SELECT:         return "M680x0ISD::SELECT";
-  case M680x0ISD::CMOV:           return "M680x0ISD::CMOV";
-  case M680x0ISD::BRCOND:         return "M680x0ISD::BRCOND";
-  case M680x0ISD::SETCC:          return "M680x0ISD::SETCC";
-  case M680x0ISD::SETCC_CARRY:    return "M680x0ISD::SETCC_CARRY";
-  case M680x0ISD::GlobalBaseReg:  return "M680x0ISD::GlobalBaseReg";
-  case M680x0ISD::Wrapper:        return "M680x0ISD::Wrapper";
-  case M680x0ISD::WrapperPC:      return "M680x0ISD::WrapperPC";
-  default:                        return NULL;
-  }
-}
-
 /// Determines whether the callee is required to pop its own arguments.
 /// Callee pop is necessary to support tail calls.
 bool M680x0::
@@ -3191,6 +3170,12 @@ EmitLoweredSelect(MachineInstr &MI, MachineBasicBlock *BB) const {
 }
 
 MachineBasicBlock * M680x0TargetLowering::
+EmitLoweredSegAlloca(MachineInstr &MI, MachineBasicBlock *BB) const {
+  // FIXME See Target TODO.md
+  llvm_unreachable("Cannot lower Segmented Stack Alloca with stack-split on");
+}
+
+MachineBasicBlock * M680x0TargetLowering::
 EmitInstrWithCustomInserter(MachineInstr &MI, MachineBasicBlock *BB) const {
   switch (MI.getOpcode()) {
   default: llvm_unreachable("Unexpected instr type to insert");
@@ -3198,7 +3183,8 @@ EmitInstrWithCustomInserter(MachineInstr &MI, MachineBasicBlock *BB) const {
   case M680x0::CMOV16d:
   case M680x0::CMOV32r:
     return EmitLoweredSelect(MI, BB);
-
+  case M680x0::SALLOCA:
+    return EmitLoweredSegAlloca(MI, BB);
   }
 }
 
@@ -3218,6 +3204,63 @@ LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
                       MachinePointerInfo(SV));
 }
 
+
+// Lower dynamic stack allocation to _alloca call for Cygwin/Mingw targets.
+// Calls to _alloca are needed to probe the stack when allocating more than 4k
+// bytes in one go. Touching the stack at 4K increments is necessary to ensure
+// that the guard pages used by the OS virtual memory manager are allocated in
+// correct sequence.
+SDValue M680x0TargetLowering::
+LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  bool SplitStack = MF.shouldSplitStack();
+
+  SDLoc DL(Op);
+
+  // Get the inputs.
+  SDNode *Node = Op.getNode();
+  SDValue Chain = Op.getOperand(0);
+  SDValue Size  = Op.getOperand(1);
+  unsigned Align = cast<ConstantSDNode>(Op.getOperand(2))->getZExtValue();
+  EVT VT = Node->getValueType(0);
+
+  // Chain the dynamic stack allocation so that it doesn't modify the stack
+  // pointer when other instructions are using the stack.
+  Chain = DAG.getCALLSEQ_START(Chain, DAG.getIntPtrConstant(0, DL, true), DL);
+
+  SDValue Result;
+  if (SplitStack) {
+    auto &MRI = MF.getRegInfo();
+    auto SPTy = getPointerTy(DAG.getDataLayout());
+    auto *ARClass = getRegClassFor(SPTy);
+    unsigned Vreg = MRI.createVirtualRegister(ARClass);
+    Chain = DAG.getCopyToReg(Chain, DL, Vreg, Size);
+    Result = DAG.getNode(M680x0ISD::SEG_ALLOCA, DL, SPTy, Chain,
+                                DAG.getRegister(Vreg, SPTy));
+  } else {
+    auto &TLI = DAG.getTargetLoweringInfo();
+    unsigned SPReg = TLI.getStackPointerRegisterToSaveRestore();
+    assert(SPReg && "Target cannot require DYNAMIC_STACKALLOC expansion and"
+                    " not tell us which reg is the stack pointer!");
+
+    SDValue SP = DAG.getCopyFromReg(Chain, DL, SPReg, VT);
+    Chain = SP.getValue(1);
+    const TargetFrameLowering &TFI = *Subtarget.getFrameLowering();
+    unsigned StackAlign = TFI.getStackAlignment();
+    Result = DAG.getNode(ISD::SUB, DL, VT, SP, Size); // Value
+    if (Align > StackAlign)
+      Result = DAG.getNode(ISD::AND, DL, VT, Result,
+                         DAG.getConstant(-(uint64_t)Align, DL, VT));
+    Chain = DAG.getCopyToReg(Chain, DL, SPReg, Result); // Output chain
+  }
+
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(0, DL, true),
+                             DAG.getIntPtrConstant(0, DL, true), SDValue(), DL);
+
+  SDValue Ops[2] = {Result, Chain};
+  return DAG.getMergeValues(Ops, DL);
+}
+
 //===----------------------------------------------------------------------===//
 // DAG Combine
 //===----------------------------------------------------------------------===//
@@ -3230,3 +3273,37 @@ LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
 //
 //   return SDValue();
 // }
+
+
+//===----------------------------------------------------------------------===//
+// M680x0ISD Node Names
+//===----------------------------------------------------------------------===//
+const char *M680x0TargetLowering::getTargetNodeName(unsigned Opcode) const {
+  switch (Opcode) {
+  case M680x0ISD::CALL:           return "M680x0ISD::CALL";
+  case M680x0ISD::TAIL_CALL:      return "M680x0ISD::TAIL_CALL";
+  case M680x0ISD::RET:            return "M680x0ISD::RET";
+  case M680x0ISD::TC_RETURN:      return "M680x0ISD::TC_RETURN";
+  case M680x0ISD::ADD:            return "M680x0ISD::ADD";
+  case M680x0ISD::SUB:            return "M680x0ISD::SUB";
+  case M680x0ISD::ADDX:           return "M680x0ISD::ADDX";
+  case M680x0ISD::SUBX:           return "M680x0ISD::SUBX";
+  case M680x0ISD::SMUL:           return "M680x0ISD::SMUL";
+  case M680x0ISD::UMUL:           return "M680x0ISD::UMUL";
+  case M680x0ISD::OR:             return "M680x0ISD::OR";
+  case M680x0ISD::XOR:            return "M680x0ISD::XOR";
+  case M680x0ISD::AND:            return "M680x0ISD::AND";
+  case M680x0ISD::CMP:            return "M680x0ISD::CMP";
+  case M680x0ISD::BT:             return "M680x0ISD::BT";
+  case M680x0ISD::SELECT:         return "M680x0ISD::SELECT";
+  case M680x0ISD::CMOV:           return "M680x0ISD::CMOV";
+  case M680x0ISD::BRCOND:         return "M680x0ISD::BRCOND";
+  case M680x0ISD::SETCC:          return "M680x0ISD::SETCC";
+  case M680x0ISD::SETCC_CARRY:    return "M680x0ISD::SETCC_CARRY";
+  case M680x0ISD::GlobalBaseReg:  return "M680x0ISD::GlobalBaseReg";
+  case M680x0ISD::Wrapper:        return "M680x0ISD::Wrapper";
+  case M680x0ISD::WrapperPC:      return "M680x0ISD::WrapperPC";
+  case M680x0ISD::SEG_ALLOCA:     return "M680x0ISD::SEG_ALLOCA";
+  default:                        return NULL;
+  }
+}

@@ -95,6 +95,12 @@ def MxSDT_SetCC_C : SDTypeProfile<1, 2, [
 ]>;
 
 
+def MxSDT_SEG_ALLOCA : SDTypeProfile<1, 1,[
+  /*  MEM */ SDTCisVT<0, iPTR>,
+  /* SIZE */ SDTCisVT<1, iPTR>
+]>;
+
+
 //===----------------------------------------------------------------------===//
 // Nodes
 //===----------------------------------------------------------------------===//
@@ -137,6 +143,10 @@ def MxCmov    : SDNode<"M680x0ISD::CMOV",        MxSDT_Cmov>;
 def MxBrCond  : SDNode<"M680x0ISD::BRCOND",      MxSDT_BrCond, [SDNPHasChain]>;
 def MxSetCC   : SDNode<"M680x0ISD::SETCC",       MxSDT_SetCC>;
 def MxSetCC_C : SDNode<"M680x0ISD::SETCC_CARRY", MxSDT_SetCC_C>;
+
+
+def MxSegAlloca : SDNode<"M680x0ISD::SEG_ALLOCA", MxSDT_SEG_ALLOCA,
+                         [SDNPHasChain]>;
 
 
 //===----------------------------------------------------------------------===//

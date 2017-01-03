@@ -77,6 +77,11 @@ namespace llvm {
       /// Special wrapper used under M680x0 PIC mode for PC
       /// relative displacements.
       WrapperPC,
+
+      // For allocating variable amounts of stack space when using
+      // segmented stacks. Check if the current stacklet has enough space, and
+      // falls back to heap allocation if not.
+      SEG_ALLOCA,
     };
   }
 
@@ -197,6 +202,7 @@ namespace llvm {
                                int64_t Offset, SelectionDAG &DAG) const;
     SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
                             CallingConv::ID CallConv, bool isVarArg,
@@ -224,6 +230,8 @@ namespace llvm {
 
     MachineBasicBlock *EmitLoweredSelect(MachineInstr &I,
                                          MachineBasicBlock *BB) const;
+    MachineBasicBlock * EmitLoweredSegAlloca(MachineInstr &MI,
+                                             MachineBasicBlock *BB) const;
 
     /// Emit nodes that will be selected as "test Op0,Op0", or something
     /// equivalent, for use with the given M680x0 condition code.

@@ -110,3 +110,19 @@ def : Pat<(MxTCRet (i32 tglobaladdr:$dst), imm:$adj),
 
 def : Pat<(MxTCRet (i32 texternalsym:$dst), imm:$adj),
           (TCRETURNq MxPCD32:$dst, imm:$adj)>;
+
+
+//===----------------------------------------------------------------------===//
+// Segmented Stack
+//
+// When using segmented stacks these are lowered into instructions which first
+// check if the current stacklet has enough free memory. If it does, memory is
+// allocated by bumping the stack pointer. Otherwise memory is allocated from
+// the heap.
+//===----------------------------------------------------------------------===//
+
+let Defs = [SP, CCR], Uses = [SP] in
+let usesCustomInserter = 1 in
+def SALLOCA : MxPseudo<(outs MxARD32:$dst), (ins MxARD32:$size),
+                       "# variable sized alloca for segmented stacks",
+                       [(set iPTR:$dst, (MxSegAlloca iPTR:$size))]>;
