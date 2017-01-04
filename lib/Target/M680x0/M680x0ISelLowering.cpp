@@ -89,6 +89,11 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
     setOperationAction(OP, MVT::i32, LibCall);
   }
 
+  for (auto OP : { ISD::UMUL_LOHI, ISD::SMUL_LOHI }) {
+    setOperationAction(OP, MVT::i8,  Expand);
+    setOperationAction(OP, MVT::i16, Expand);
+  }
+
   for (auto OP : { ISD::SMULO, ISD::UMULO }) {
     setOperationAction(OP, MVT::i8,  Expand);
     setOperationAction(OP, MVT::i16, Expand); //FIXME something wrong with custom lowering here
