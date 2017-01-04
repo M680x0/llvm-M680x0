@@ -96,6 +96,7 @@ static unsigned getRelaxedOpcodeBranch(const MCInst &Inst) {
   case M680x0::Bmi8: return M680x0::Bmi16;
   case M680x0::Bne8: return M680x0::Bne16;
   case M680x0::Bge8: return M680x0::Bge16;
+  case M680x0::Bcs8: return M680x0::Bcs16;
   case M680x0::Bpl8: return M680x0::Bpl16;
   case M680x0::Bgt8: return M680x0::Bgt16;
   case M680x0::Bhi8: return M680x0::Bhi16;
