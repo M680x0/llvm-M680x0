@@ -470,8 +470,8 @@ matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
     // and $1, %esi
     // lea (%rsi, %rdi, 8), %rax
     if (CurDAG->haveNoCommonBitsSet(N.getOperand(0), N.getOperand(1)) &&
-        !matchADD(N, AM, Depth))
-      return false;
+        matchADD(N, AM, Depth))
+      return true;
     break;
 
   case ISD::ADD:
