@@ -474,7 +474,7 @@ FindCallSeqStart(SDNode *N, unsigned &NestLevel, unsigned &MaxNest,
             BestMaxNest = MyMaxNest;
           }
       }
-      assert(Best);
+      //assert(Best);
       MaxNest = BestMaxNest;
       return Best;
     }
@@ -554,6 +554,7 @@ void ScheduleDAGRRList::ReleasePredecessors(SUnit *SU) {
         unsigned NestLevel = 0;
         unsigned MaxNest = 0;
         SDNode *N = FindCallSeqStart(Node, NestLevel, MaxNest, TII);
+        assert(N);
 
         SUnit *Def = &SUnits[N->getNodeId()];
         CallSeqEndForStart[Def] = SU;
