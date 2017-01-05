@@ -141,6 +141,9 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   setOperationAction(ISD::VAARG,   MVT::Other, Expand);
   setOperationAction(ISD::VACOPY,  MVT::Other, Expand);
 
+  setOperationAction(ISD::STACKSAVE,    MVT::Other, Expand);
+  setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
+
   setOperationAction(ISD::DYNAMIC_STACKALLOC, PtrVT, Custom);
 
   computeRegisterProperties(STI.getRegisterInfo());
