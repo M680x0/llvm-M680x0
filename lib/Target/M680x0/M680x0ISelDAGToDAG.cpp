@@ -754,7 +754,7 @@ isAddressBase(const SDValue &N) {
     return true;
   }
 
-  if (Op == ISD::ADD || ISD::ADDC) {
+  if (Op == ISD::ADD || Op == ISD::ADDC) {
     for (unsigned i = 0; i < N.getNumOperands(); ++i) {
       if (isAddressBase(N.getOperand(i))) {
         return true;
