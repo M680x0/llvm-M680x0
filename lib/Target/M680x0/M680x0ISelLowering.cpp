@@ -84,6 +84,7 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
 
   for (auto OP : { ISD::SDIV, ISD::UDIV,
                    ISD::SREM, ISD::UREM,
+                   ISD::UDIVREM, ISD::SDIVREM,
                    ISD::MULHS, ISD::MULHU,
                    ISD::UMUL_LOHI, ISD::SMUL_LOHI }) {
     setOperationAction(OP, MVT::i8,  Legal);
