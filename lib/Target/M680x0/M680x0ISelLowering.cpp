@@ -131,7 +131,10 @@ M680x0TargetLowering(const M680x0TargetMachine &TM, const M680x0Subtarget &STI)
   }
 
   for (auto VT : { MVT::i8, MVT::i16, MVT::i32 }) {
-    setOperationAction(ISD::BSWAP , VT, Expand);
+    setOperationAction(ISD::BSWAP, VT, Expand);
+    setOperationAction(ISD::CTTZ,  VT, Expand);
+    setOperationAction(ISD::CTLZ,  VT, Expand);
+    setOperationAction(ISD::CTPOP, VT, Expand);
   }
 
   setOperationAction(ISD::ConstantPool    , MVT::i32, Custom);
