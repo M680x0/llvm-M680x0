@@ -51,7 +51,7 @@ M680x0Subtarget(const Triple &TT, const std::string &CPU,
                 const std::string &FS,
                 const M680x0TargetMachine &TM) :
   M680x0GenSubtargetInfo(TT, CPU, FS), TM(TM), TSInfo(),
-  InstrInfo(initializeSubtargetDependencies(CPU, FS, TM)),
+  InstrInfo(initializeSubtargetDependencies(CPU, TT, FS, TM)),
   FrameLowering(*this, this->getStackAlignment()),
   TLInfo(TM, *this), TargetTriple(TT)  {
 }
@@ -69,13 +69,11 @@ abiUsesSoftFloat() const {
 }
 
 M680x0Subtarget & M680x0Subtarget::
-initializeSubtargetDependencies(StringRef CPU, StringRef FS,
+initializeSubtargetDependencies(StringRef CPU, Triple TT, StringRef FS,
                                 const M680x0TargetMachine &TM) {
-  std::string CPUName = selectM680x0CPU(TargetTriple, CPU);
+  std::string CPUName = selectM680x0CPU(TT, CPU);
 
   // Parse features string.
-  // FIXME There is weird behaviour, features parsed sometimes wrongly with the
-  // same argument string
   // ParseSubtargetFeatures(CPUName, FS);
   // The only CPU supported thus far
   IsM68000 = true;

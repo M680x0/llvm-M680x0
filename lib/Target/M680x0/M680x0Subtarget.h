@@ -125,8 +125,9 @@ public:
   /// getSlotSize - Stack slot size in bytes.
   unsigned getSlotSize() const { return 4; }
 
-  M680x0Subtarget &initializeSubtargetDependencies(StringRef CPU, StringRef FS,
-                                                 const M680x0TargetMachine &TM);
+  M680x0Subtarget &
+  initializeSubtargetDependencies(StringRef CPU, Triple TT, StringRef FS,
+                                  const M680x0TargetMachine &TM);
 
   const SelectionDAGTargetInfo *getSelectionDAGInfo() const override {
     return &TSInfo;
