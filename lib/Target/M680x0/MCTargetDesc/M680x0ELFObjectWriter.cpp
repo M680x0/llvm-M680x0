@@ -9,35 +9,33 @@
 
 #include "MCTargetDesc/M680x0FixupKinds.h"
 #include "MCTargetDesc/M680x0MCTargetDesc.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/Support/ELF.h"
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
 
 namespace {
-  class M680x0ELFObjectWriter : public MCELFObjectTargetWriter {
-  public:
-    M680x0ELFObjectWriter(uint8_t OSABI);
+class M680x0ELFObjectWriter : public MCELFObjectTargetWriter {
+public:
+  M680x0ELFObjectWriter(uint8_t OSABI);
 
-    ~M680x0ELFObjectWriter() override;
+  ~M680x0ELFObjectWriter() override;
 
-  protected:
-    unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
-                          const MCFixup &Fixup, bool IsPCRel) const override;
-  };
-}
+protected:
+  unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
+                        const MCFixup &Fixup, bool IsPCRel) const override;
+};
+} // namespace
 
-M680x0ELFObjectWriter::
-M680x0ELFObjectWriter(uint8_t OSABI)
+M680x0ELFObjectWriter::M680x0ELFObjectWriter(uint8_t OSABI)
     : MCELFObjectTargetWriter(false, OSABI, ELF::EM_68K, /* RELA */ true) {}
 
-M680x0ELFObjectWriter::~M680x0ELFObjectWriter()
-{}
+M680x0ELFObjectWriter::~M680x0ELFObjectWriter() {}
 
 enum M680x0RelType { RT_32, RT_16, RT_8 };
 
@@ -59,9 +57,10 @@ getType(unsigned Kind, MCSymbolRefExpr::VariantKind &Modifier, bool &IsPCRel) {
 }
 
 // FIXME Should i split reloc types between pre x20 and the rest?
-unsigned M680x0ELFObjectWriter::
-getRelocType(MCContext &Ctx, const MCValue &Target,
-             const MCFixup &Fixup, bool IsPCRel) const {
+unsigned M680x0ELFObjectWriter::getRelocType(MCContext &Ctx,
+                                             const MCValue &Target,
+                                             const MCFixup &Fixup,
+                                             bool IsPCRel) const {
   MCSymbolRefExpr::VariantKind Modifier = Target.getAccessVariant();
   unsigned Kind = Fixup.getKind();
   M680x0RelType Type = getType(Kind, Modifier, IsPCRel);
@@ -75,7 +74,7 @@ getRelocType(MCContext &Ctx, const MCValue &Target,
     case RT_16:
       return IsPCRel ? ELF::R_M680x0_PC16 : ELF::R_M680x0_16;
     case RT_8:
-      return IsPCRel ? ELF::R_M680x0_PC8  : ELF::R_M680x0_8;
+      return IsPCRel ? ELF::R_M680x0_PC8 : ELF::R_M680x0_8;
     }
   // case MCSymbolRefExpr::VK_GOT:
   //   switch (Type) {
@@ -115,12 +114,10 @@ getRelocType(MCContext &Ctx, const MCValue &Target,
       return ELF::R_M680x0_PLT8;
     }
   }
-
 }
 
-MCObjectWriter *llvm::
-createM680x0ELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI) {
-  MCELFObjectTargetWriter *MOTW =
-    new M680x0ELFObjectWriter(OSABI);
-  return createELFObjectWriter(MOTW, OS, /*IsLittleEndian=*/false);
+std::unique_ptr<MCObjectWriter>
+llvm::createM680x0ELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI) {
+  return createELFObjectWriter(make_unique<M680x0ELFObjectWriter>(OSABI),
+                               OS, /*IsLittleEndian=*/false);
 }

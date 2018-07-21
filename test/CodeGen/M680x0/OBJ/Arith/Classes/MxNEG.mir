@@ -14,12 +14,12 @@
 #                0   1   0   0 | x   x   x   x | SIZE  |    MODE   |    REG
 #               ---------------+---------------+-------+-----------+-----------
 # NEG8d:         0   1   0   0   0   1   0   0 . 0   0   0   0   0   0   0   0
-# NEG32d-SAME:   0   1   0   0   0   1   0   0 . 1   0   0   0   0   0   0   1
+# NEG32d-SAME:   0   1   0   0   0   1   0   0 . 1   0   0   0   0   0   0   0
 name: MxNEG
 body: |
   bb.0:
     %bd0 = NEG8d  %bd0, implicit-def %ccr
-    %d1  = NEG32d  %d0, implicit-def %ccr
+    %d0  = NEG32d  %d0, implicit-def %ccr
 
 ...
 --- # NEGX
@@ -29,11 +29,11 @@ body: |
 #                0   1   0   0 | x   x   x   x | SIZE  |    MODE   |    REG
 #               ---------------+---------------+-------+-----------+-----------
 # NEGX8d-SAME:   0   1   0   0   0   0   0   0 . 0   0   0   0   0   0   0   0
-# NEGX32d-SAME:  0   1   0   0   0   0   0   0 . 1   0   0   0   0   0   0   1
+# NEGX32d-SAME:  0   1   0   0   0   0   0   0 . 1   0   0   0   0   0   0   0
 name: MxNEGX
 body: |
   bb.0:
     %bd0 = NEGX8d  %bd0, implicit %ccr, implicit-def %ccr
-    %d1  = NEGX32d  %d0, implicit %ccr, implicit-def %ccr
+    %d0  = NEGX32d  %d0, implicit %ccr, implicit-def %ccr
 
 ...

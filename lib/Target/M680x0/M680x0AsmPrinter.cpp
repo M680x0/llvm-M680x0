@@ -42,7 +42,7 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetRegistry.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
+#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetOptions.h"
 
 using namespace llvm;

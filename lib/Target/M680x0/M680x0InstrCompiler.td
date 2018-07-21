@@ -76,8 +76,8 @@ def CMOV32r : MxCMove<MxType32r>;
 let Defs = [SP, CCR], Uses = [SP] in {
 
 def ADJCALLSTACKDOWN
-  : MxPseudo<(outs), (ins i32imm:$amt1), "#ADJCALLSTACKDOWN",
-            [(MxCallSeqStart timm:$amt1)]>;
+  : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2), "#ADJCALLSTACKDOWN",
+            [(MxCallSeqStart timm:$amt1, timm:$amt2)]>;
 
 def ADJCALLSTACKUP
   : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2), "#ADJCALLSTACKUP",

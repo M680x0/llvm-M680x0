@@ -14,15 +14,15 @@
 #ifndef LLVM_LIB_TARGET_M680X0_MCTARGETDESC_M680X0MCTARGETDESC_H
 #define LLVM_LIB_TARGET_M680X0_MCTARGETDESC_M680X0MCTARGETDESC_H
 
-#include "llvm/Support/DataTypes.h"
 #include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCObjectWriter.h"
+#include "llvm/Support/DataTypes.h"
 
 namespace llvm {
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class MCRelocationInfo;
@@ -44,10 +44,10 @@ MCCodeEmitter *createM680x0MCCodeEmitter(const MCInstrInfo &MCII,
                                          MCContext &Ctx);
 
 /// Construct an M680x0 ELF object writer.
-MCObjectWriter *createM680x0ELFObjectWriter(raw_pwrite_stream &OS,
-                                            uint8_t OSABI);
+std::unique_ptr<MCObjectWriter>
+createM680x0ELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
 
-} // End llvm namespace
+} // namespace llvm
 
 // Defines symbolic names for M680x0 registers. This defines a mapping from
 // register name to register number.

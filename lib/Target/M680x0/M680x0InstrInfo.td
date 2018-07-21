@@ -19,7 +19,7 @@ include "M680x0InstrFormats.td"
 // Profiles
 //===----------------------------------------------------------------------===//
 
-def MxSDT_CallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>]>;
+def MxSDT_CallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 def MxSDT_CallSeqEnd   : SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 
 def MxSDT_Call    : SDTypeProfile<0, -1, [SDTCisVT<0, iPTR>]>;

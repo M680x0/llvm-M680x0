@@ -668,6 +668,11 @@ enum {
 #include "ELFRelocs/BPF.def"
 };
 
+// ELF Relocation types for M680x0
+enum {
+#include "ELFRelocs/m680x0.def"
+};
+
 #undef ELF_RELOC
 
 // Section header.

@@ -235,12 +235,6 @@ int RegAllocFast::getStackSpaceFor(unsigned VirtReg,
   if (SS != -1)
     return SS;
 
-  // We ask backend how it wants to store the spill
-  unsigned SpillSize;
-  unsigned SpillOffset;
-  bool Valid = TII->getStackSlotRange(RC, 0, SpillSize, SpillOffset, *MF);
-  if (!Valid) report_fatal_error("cannot spill a register");
-
   // Allocate a new stack object for this spill location...
   unsigned Size = TRI->getSpillSize(RC);
   unsigned Align = TRI->getSpillAlignment(RC);

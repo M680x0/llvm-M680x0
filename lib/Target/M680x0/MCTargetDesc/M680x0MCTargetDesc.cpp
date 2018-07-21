@@ -54,7 +54,7 @@ createM680x0MCInstrInfo() {
 static MCRegisterInfo *
 createM680x0MCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  InitM680x0MCRegisterInfo(X, M680x0::PC);
+  InitM680x0MCRegisterInfo(X, M680x0::A0, 0, 0, M680x0::PC);
   return X;
 }
 
@@ -105,16 +105,6 @@ createM680x0MCInstPrinter(const Triple &T, unsigned SyntaxVariant,
   return new M680x0InstPrinter(MAI, MII, MRI);
 }
 
-static void
-adjustCodeGenOpts(const Triple &TT, Reloc::Model RM, CodeModel::Model &CM) {
-  // We always default to Small CM
-  if (CM == CodeModel::Default) {
-    CM = CodeModel::Small;
-  } else if (CM == CodeModel::Large) {
-    llvm_unreachable("Large code model is not supported");
-  }
-}
-
 extern "C" void
 LLVMInitializeM680x0TargetMC() {
   Target &T = TheM680x0Target;
@@ -142,8 +132,4 @@ LLVMInitializeM680x0TargetMC() {
 
   // Register the asm backend.
   TargetRegistry::RegisterMCAsmBackend(T, createM680x0AsmBackend);
-
-  // Register CodeGen Options adjust function. This will correct code model
-  // and optimization settings
-  RegisterMCAdjustCodeGenOptsFn AdjustCodeGenOptsFn(T, adjustCodeGenOpts);
 }

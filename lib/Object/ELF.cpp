@@ -25,7 +25,7 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
   switch (Machine) {
   case ELF::EM_68K:
     switch (Type) {
-#include "llvm/Support/ELFRelocs/m680x0.def"
+#include "llvm/BinaryFormat/ELFRelocs/m680x0.def"
     default:
       break;
     }

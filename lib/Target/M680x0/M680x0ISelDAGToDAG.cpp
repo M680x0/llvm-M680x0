@@ -1,4 +1,5 @@
-//===-- M680x0ISelDAGToDAG.cpp - A Dag to Dag Inst Selector for M680x0 --------===//
+//===-- M680x0ISelDAGToDAG.cpp - A Dag to Dag Inst Selector for M680x0
+//--------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -37,24 +38,30 @@ using namespace llvm;
 #define DEBUG_TYPE "m680x0-isel"
 
 namespace {
+
+/// isInt - Checks if an integer fits into the given bit width.
+/// non-templated version
+/// FIXME move it somewhere
+inline bool isInt(unsigned N, int64_t x) {
+  return N >= 64 ||
+         (-(INT64_C(1) << (N - 1)) <= x && x < (INT64_C(1) << (N - 1)));
+}
+
 // For reference, the full order of operands for memory references is:
 // (Operand), Displacement, Base, Index, Scale
 struct M680x0ISelAddressMode {
   enum AddrType {
-    ARI,     // Address Register Indirect
-    ARIPI,   // Address Register Indirect with Postincrement
-    ARIPD,   // Address Register Indirect with Postdecrement
-    ARID,    // Address Register Indirect with Displacement
-    ARII,    // Address Register Indirect with Index
-    PCD,     // Program Counter Indirect with Displacement
-    PCI,     // Program Counter Indirect with Index
-    AL,      // Absolute
+    ARI,   // Address Register Indirect
+    ARIPI, // Address Register Indirect with Postincrement
+    ARIPD, // Address Register Indirect with Postdecrement
+    ARID,  // Address Register Indirect with Displacement
+    ARII,  // Address Register Indirect with Index
+    PCD,   // Program Counter Indirect with Displacement
+    PCI,   // Program Counter Indirect with Index
+    AL,    // Absolute
   } AM;
 
-  enum {
-    RegBase,
-    FrameIndexBase
-  } BaseType;
+  enum { RegBase, FrameIndexBase } BaseType;
 
   int64_t Disp;
 
@@ -71,15 +78,14 @@ struct M680x0ISelAddressMode {
   const char *ES;
   MCSymbol *MCSym;
   int JT;
-  unsigned Align;    // CP alignment.
+  unsigned Align; // CP alignment.
 
-  unsigned char SymbolFlags;  // M680x0II::MO_*
+  unsigned char SymbolFlags; // M680x0II::MO_*
 
   M680x0ISelAddressMode(AddrType AT)
-    : AM(AT), BaseType(RegBase),
-      Disp(0), BaseFrameIndex(0), IndexReg(), Scale(1),
-      GV(nullptr), CP(nullptr), BlockAddr(nullptr), ES(nullptr),
-      MCSym(nullptr), JT(-1), Align(0), SymbolFlags(M680x0II::MO_NO_FLAG) {}
+      : AM(AT), BaseType(RegBase), Disp(0), BaseFrameIndex(0), IndexReg(),
+        Scale(1), GV(nullptr), CP(nullptr), BlockAddr(nullptr), ES(nullptr),
+        MCSym(nullptr), JT(-1), Align(0), SymbolFlags(M680x0II::MO_NO_FLAG) {}
 
   bool hasSymbolicDisplacement() const {
     return GV != nullptr || CP != nullptr || ES != nullptr ||
@@ -90,9 +96,7 @@ struct M680x0ISelAddressMode {
     return BaseType == FrameIndexBase || BaseReg.getNode() != nullptr;
   }
 
-  bool hasFrameIndex() const {
-    return BaseType == FrameIndexBase;
-  }
+  bool hasFrameIndex() const { return BaseType == FrameIndexBase; }
 
   bool hasBaseReg() const {
     return BaseType == RegBase && BaseReg.getNode() != nullptr;
@@ -107,33 +111,33 @@ struct M680x0ISelAddressMode {
     return AM == ARII || AM == PCI || AM == ARID || AM == PCD || AM == AL;
   }
 
-  int getDispSize() const {
+  unsigned getDispSize() const {
     switch (AM) {
-      default: return 0;
-      case ARII:
-      case PCI:
-        return 8;
-      // These two in the next chip generations can hold upto 32 bit
-      case ARID:
-      case PCD:
-        return 16;
-      case AL:
-        return 32;
+    default:
+      return 0;
+    case ARII:
+    case PCI:
+      return 8;
+    // These two in the next chip generations can hold upto 32 bit
+    case ARID:
+    case PCD:
+      return 16;
+    case AL:
+      return 32;
     }
   }
 
-
-  bool hasDisp()  const { return getDispSize() != 0;  }
-  bool isDisp8()  const { return getDispSize() == 8;  }
+  bool hasDisp() const { return getDispSize() != 0; }
+  bool isDisp8() const { return getDispSize() == 8; }
   bool isDisp16() const { return getDispSize() == 16; }
   bool isDisp32() const { return getDispSize() == 32; }
 
-
   /// Return true if this addressing mode is already PC-relative.
   bool isPCRelative() const {
-    if (BaseType != RegBase) return false;
+    if (BaseType != RegBase)
+      return false;
     if (RegisterSDNode *RegNode =
-          dyn_cast_or_null<RegisterSDNode>(BaseReg.getNode()))
+            dyn_cast_or_null<RegisterSDNode>(BaseReg.getNode()))
       return RegNode->getReg() == M680x0::PC;
     return false;
   }
@@ -143,9 +147,7 @@ struct M680x0ISelAddressMode {
     BaseReg = Reg;
   }
 
-  void setIndexReg(SDValue Reg) {
-    IndexReg = Reg;
-  }
+  void setIndexReg(SDValue Reg) { IndexReg = Reg; }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   void dump() {
@@ -177,7 +179,7 @@ public:
   explicit M680x0DAGToDAGISel(M680x0TargetMachine &TM)
       : SelectionDAGISel(TM), Subtarget(nullptr) {}
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "M680X0 DAG->DAG Pattern Instruction Selection";
   }
 
@@ -188,8 +190,8 @@ private:
   /// make the right decision when generating code for different targets.
   const M680x0Subtarget *Subtarget;
 
-  // Include the pieces autogenerated from the target description.
-  #include "M680x0GenDAGISel.inc"
+// Include the pieces autogenerated from the target description.
+#include "M680x0GenDAGISel.inc"
 
   /// getTargetMachine - Return a reference to the TargetMachine, casted
   /// to the target-specific type.
@@ -214,14 +216,14 @@ private:
   bool matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth);
   bool matchWrapper(SDValue N, M680x0ISelAddressMode &AM);
 
-  std::pair<bool, SDNode*> selectNode(SDNode *Node);
+  std::pair<bool, SDNode *> selectNode(SDNode *Node);
 
   bool SelectARI(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base);
   bool SelectARID(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base);
-  bool SelectARII(SDNode *Parent, SDValue N,
-                  SDValue &Imm, SDValue &Base, SDValue &Index);
+  bool SelectARII(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Base,
+                  SDValue &Index);
   bool SelectAL(SDNode *Parent, SDValue N, SDValue &Sym);
   bool SelectPCD(SDNode *Parent, SDValue N, SDValue &Imm);
   bool SelectPCI(SDNode *Parent, SDValue N, SDValue &Imm, SDValue &Index);
@@ -234,8 +236,7 @@ private:
     if (AM.BaseType == M680x0ISelAddressMode::FrameIndexBase) {
       Disp = getI32Imm(AM.Disp, DL);
       Base = CurDAG->getTargetFrameIndex(
-          AM.BaseFrameIndex,
-          TLI->getPointerTy(CurDAG->getDataLayout()));
+          AM.BaseFrameIndex, TLI->getPointerTy(CurDAG->getDataLayout()));
       return true;
     }
 
@@ -244,15 +245,14 @@ private:
 
   // Gets a symbol plus optional displacement
   inline bool getSymbolicDisplacement(M680x0ISelAddressMode &AM,
-                                 const SDLoc &DL,
-                                 SDValue &Sym) {
+                                      const SDLoc &DL, SDValue &Sym) {
     if (AM.GV) {
-      Sym = CurDAG->getTargetGlobalAddress(AM.GV, SDLoc(), MVT::i32,
-                                           AM.Disp, AM.SymbolFlags);
+      Sym = CurDAG->getTargetGlobalAddress(AM.GV, SDLoc(), MVT::i32, AM.Disp,
+                                           AM.SymbolFlags);
       return true;
     } else if (AM.CP) {
-      Sym = CurDAG->getTargetConstantPool(AM.CP, MVT::i32,
-                                          AM.Align, AM.Disp, AM.SymbolFlags);
+      Sym = CurDAG->getTargetConstantPool(AM.CP, MVT::i32, AM.Align, AM.Disp,
+                                          AM.SymbolFlags);
       return true;
     } else if (AM.ES) {
       assert(!AM.Disp && "Non-zero displacement is ignored with ES.");
@@ -268,8 +268,8 @@ private:
       Sym = CurDAG->getTargetJumpTable(AM.JT, MVT::i32, AM.SymbolFlags);
       return true;
     } else if (AM.BlockAddr) {
-      Sym = CurDAG->getTargetBlockAddress(AM.BlockAddr, MVT::i32,
-                                          AM.Disp, AM.SymbolFlags);
+      Sym = CurDAG->getTargetBlockAddress(AM.BlockAddr, MVT::i32, AM.Disp,
+                                          AM.SymbolFlags);
       return true;
     }
 
@@ -302,10 +302,9 @@ private:
   /// if necessary.
   SDNode *getGlobalBaseReg();
 };
-}
+} // namespace
 
-bool M680x0DAGToDAGISel::
-runOnMachineFunction(MachineFunction &MF) {
+bool M680x0DAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
   Subtarget = &static_cast<const M680x0Subtarget &>(MF.getSubtarget());
   return SelectionDAGISel::runOnMachineFunction(MF);
 }
@@ -316,21 +315,16 @@ FunctionPass *llvm::createM680x0ISelDag(M680x0TargetMachine &TM) {
   return new M680x0DAGToDAGISel(TM);
 }
 
-/// isInt - Checks if an integer fits into the given bit width.
-/// non-templated version
-/// FIXME move it somewhere
-LLVM_CONSTEXPR static inline bool isInt(unsigned N, int64_t x) {
-  return N >= 64 || (-(INT64_C(1)<<(N-1)) <= x && x < (INT64_C(1)<<(N-1)));
-}
-
 static bool doesDispFitFI(M680x0ISelAddressMode &AM) {
-  if (!AM.isDispAddrType()) return false;
+  if (!AM.isDispAddrType())
+    return false;
   // -1 to make sure that resolved FI will fit into Disp field
   return isInt(AM.getDispSize() - 1, AM.Disp);
 }
 
 static bool doesDispFit(M680x0ISelAddressMode &AM, int64_t Val) {
-  if (!AM.isDispAddrType()) return false;
+  if (!AM.isDispAddrType())
+    return false;
   return isInt(AM.getDispSize(), Val);
 }
 
@@ -343,8 +337,8 @@ SDNode *M680x0DAGToDAGISel::getGlobalBaseReg() {
   return CurDAG->getRegister(GlobalBaseReg, TLI->getPointerTy(DL)).getNode();
 }
 
-bool M680x0DAGToDAGISel::
-foldOffsetIntoAddress(uint64_t Offset, M680x0ISelAddressMode &AM) {
+bool M680x0DAGToDAGISel::foldOffsetIntoAddress(uint64_t Offset,
+                                               M680x0ISelAddressMode &AM) {
   // Cannot combine ExternalSymbol displacements with integer offsets.
   if (Offset != 0 && (AM.ES || AM.MCSym))
     return false;
@@ -365,8 +359,8 @@ foldOffsetIntoAddress(uint64_t Offset, M680x0ISelAddressMode &AM) {
 
 /// Helper for MatchAddress. Add the specified node to the
 /// specified addressing mode without any further recursion.
-bool M680x0DAGToDAGISel::
-matchAddressBase(SDValue N, M680x0ISelAddressMode &AM) {
+bool M680x0DAGToDAGISel::matchAddressBase(SDValue N,
+                                          M680x0ISelAddressMode &AM) {
   // Is the base register already occupied?
   if (AM.hasBase()) {
     // If so, check to see if the scale index register is set.
@@ -390,8 +384,8 @@ matchAddressBase(SDValue N, M680x0ISelAddressMode &AM) {
 /// Have no idea how it is node with M680x0 ATM
 /// Here is some description:
 /// https://lists.debian.org/debian-68k/2007/11/msg00071.html
-bool M680x0DAGToDAGISel::
-matchLoadInAddress(LoadSDNode *N, M680x0ISelAddressMode &AM){
+bool M680x0DAGToDAGISel::matchLoadInAddress(LoadSDNode *N,
+                                            M680x0ISelAddressMode &AM) {
   // SDValue Address = N->getOperand(1);
 
   // load gs:0 -> GS segment register.
@@ -417,8 +411,9 @@ matchLoadInAddress(LoadSDNode *N, M680x0ISelAddressMode &AM){
   return false;
 }
 
-bool M680x0DAGToDAGISel::
-matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
+bool M680x0DAGToDAGISel::matchAddressRecursively(SDValue N,
+                                                 M680x0ISelAddressMode &AM,
+                                                 unsigned Depth) {
   SDLoc DL(N);
 
   // Limit recursion.
@@ -442,7 +437,8 @@ matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
   }
 
   switch (N.getOpcode()) {
-  default: break;
+  default:
+    break;
 
   case ISD::Constant: {
     uint64_t Val = cast<ConstantSDNode>(N)->getSExtValue();
@@ -480,10 +476,8 @@ matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
     break;
 
   case ISD::FrameIndex:
-    if (AM.isDispAddrType() &&
-        AM.BaseType == M680x0ISelAddressMode::RegBase &&
-        AM.BaseReg.getNode() == nullptr &&
-        doesDispFitFI(AM)) {
+    if (AM.isDispAddrType() && AM.BaseType == M680x0ISelAddressMode::RegBase &&
+        AM.BaseReg.getNode() == nullptr && doesDispFitFI(AM)) {
       AM.BaseType = M680x0ISelAddressMode::FrameIndexBase;
       AM.BaseFrameIndex = cast<FrameIndexSDNode>(N)->getIndex();
       return true;
@@ -496,8 +490,7 @@ matchAddressRecursively(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
 
 /// Add the specified node to the specified addressing mode, returning true if
 /// it cannot be done. This just pattern matches for the addressing mode.
-bool M680x0DAGToDAGISel::
-matchAddress(SDValue N, M680x0ISelAddressMode &AM) {
+bool M680x0DAGToDAGISel::matchAddress(SDValue N, M680x0ISelAddressMode &AM) {
   if (!matchAddressRecursively(N, AM, 0))
     return false;
 
@@ -528,23 +521,23 @@ matchAddress(SDValue N, M680x0ISelAddressMode &AM) {
   return true;
 }
 
-bool M680x0DAGToDAGISel::
-matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
+bool M680x0DAGToDAGISel::matchADD(SDValue N, M680x0ISelAddressMode &AM,
+                                  unsigned Depth) {
   // Add an artificial use to this node so that we can keep track of
   // it if it gets CSE'd with a different node.
   HandleSDNode Handle(N);
 
   M680x0ISelAddressMode Backup = AM;
-  if (matchAddressRecursively(N.getOperand(0), AM, Depth+1) &&
-      matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1)) {
-      return true;
+  if (matchAddressRecursively(N.getOperand(0), AM, Depth + 1) &&
+      matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth + 1)) {
+    return true;
   }
   AM = Backup;
 
   // Try again after commuting the operands.
-  if (matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth+1) &&
-      matchAddressRecursively(Handle.getValue().getOperand(0), AM, Depth+1)) {
-      return true;
+  if (matchAddressRecursively(Handle.getValue().getOperand(1), AM, Depth + 1) &&
+      matchAddressRecursively(Handle.getValue().getOperand(0), AM, Depth + 1)) {
+    return true;
   }
   AM = Backup;
 
@@ -563,11 +556,11 @@ matchADD(SDValue N, M680x0ISelAddressMode &AM, unsigned Depth) {
   return false;
 }
 
-/// Try to match M680x0ISD::Wrapper and M680x0ISD::WrapperPC nodes into an addressing
-/// mode. These wrap things that will resolve down into a symbol reference.
-/// If no match is possible, this returns true, otherwise it returns false.
-bool M680x0DAGToDAGISel::
-matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
+/// Try to match M680x0ISD::Wrapper and M680x0ISD::WrapperPC nodes into an
+/// addressing mode. These wrap things that will resolve down into a symbol
+/// reference. If no match is possible, this returns true, otherwise it returns
+/// false.
+bool M680x0DAGToDAGISel::matchWrapper(SDValue N, M680x0ISelAddressMode &AM) {
   // If the addressing mode already has a symbol as the displacement, we can
   // never match another symbol.
   if (AM.hasSymbolicDisplacement())
@@ -667,13 +660,14 @@ void M680x0DAGToDAGISel::Select(SDNode *Node) {
   DEBUG(dbgs() << "Selecting: "; Node->dump(CurDAG); dbgs() << '\n');
 
   if (Node->isMachineOpcode()) {
-    DEBUG(dbgs() << "== ";  Node->dump(CurDAG); dbgs() << '\n');
+    DEBUG(dbgs() << "== "; Node->dump(CurDAG); dbgs() << '\n');
     Node->setNodeId(-1);
-    return;   // Already selected.
+    return; // Already selected.
   }
 
-  switch(Opcode) {
-  default: break;
+  switch (Opcode) {
+  default:
+    break;
 
   case M680x0ISD::GlobalBaseReg:
     ReplaceNode(Node, getGlobalBaseReg());
@@ -683,22 +677,20 @@ void M680x0DAGToDAGISel::Select(SDNode *Node) {
   SelectCode(Node);
 }
 
-bool M680x0DAGToDAGISel::
-SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
+bool M680x0DAGToDAGISel::SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
   DEBUG(dbgs() << "Selecting ARIPI: ");
   DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
-bool M680x0DAGToDAGISel::
-SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
+bool M680x0DAGToDAGISel::SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
   DEBUG(dbgs() << "Selecting ARIPD: ");
   DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
-bool M680x0DAGToDAGISel::
-SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
+bool M680x0DAGToDAGISel::SelectARID(SDNode *Parent, SDValue N, SDValue &Disp,
+                                    SDValue &Base) {
   DEBUG(dbgs() << "Selecting ARID: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARID);
 
@@ -745,11 +737,9 @@ SelectARID(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Base) {
   return true;
 }
 
-static bool
-isAddressBase(const SDValue &N) {
+static bool isAddressBase(const SDValue &N) {
   unsigned Op = N.getOpcode();
-  if (Op == M680x0ISD::Wrapper ||
-      Op == M680x0ISD::WrapperPC ||
+  if (Op == M680x0ISD::Wrapper || Op == M680x0ISD::WrapperPC ||
       Op == M680x0ISD::GlobalBaseReg) {
     return true;
   }
@@ -765,9 +755,8 @@ isAddressBase(const SDValue &N) {
   return false;
 }
 
-bool M680x0DAGToDAGISel::
-SelectARII(SDNode *Parent, SDValue N,
-           SDValue &Disp, SDValue &Base, SDValue &Index) {
+bool M680x0DAGToDAGISel::SelectARII(SDNode *Parent, SDValue N, SDValue &Disp,
+                                    SDValue &Base, SDValue &Index) {
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARII);
   DEBUG(dbgs() << "Selecting ARII: ");
 
@@ -805,9 +794,8 @@ SelectARII(SDNode *Parent, SDValue N,
   // The idea here is that we want to use ARII without displacement only if
   // necessary like memory operations, otherwise this must be lowered into
   // addition
-  if (AM.Disp == 0 && (!Parent ||
-      (Parent->getOpcode() != ISD::LOAD &&
-       Parent->getOpcode() != ISD::STORE))) {
+  if (AM.Disp == 0 && (!Parent || (Parent->getOpcode() != ISD::LOAD &&
+                                   Parent->getOpcode() != ISD::STORE))) {
     DEBUG(dbgs() << "REJECT: Displacement is Zero\n");
     return false;
   }
@@ -818,8 +806,7 @@ SelectARII(SDNode *Parent, SDValue N,
   return true;
 }
 
-bool M680x0DAGToDAGISel::
-SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
+bool M680x0DAGToDAGISel::SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
   DEBUG(dbgs() << "Selecting AL: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::AL);
 
@@ -855,11 +842,11 @@ SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
   }
 
   DEBUG(dbgs() << "REJECT: Not Symbol or Disp\n");
-  return false;;
+  return false;
+  ;
 }
 
-bool M680x0DAGToDAGISel::
-SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
+bool M680x0DAGToDAGISel::SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
   DEBUG(dbgs() << "Selecting PCD: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::PCD);
 
@@ -887,8 +874,8 @@ SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
   return true;
 }
 
-bool M680x0DAGToDAGISel::
-SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Index) {
+bool M680x0DAGToDAGISel::SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp,
+                                   SDValue &Index) {
   DEBUG(dbgs() << "Selecting PCI: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::PCI);
 
@@ -919,8 +906,7 @@ SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp, SDValue &Index) {
   return true;
 }
 
-bool M680x0DAGToDAGISel::
-SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
+bool M680x0DAGToDAGISel::SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
   DEBUG(dbgs() << "Selecting ARI: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARI);
 
