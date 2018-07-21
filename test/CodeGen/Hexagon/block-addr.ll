@@ -1,8 +1,7 @@
 ; RUN: llc -march=hexagon < %s | FileCheck %s
 
-; CHECK: .LJTI
-; CHECK-DAG: r[[REG:[0-9]+]] = memw(r{{[0-9]+}}{{ *}}+{{ *}}r{{[0-9]+<<#[0-9]+}})
-; CHECK-DAG: jumpr:nt r[[REG]]
+; CHECK-DAG: r[[REG:[0-9]+]] = memw(r{{[0-9]+<<#[0-9]+}}+##.LJTI{{.*}})
+; CHECK-DAG: jumpr r[[REG]]
 
 define void @main() #0 {
 entry:

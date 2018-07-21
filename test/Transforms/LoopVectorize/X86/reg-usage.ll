@@ -10,8 +10,6 @@ define i32 @foo() {
 ; register usage doesn't exceed 16.
 ;
 ; CHECK-LABEL: foo
-; CHECK:      LV(REG): VF = 4
-; CHECK-NEXT: LV(REG): Found max usage: 4
 ; CHECK:      LV(REG): VF = 8
 ; CHECK-NEXT: LV(REG): Found max usage: 7
 ; CHECK:      LV(REG): VF = 16
@@ -48,8 +46,6 @@ define i32 @goo() {
 ; it will not have vector version and the vector register usage will not exceed the
 ; available vector register number.
 ; CHECK-LABEL: goo
-; CHECK:      LV(REG): VF = 4
-; CHECK-NEXT: LV(REG): Found max usage: 4
 ; CHECK:      LV(REG): VF = 8
 ; CHECK-NEXT: LV(REG): Found max usage: 7
 ; CHECK:      LV(REG): VF = 16
@@ -85,7 +81,7 @@ for.body:                                         ; preds = %for.body, %entry
 define i64 @bar(i64* nocapture %a) {
 ; CHECK-LABEL: bar
 ; CHECK:       LV(REG): VF = 2
-; CHECK:       LV(REG): Found max usage: 4
+; CHECK:       LV(REG): Found max usage: 3
 ;
 entry:
   br label %for.body

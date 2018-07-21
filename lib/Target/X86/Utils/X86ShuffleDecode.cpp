@@ -136,7 +136,7 @@ void DecodePSRLDQMask(MVT VT, unsigned Imm, SmallVectorImpl<int> &ShuffleMask) {
 void DecodePALIGNRMask(MVT VT, unsigned Imm,
                        SmallVectorImpl<int> &ShuffleMask) {
   unsigned NumElts = VT.getVectorNumElements();
-  unsigned Offset = Imm * (VT.getVectorElementType().getSizeInBits() / 8);
+  unsigned Offset = Imm * (VT.getScalarSizeInBits() / 8);
 
   unsigned NumLanes = VT.getSizeInBits() / 128;
   unsigned NumLaneElts = NumElts / NumLanes;
@@ -149,6 +149,16 @@ void DecodePALIGNRMask(MVT VT, unsigned Imm,
       ShuffleMask.push_back(Base + l);
     }
   }
+}
+
+void DecodeVALIGNMask(MVT VT, unsigned Imm,
+                      SmallVectorImpl<int> &ShuffleMask) {
+  int NumElts = VT.getVectorNumElements();
+  // Not all bits of the immediate are used so mask it.
+  assert(isPowerOf2_32(NumElts) && "NumElts should be power of 2");
+  Imm = Imm & (NumElts - 1);
+  for (int i = 0; i != NumElts; ++i)
+    ShuffleMask.push_back(i + Imm);
 }
 
 /// DecodePSHUFMask - This decodes the shuffle masks for pshufw, pshufd, and vpermilp*.
@@ -442,15 +452,20 @@ void DecodeScalarMoveMask(MVT VT, bool IsLoad, SmallVectorImpl<int> &Mask) {
     Mask.push_back(IsLoad ? static_cast<int>(SM_SentinelZero) : i);
 }
 
-void DecodeEXTRQIMask(int Len, int Idx,
+void DecodeEXTRQIMask(MVT VT, int Len, int Idx,
                       SmallVectorImpl<int> &ShuffleMask) {
+  assert(VT.is128BitVector() && "Expected 128-bit vector");
+  unsigned NumElts = VT.getVectorNumElements();
+  unsigned EltSize = VT.getScalarSizeInBits();
+  unsigned HalfElts = NumElts / 2;
+
   // Only the bottom 6 bits are valid for each immediate.
   Len &= 0x3F;
   Idx &= 0x3F;
 
   // We can only decode this bit extraction instruction as a shuffle if both the
-  // length and index work with whole bytes.
-  if (0 != (Len % 8) || 0 != (Idx % 8))
+  // length and index work with whole elements.
+  if (0 != (Len % EltSize) || 0 != (Idx % EltSize))
     return;
 
   // A length of zero is equivalent to a bit length of 64.
@@ -459,33 +474,38 @@ void DecodeEXTRQIMask(int Len, int Idx,
 
   // If the length + index exceeds the bottom 64 bits the result is undefined.
   if ((Len + Idx) > 64) {
-    ShuffleMask.append(16, SM_SentinelUndef);
+    ShuffleMask.append(NumElts, SM_SentinelUndef);
     return;
   }
 
-  // Convert index and index to work with bytes.
-  Len /= 8;
-  Idx /= 8;
+  // Convert index and index to work with elements.
+  Len /= EltSize;
+  Idx /= EltSize;
 
-  // EXTRQ: Extract Len bytes starting from Idx. Zero pad the remaining bytes
-  // of the lower 64-bits. The upper 64-bits are undefined.
+  // EXTRQ: Extract Len elements starting from Idx. Zero pad the remaining
+  // elements of the lower 64-bits. The upper 64-bits are undefined.
   for (int i = 0; i != Len; ++i)
     ShuffleMask.push_back(i + Idx);
-  for (int i = Len; i != 8; ++i)
+  for (int i = Len; i != (int)HalfElts; ++i)
     ShuffleMask.push_back(SM_SentinelZero);
-  for (int i = 8; i != 16; ++i)
+  for (int i = HalfElts; i != (int)NumElts; ++i)
     ShuffleMask.push_back(SM_SentinelUndef);
 }
 
-void DecodeINSERTQIMask(int Len, int Idx,
+void DecodeINSERTQIMask(MVT VT, int Len, int Idx,
                         SmallVectorImpl<int> &ShuffleMask) {
+  assert(VT.is128BitVector() && "Expected 128-bit vector");
+  unsigned NumElts = VT.getVectorNumElements();
+  unsigned EltSize = VT.getScalarSizeInBits();
+  unsigned HalfElts = NumElts / 2;
+
   // Only the bottom 6 bits are valid for each immediate.
   Len &= 0x3F;
   Idx &= 0x3F;
 
   // We can only decode this bit insertion instruction as a shuffle if both the
-  // length and index work with whole bytes.
-  if (0 != (Len % 8) || 0 != (Idx % 8))
+  // length and index work with whole elements.
+  if (0 != (Len % EltSize) || 0 != (Idx % EltSize))
     return;
 
   // A length of zero is equivalent to a bit length of 64.
@@ -494,24 +514,24 @@ void DecodeINSERTQIMask(int Len, int Idx,
 
   // If the length + index exceeds the bottom 64 bits the result is undefined.
   if ((Len + Idx) > 64) {
-    ShuffleMask.append(16, SM_SentinelUndef);
+    ShuffleMask.append(NumElts, SM_SentinelUndef);
     return;
   }
 
-  // Convert index and index to work with bytes.
-  Len /= 8;
-  Idx /= 8;
+  // Convert index and index to work with elements.
+  Len /= EltSize;
+  Idx /= EltSize;
 
-  // INSERTQ: Extract lowest Len bytes from lower half of second source and
-  // insert over first source starting at Idx byte. The upper 64-bits are
+  // INSERTQ: Extract lowest Len elements from lower half of second source and
+  // insert over first source starting at Idx element. The upper 64-bits are
   // undefined.
   for (int i = 0; i != Idx; ++i)
     ShuffleMask.push_back(i);
   for (int i = 0; i != Len; ++i)
-    ShuffleMask.push_back(i + 16);
-  for (int i = Idx + Len; i != 8; ++i)
+    ShuffleMask.push_back(i + NumElts);
+  for (int i = Idx + Len; i != (int)HalfElts; ++i)
     ShuffleMask.push_back(i);
-  for (int i = 8; i != 16; ++i)
+  for (int i = HalfElts; i != (int)NumElts; ++i)
     ShuffleMask.push_back(SM_SentinelUndef);
 }
 
@@ -538,10 +558,11 @@ void DecodeVPERMIL2PMask(MVT VT, unsigned M2Z, ArrayRef<uint64_t> RawMask,
   unsigned VecSize = VT.getSizeInBits();
   unsigned EltSize = VT.getScalarSizeInBits();
   unsigned NumLanes = VecSize / 128;
-  unsigned NumEltsPerLane = VT.getVectorNumElements() / NumLanes;
-  assert((VecSize == 128 || VecSize == 256) &&
-         "Unexpected vector size");
+  unsigned NumElts = VT.getVectorNumElements();
+  unsigned NumEltsPerLane = NumElts / NumLanes;
+  assert((VecSize == 128 || VecSize == 256) && "Unexpected vector size");
   assert((EltSize == 32 || EltSize == 64) && "Unexpected element size");
+  assert((NumElts == RawMask.size()) && "Unexpected mask size");
 
   for (unsigned i = 0, e = RawMask.size(); i < e; ++i) {
     // VPERMIL2 Operation.
@@ -562,14 +583,15 @@ void DecodeVPERMIL2PMask(MVT VT, unsigned M2Z, ArrayRef<uint64_t> RawMask,
       continue;
     }
 
-    unsigned Index = i & ~(NumEltsPerLane - 1);
+    int Index = i & ~(NumEltsPerLane - 1);
     if (EltSize == 64)
       Index += (Selector >> 1) & 0x1;
     else
       Index += Selector & 0x3;
 
-    unsigned SrcOffset = (Selector >> 2) & 1;
-    ShuffleMask.push_back((int)(SrcOffset + Index));
+    int Src = (Selector >> 2) & 0x1;
+    Index += Src * NumElts;
+    ShuffleMask.push_back(Index);
   }
 }
 

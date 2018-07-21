@@ -15,8 +15,8 @@
 #ifndef LLVM_AVR_H
 #define LLVM_AVR_H
 
-#include "llvm/Target/TargetMachine.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
 
@@ -27,8 +27,12 @@ FunctionPass *createAVRISelDag(AVRTargetMachine &TM,
                                CodeGenOpt::Level OptLevel);
 FunctionPass *createAVRExpandPseudoPass();
 FunctionPass *createAVRFrameAnalyzerPass();
+FunctionPass *createAVRRelaxMemPass();
 FunctionPass *createAVRDynAllocaSRPass();
 FunctionPass *createAVRBranchSelectionPass();
+
+void initializeAVRExpandPseudoPass(PassRegistry&);
+void initializeAVRRelaxMemPass(PassRegistry&);
 
 /// Contains the AVR backend.
 namespace AVR {

@@ -20,28 +20,28 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/InstructionSimplify.h"
+#include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Pass.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/Local.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "instsimplify"
 
 STATISTIC(NumSimplified, "Number of redundant instructions removed");
 
-static bool runImpl(Function &F, const DominatorTree *DT, const TargetLibraryInfo *TLI,
-                    AssumptionCache *AC) {
-  const DataLayout &DL = F.getParent()->getDataLayout();
-  SmallPtrSet<const Instruction*, 8> S1, S2, *ToSimplify = &S1, *Next = &S2;
+static bool runImpl(Function &F, const SimplifyQuery &SQ,
+                    OptimizationRemarkEmitter *ORE) {
+  SmallPtrSet<const Instruction *, 8> S1, S2, *ToSimplify = &S1, *Next = &S2;
   bool Changed = false;
 
   do {
-    for (BasicBlock *BB : depth_first(&F.getEntryBlock()))
+    for (BasicBlock *BB : depth_first(&F.getEntryBlock())) {
       // Here be subtlety: the iterator must be incremented before the loop
       // body (not sure why), so a range-for loop won't work here.
       for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE;) {
@@ -51,9 +51,10 @@ static bool runImpl(Function &F, const DominatorTree *DT, const TargetLibraryInf
         // empty and we only bother simplifying instructions that are in it.
         if (!ToSimplify->empty() && !ToSimplify->count(I))
           continue;
+
         // Don't waste time simplifying unused instructions.
-        if (!I->use_empty())
-          if (Value *V = SimplifyInstruction(I, DL, TLI, DT, AC)) {
+        if (!I->use_empty()) {
+          if (Value *V = SimplifyInstruction(I, SQ, ORE)) {
             // Mark all uses for resimplification next time round the loop.
             for (User *U : I->users())
               Next->insert(cast<Instruction>(U));
@@ -61,16 +62,17 @@ static bool runImpl(Function &F, const DominatorTree *DT, const TargetLibraryInf
             ++NumSimplified;
             Changed = true;
           }
-        bool res = RecursivelyDeleteTriviallyDeadInstructions(I, TLI);
-        if (res)  {
-          // RecursivelyDeleteTriviallyDeadInstruction can remove
-          // more than one instruction, so simply incrementing the
-          // iterator does not work. When instructions get deleted
-          // re-iterate instead.
-          BI = BB->begin(); BE = BB->end();
-          Changed |= res;
+        }
+        if (RecursivelyDeleteTriviallyDeadInstructions(I, SQ.TLI)) {
+          // RecursivelyDeleteTriviallyDeadInstruction can remove more than one
+          // instruction, so simply incrementing the iterator does not work.
+          // When instructions get deleted re-iterate instead.
+          BI = BB->begin();
+          BE = BB->end();
+          Changed = true;
         }
       }
+    }
 
     // Place the list of instructions to simplify on the next loop iteration
     // into ToSimplify.
@@ -90,8 +92,10 @@ namespace {
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesCFG();
+      AU.addRequired<DominatorTreeWrapperPass>();
       AU.addRequired<AssumptionCacheTracker>();
       AU.addRequired<TargetLibraryInfoWrapperPass>();
+      AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
     }
 
     /// runOnFunction - Remove instructions that simplify.
@@ -99,14 +103,17 @@ namespace {
       if (skipFunction(F))
         return false;
 
-      const DominatorTreeWrapperPass *DTWP =
-          getAnalysisIfAvailable<DominatorTreeWrapperPass>();
-      const DominatorTree *DT = DTWP ? &DTWP->getDomTree() : nullptr;
+      const DominatorTree *DT =
+          &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
       const TargetLibraryInfo *TLI =
           &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
       AssumptionCache *AC =
           &getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
-      return runImpl(F, DT, TLI, AC);
+      OptimizationRemarkEmitter *ORE =
+          &getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE();
+      const DataLayout &DL = F.getParent()->getDataLayout();
+      const SimplifyQuery SQ(DL, TLI, DT, AC);
+      return runImpl(F, SQ, ORE);
     }
   };
 }
@@ -115,7 +122,9 @@ char InstSimplifier::ID = 0;
 INITIALIZE_PASS_BEGIN(InstSimplifier, "instsimplify",
                       "Remove redundant instructions", false, false)
 INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
+INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
 INITIALIZE_PASS_END(InstSimplifier, "instsimplify",
                     "Remove redundant instructions", false, false)
 char &llvm::InstructionSimplifierID = InstSimplifier::ID;
@@ -127,12 +136,17 @@ FunctionPass *llvm::createInstructionSimplifierPass() {
 
 PreservedAnalyses InstSimplifierPass::run(Function &F,
                                       FunctionAnalysisManager &AM) {
-  auto *DT = AM.getCachedResult<DominatorTreeAnalysis>(F);
+  auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
   auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
   auto &AC = AM.getResult<AssumptionAnalysis>(F);
-  bool Changed = runImpl(F, DT, &TLI, &AC);
+  auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
+  const DataLayout &DL = F.getParent()->getDataLayout();
+  const SimplifyQuery SQ(DL, &TLI, &DT, &AC);
+  bool Changed = runImpl(F, SQ, &ORE);
   if (!Changed)
     return PreservedAnalyses::all();
-  // FIXME: This should also 'preserve the CFG'.
-  return PreservedAnalyses::none();
+
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
 }

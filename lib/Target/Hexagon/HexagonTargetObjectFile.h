@@ -19,18 +19,24 @@ namespace llvm {
   public:
     void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 
-    MCSection *SelectSectionForGlobal(const GlobalValue *GV, SectionKind Kind,
-        Mangler &Mang, const TargetMachine &TM) const override;
+    MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
+                                      const TargetMachine &TM) const override;
 
-    MCSection *getExplicitSectionGlobal(const GlobalValue *GV, SectionKind Kind,
-        Mangler &Mang, const TargetMachine &TM) const override;
+    MCSection *getExplicitSectionGlobal(const GlobalObject *GO,
+                                        SectionKind Kind,
+                                        const TargetMachine &TM) const override;
 
-    bool isGlobalInSmallSection(const GlobalValue *GV, const TargetMachine &TM)
-        const;
+    bool isGlobalInSmallSection(const GlobalObject *GO,
+                                const TargetMachine &TM) const;
 
     bool isSmallDataEnabled() const;
 
     unsigned getSmallDataSize() const;
+
+    bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
+                                             const Function &F) const override;
+
+    const Function *getLutUsedFunction(const GlobalObject *GO) const;
 
   private:
     MCSectionELF *SmallDataSection;
@@ -39,8 +45,13 @@ namespace llvm {
     unsigned getSmallestAddressableSize(const Type *Ty, const GlobalValue *GV,
         const TargetMachine &TM) const;
 
-    MCSection *selectSmallSectionForGlobal(const GlobalValue *GV,
-        SectionKind Kind, Mangler &Mang, const TargetMachine &TM) const;
+    MCSection *selectSmallSectionForGlobal(const GlobalObject *GO,
+                                           SectionKind Kind,
+                                           const TargetMachine &TM) const;
+
+    MCSection *selectSectionForLookupTable(const GlobalObject *GO,
+                                           const TargetMachine &TM,
+                                           const Function *Fn) const;
   };
 
 } // namespace llvm

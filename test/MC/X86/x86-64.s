@@ -99,6 +99,10 @@
 // CHECK: shll $2, %eax
         sall $2, %eax
 
+// CHECK: rep movsb
+rep     # comment
+movsb
+
 // CHECK: rep
 // CHECK: insb
         rep;insb
@@ -394,11 +398,14 @@ shrd  %cl, %bx, (%rax)
 sldt	%ecx
 sldt	%cx
 
-// CHECK: lcalll	*3135175374 
-// CHECK: ljmpl	*3135175374
-lcall	*0xbadeface
-ljmp	*0xbadeface
-
+// CHECK: lcalll *3135175374 
+// CHECK: ljmpl  *3135175374
+// CHECK: lcalll *(%rax)
+// CHECK: ljmpl *(%rax)
+lcall  *0xbadeface
+ljmp *0xbadeface
+lcall *(%rax)
+ljmpl *(%rax)
 
 // rdar://8444631
 // CHECK: enter	$31438, $0
@@ -414,7 +421,7 @@ enter $0x7ace,$0x7f
 
 // rdar://8456364
 // CHECK: movw	%cs, %ax
-mov %CS, %ax
+mov %cs, %ax
 
 // rdar://8456391
 fcmovb %st(1), %st(0)   // CHECK: fcmovb	%st(1), %st(0)
@@ -449,6 +456,12 @@ mov %rdx, %cr8
 mov %rdx, %cr15
 // CHECK: movq	%rdx, %cr15
 // CHECK: encoding: [0x44,0x0f,0x22,0xfa]
+mov %rdx, %dr15
+// CHECK: movq	%rdx, %dr15
+// CHECK: encoding: [0x44,0x0f,0x23,0xfa]
+mov %rdx, %db15
+// CHECK: movq	%rdx, %dr15
+// CHECK: encoding: [0x44,0x0f,0x23,0xfa]
 
 // rdar://8456371 - Handle commutable instructions written backward.
 // CHECK: 	faddp	%st(1)
@@ -580,8 +593,8 @@ movmskpd	%xmm6, %eax
 fdivrp %st(0), %st(1) // CHECK: encoding: [0xde,0xf9]
 fdivrp %st(1), %st(0) // CHECK: encoding: [0xde,0xf9]
 
-fsubrp %ST(0), %ST(1) // CHECK: encoding: [0xde,0xe9]
-fsubrp %ST(1), %ST(0) // CHECK: encoding: [0xde,0xe9]
+fsubrp %st(0), %st(1) // CHECK: encoding: [0xde,0xe9]
+fsubrp %st(1), %st(0) // CHECK: encoding: [0xde,0xe9]
 
 // also PR8861
 fdivp %st(0), %st(1) // CHECK: encoding: [0xde,0xf1]
@@ -899,41 +912,48 @@ lock/incl 1(%rsp)
 
 lock addq %rsi, (%rdi)
 // CHECK: lock
-// CHECK: encoding: [0xf0]
 // CHECK: addq %rsi, (%rdi)
-// CHECK: encoding: [0x48,0x01,0x37]
+// CHECK: encoding: [0xf0,0x48,0x01,0x37]
 
 lock subq %rsi, (%rdi)
 // CHECK: lock
-// CHECK: encoding: [0xf0]
 // CHECK: subq %rsi, (%rdi)
-// CHECK: encoding: [0x48,0x29,0x37]
+// CHECK: encoding: [0xf0,0x48,0x29,0x37]
 
 lock andq %rsi, (%rdi)
 // CHECK: lock
-// CHECK: encoding: [0xf0]
 // CHECK: andq %rsi, (%rdi)
-// CHECK: encoding: [0x48,0x21,0x37]
+// CHECK: encoding: [0xf0,0x48,0x21,0x37]
 
 lock orq %rsi, (%rdi)
 // CHECK: lock
-// CHECK: encoding: [0xf0]
 // CHECK: orq %rsi, (%rdi)
-// CHECK: encoding: [0x48,0x09,0x37]
+// CHECK: encoding: [0xf0,0x48,0x09,0x37]
 
 lock xorq %rsi, (%rdi)
 // CHECK: lock
-// CHECK: encoding: [0xf0]
 // CHECK: xorq %rsi, (%rdi)
-// CHECK: encoding: [0x48,0x31,0x37]
+// CHECK: encoding: [0xf0,0x48,0x31,0x37]
 
+xacquire lock addq %rax, (%rax)
+// CHECK: xacquire
+// CHECK: encoding: [0xf2]
+// CHECK: lock
+// CHECK: addq %rax, (%rax)
+// CHECK: encoding: [0xf0,0x48,0x01,0x00]
+
+xrelease lock addq %rax, (%rax)
+// CHECK: xrelease
+// CHECK: encoding: [0xf3]
+// CHECK: lock
+// CHECK: addq %rax, (%rax)
+// CHECK: encoding: [0xf0,0x48,0x01,0x00]
 
 // rdar://8033482
 rep movsl
 // CHECK: rep
-// CHECK: encoding: [0xf3]
 // CHECK: movsl
-// CHECK: encoding: [0xa5]
+// CHECK: encoding: [0xf3,0xa5]
 
 
 // rdar://8403974
@@ -1072,8 +1092,8 @@ decl %eax // CHECK:	decl	%eax # encoding: [0xff,0xc8]
 
 
 // rdar://8208615
-mov (%rsi), %gs  // CHECK: movl	(%rsi), %gs # encoding: [0x8e,0x2e]
-mov %gs, (%rsi)  // CHECK: movl	%gs, (%rsi) # encoding: [0x8c,0x2e]
+mov (%rsi), %gs  // CHECK: movw	(%rsi), %gs # encoding: [0x8e,0x2e]
+mov %gs, (%rsi)  // CHECK: movw	%gs, (%rsi) # encoding: [0x8c,0x2e]
 
 
 // rdar://8431864
@@ -1118,6 +1138,12 @@ movq	%mm5, %rbx // CHECK: movd %mm5, %rbx # encoding: [0x48,0x0f,0x7e,0xeb]
 
 rex64 // CHECK: rex64 # encoding: [0x48]
 data16 // CHECK: data16 # encoding: [0x66]
+
+// CHECK: data16
+// CHECK: encoding: [0x66]
+// CHECK: lgdtq 4(%rax)
+// CHECK:  encoding: [0x0f,0x01,0x50,0x04]
+data16 lgdt 4(%rax)
 
 // PR8855
 movq 18446744073709551615,%rbx   // CHECK: movq	-1, %rbx
@@ -1291,17 +1317,13 @@ xsetbv // CHECK: xsetbv # encoding: [0x0f,0x01,0xd1]
 // CHECK: encoding: [0x48,0x0f,0x00,0xc8]
 	str %rax
 
-// CHECK: movd %rdi, %xmm0
+// CHECK: movq %rdi, %xmm0
 // CHECK: encoding: [0x66,0x48,0x0f,0x6e,0xc7]
 	movq %rdi,%xmm0
 
-// CHECK: movd %rdi, %xmm0
-// CHECK: encoding: [0x66,0x48,0x0f,0x6e,0xc7]
-	movd %rdi,%xmm0
-
-// CHECK: movd  %xmm0, %rax
+// CHECK: movq  %xmm0, %rax
 // CHECK: encoding: [0x66,0x48,0x0f,0x7e,0xc0]
-        movd  %xmm0, %rax
+    movq  %xmm0, %rax
 
 // CHECK: movntil %eax, (%rdi)
 // CHECK: encoding: [0x0f,0xc3,0x07]
@@ -1464,13 +1486,13 @@ fdiv %st(1)
 fdivr %st(1)
 
 // CHECK: movd %xmm0, %eax
-// CHECK: movd %xmm0, %rax
-// CHECK: movd %xmm0, %rax
+// CHECK: movq %xmm0, %rax
+// CHECK: movq %xmm0, %rax
 // CHECK: vmovd %xmm0, %eax
 // CHECK: vmovq %xmm0, %rax
 // CHECK: vmovq %xmm0, %rax
 movd %xmm0, %eax
-movd %xmm0, %rax
+movq %xmm0, %rax
 movq %xmm0, %rax
 vmovd %xmm0, %eax
 vmovd %xmm0, %rax
@@ -1496,6 +1518,42 @@ vmovq %xmm0, %rax
 // CHECK:  encoding: [0x0f,0x01,0xfb]
         	mwaitx %rax, %rcx, %rbx
 
+// CHECK:       clzero
+// CHECK:  encoding: [0x0f,0x01,0xfc]
+                clzero
+
+// CHECK:       clzero
+// CHECK:  encoding: [0x0f,0x01,0xfc]
+                clzero %rax
+
 // CHECK: 	movl %r15d, (%r15,%r15)
 // CHECK:  encoding: [0x47,0x89,0x3c,0x3f]
 movl %r15d, (%r15,%r15)
+
+// CHECK: nopq	3735928559(%rbx,%rcx,8)
+// CHECK:  encoding: [0x48,0x0f,0x1f,0x84,0xcb,0xef,0xbe,0xad,0xde]
+nopq	0xdeadbeef(%rbx,%rcx,8)
+
+// CHECK: nopq	%rax
+// CHECK:  encoding: [0x48,0x0f,0x1f,0xc0]
+nopq	%rax
+
+// CHECK: rdpid %rax
+// CHECK: encoding: [0xf3,0x0f,0xc7,0xf8]
+rdpid %rax
+
+// CHECK: ptwritel 3735928559(%rbx,%rcx,8)
+// CHECK:  encoding: [0xf3,0x0f,0xae,0xa4,0xcb,0xef,0xbe,0xad,0xde]
+ptwritel 0xdeadbeef(%rbx,%rcx,8)
+
+// CHECK: ptwritel %eax
+// CHECK:  encoding: [0xf3,0x0f,0xae,0xe0]
+ptwritel %eax
+
+// CHECK: ptwriteq 3735928559(%rbx,%rcx,8)
+// CHECK:  encoding: [0xf3,0x48,0x0f,0xae,0xa4,0xcb,0xef,0xbe,0xad,0xde]
+ptwriteq 0xdeadbeef(%rbx,%rcx,8)
+
+// CHECK: ptwriteq %rax
+// CHECK:  encoding: [0xf3,0x48,0x0f,0xae,0xe0]
+ptwriteq %rax

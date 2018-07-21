@@ -1,4 +1,4 @@
-//===----------- LoopVersioningLICM.cpp - LICM Loop Versioning ------------===//
+//===- LoopVersioningLICM.cpp - LICM Loop Versioning ----------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -60,42 +60,41 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/Statistic.h"
-#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasSetTracker.h"
-#include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/LoopAccessAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolution.h"
-#include "llvm/Analysis/ScalarEvolutionExpander.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/Analysis/ValueTracking.h"
-#include "llvm/Analysis/VectorUtils.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MDBuilder.h"
-#include "llvm/IR/PatternMatch.h"
-#include "llvm/IR/PredIteratorCache.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/LoopVersioning.h"
-#include "llvm/Transforms/Utils/ValueMapper.h"
-
-#define DEBUG_TYPE "loop-versioning-licm"
-static const char* LICMVersioningMetaData =
-    "llvm.loop.licm_versioning.disable";
+#include <cassert>
+#include <memory>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "loop-versioning-licm"
+
+static const char *LICMVersioningMetaData = "llvm.loop.licm_versioning.disable";
 
 /// Threshold minimum allowed percentage for possible
 /// invariant instructions in a loop.
@@ -144,8 +143,15 @@ void llvm::addStringMetadataToLoop(Loop *TheLoop, const char *MDString,
 }
 
 namespace {
+
 struct LoopVersioningLICM : public LoopPass {
   static char ID;
+
+  LoopVersioningLICM()
+      : LoopPass(ID), LoopDepthThreshold(LVLoopDepthThreshold),
+        InvariantThreshold(LVInvarThreshold) {
+    initializeLoopVersioningLICMPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnLoop(Loop *L, LPPassManager &LPM) override;
 
@@ -158,61 +164,87 @@ struct LoopVersioningLICM : public LoopPass {
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addRequiredID(LoopSimplifyID);
     AU.addRequired<ScalarEvolutionWrapperPass>();
-    AU.addRequired<TargetLibraryInfoWrapperPass>();
     AU.addPreserved<AAResultsWrapperPass>();
     AU.addPreserved<GlobalsAAWrapperPass>();
   }
 
-  LoopVersioningLICM()
-      : LoopPass(ID), AA(nullptr), SE(nullptr), LI(nullptr), DT(nullptr),
-        TLI(nullptr), LAA(nullptr), LAI(nullptr), Changed(false),
-        Preheader(nullptr), CurLoop(nullptr), CurAST(nullptr),
-        LoopDepthThreshold(LVLoopDepthThreshold),
-        InvariantThreshold(LVInvarThreshold), LoadAndStoreCounter(0),
-        InvariantCounter(0), IsReadOnlyLoop(true) {
-    initializeLoopVersioningLICMPass(*PassRegistry::getPassRegistry());
+  StringRef getPassName() const override { return "Loop Versioning for LICM"; }
+
+  void reset() {
+    AA = nullptr;
+    SE = nullptr;
+    LAA = nullptr;
+    CurLoop = nullptr;
+    LoadAndStoreCounter = 0;
+    InvariantCounter = 0;
+    IsReadOnlyLoop = true;
+    CurAST.reset();
   }
 
-  AliasAnalysis *AA;         // Current AliasAnalysis information
-  ScalarEvolution *SE;       // Current ScalarEvolution
-  LoopInfo *LI;              // Current LoopInfo
-  DominatorTree *DT;         // Dominator Tree for the current Loop.
-  TargetLibraryInfo *TLI;    // TargetLibraryInfo for constant folding.
-  LoopAccessLegacyAnalysis *LAA;   // Current LoopAccessAnalysis
-  const LoopAccessInfo *LAI; // Current Loop's LoopAccessInfo
+  class AutoResetter {
+  public:
+    AutoResetter(LoopVersioningLICM &LVLICM) : LVLICM(LVLICM) {}
+    ~AutoResetter() { LVLICM.reset(); }
 
-  bool Changed;            // Set to true when we change anything.
-  BasicBlock *Preheader;   // The preheader block of the current loop.
-  Loop *CurLoop;           // The current loop we are working on.
-  AliasSetTracker *CurAST; // AliasSet information for the current loop.
-  ValueToValueMap Strides;
+  private:
+    LoopVersioningLICM &LVLICM;
+  };
 
-  unsigned LoopDepthThreshold;  // Maximum loop nest threshold
-  float InvariantThreshold;     // Minimum invariant threshold
-  unsigned LoadAndStoreCounter; // Counter to track num of load & store
-  unsigned InvariantCounter;    // Counter to track num of invariant
-  bool IsReadOnlyLoop;          // Read only loop marker.
+private:
+  // Current AliasAnalysis information
+  AliasAnalysis *AA = nullptr;
+
+  // Current ScalarEvolution
+  ScalarEvolution *SE = nullptr;
+
+  // Current LoopAccessAnalysis
+  LoopAccessLegacyAnalysis *LAA = nullptr;
+
+  // Current Loop's LoopAccessInfo
+  const LoopAccessInfo *LAI = nullptr;
+
+  // The current loop we are working on.
+  Loop *CurLoop = nullptr;
+
+  // AliasSet information for the current loop.
+  std::unique_ptr<AliasSetTracker> CurAST; 
+
+  // Maximum loop nest threshold
+  unsigned LoopDepthThreshold;
+
+  // Minimum invariant threshold
+  float InvariantThreshold;
+
+  // Counter to track num of load & store
+  unsigned LoadAndStoreCounter = 0;
+
+  // Counter to track num of invariant
+  unsigned InvariantCounter = 0;
+
+  // Read only loop marker.
+  bool IsReadOnlyLoop = true;
 
   bool isLegalForVersioning();
   bool legalLoopStructure();
   bool legalLoopInstructions();
   bool legalLoopMemoryAccesses();
   bool isLoopAlreadyVisited();
-  void setNoAliasToLoop(Loop *);
-  bool instructionSafeForVersioning(Instruction *);
-  const char *getPassName() const override { return "Loop Versioning"; }
+  void setNoAliasToLoop(Loop *VerLoop);
+  bool instructionSafeForVersioning(Instruction *I);
 };
-}
+
+} // end anonymous namespace
 
 /// \brief Check loop structure and confirms it's good for LoopVersioningLICM.
 bool LoopVersioningLICM::legalLoopStructure() {
-  // Loop must have a preheader, if not return false.
-  if (!CurLoop->getLoopPreheader()) {
-    DEBUG(dbgs() << "    loop preheader is missing\n");
+  // Loop must be in loop simplify form.
+  if (!CurLoop->isLoopSimplifyForm()) {
+    DEBUG(
+        dbgs() << "    loop is not in loop-simplify form.\n");
     return false;
   }
   // Loop should be innermost loop, if not return false.
-  if (CurLoop->getSubLoops().size()) {
+  if (!CurLoop->getSubLoops().empty()) {
     DEBUG(dbgs() << "    loop is not innermost\n");
     return false;
   }
@@ -242,11 +274,6 @@ bool LoopVersioningLICM::legalLoopStructure() {
   // Loop depth more then LoopDepthThreshold are not allowed
   if (CurLoop->getLoopDepth() > LoopDepthThreshold) {
     DEBUG(dbgs() << "    loop depth is more then threshold\n");
-    return false;
-  }
-  // Loop should have a dedicated exit block, if not return false.
-  if (!CurLoop->hasDedicatedExits()) {
-    DEBUG(dbgs() << "    loop does not has dedicated exit blocks\n");
     return false;
   }
   // We need to be able to compute the loop trip count in order
@@ -505,29 +532,30 @@ void LoopVersioningLICM::setNoAliasToLoop(Loop *VerLoop) {
 }
 
 bool LoopVersioningLICM::runOnLoop(Loop *L, LPPassManager &LPM) {
+  // This will automatically release all resources hold by the current
+  // LoopVersioningLICM object.
+  AutoResetter Resetter(*this);
+
   if (skipLoop(L))
     return false;
-  Changed = false;
   // Get Analysis information.
-  LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
   AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
   SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-  DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
   LAA = &getAnalysis<LoopAccessLegacyAnalysis>();
   LAI = nullptr;
   // Set Current Loop
   CurLoop = L;
-  // Get the preheader block.
-  Preheader = L->getLoopPreheader();
-  // Initial allocation
-  CurAST = new AliasSetTracker(*AA);
+  CurAST.reset(new AliasSetTracker(*AA));
 
   // Loop over the body of this loop, construct AST.
+  LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
   for (auto *Block : L->getBlocks()) {
     if (LI->getLoopFor(Block) == L) // Ignore blocks in subloop.
       CurAST->add(*Block);          // Incorporate the specified basic block
   }
+
+  bool Changed = false;
+
   // Check feasiblity of LoopVersioningLICM.
   // If versioning found to be feasible and beneficial then proceed
   // else simply return, by cleaning up memory.
@@ -535,6 +563,7 @@ bool LoopVersioningLICM::runOnLoop(Loop *L, LPPassManager &LPM) {
     // Do loop versioning.
     // Create memcheck for memory accessed inside loop.
     // Clone original loop, and set blocks properly.
+    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     LoopVersioning LVer(*LAI, CurLoop, LI, DT, SE, true);
     LVer.versionLoop();
     // Set Loop Versioning metaData for original loop.
@@ -548,12 +577,11 @@ bool LoopVersioningLICM::runOnLoop(Loop *L, LPPassManager &LPM) {
     setNoAliasToLoop(LVer.getVersionedLoop());
     Changed = true;
   }
-  // Delete allocated memory.
-  delete CurAST;
   return Changed;
 }
 
 char LoopVersioningLICM::ID = 0;
+
 INITIALIZE_PASS_BEGIN(LoopVersioningLICM, "loop-versioning-licm",
                       "Loop Versioning For LICM", false, false)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
@@ -564,7 +592,6 @@ INITIALIZE_PASS_DEPENDENCY(LoopAccessLegacyAnalysis)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_END(LoopVersioningLICM, "loop-versioning-licm",
                     "Loop Versioning For LICM", false, false)
 

@@ -20,22 +20,50 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Transforms/Scalar/LoopLoadElimination.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/LoopAccessAnalysis.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpander.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/LoopVersioning.h"
+#include <algorithm>
+#include <cassert>
 #include <forward_list>
+#include <set>
+#include <tuple>
+#include <utility>
+
+using namespace llvm;
 
 #define LLE_OPTION "loop-load-elim"
 #define DEBUG_TYPE LLE_OPTION
-
-using namespace llvm;
 
 static cl::opt<unsigned> CheckPerElim(
     "runtime-check-per-loop-load-elim", cl::Hidden,
@@ -46,7 +74,6 @@ static cl::opt<unsigned> LoadElimSCEVCheckThreshold(
     "loop-load-elimination-scev-check-threshold", cl::init(8), cl::Hidden,
     cl::desc("The maximum number of SCEV checks allowed for Loop "
              "Load Elimination"));
-
 
 STATISTIC(NumLoopLoadEliminted, "Number of loads eliminated by LLE");
 
@@ -107,13 +134,15 @@ struct StoreToLoadForwardingCandidate {
 #endif
 };
 
+} // end anonymous namespace
+
 /// \brief Check if the store dominates all latches, so as long as there is no
 /// intervening store this value will be loaded in the next iteration.
-bool doesStoreDominatesAllLatches(BasicBlock *StoreBlock, Loop *L,
-                                  DominatorTree *DT) {
+static bool doesStoreDominatesAllLatches(BasicBlock *StoreBlock, Loop *L,
+                                         DominatorTree *DT) {
   SmallVector<BasicBlock *, 8> Latches;
   L->getLoopLatches(Latches);
-  return all_of(Latches, [&](const BasicBlock *Latch) {
+  return llvm::all_of(Latches, [&](const BasicBlock *Latch) {
     return DT->dominates(StoreBlock, Latch);
   });
 }
@@ -122,6 +151,8 @@ bool doesStoreDominatesAllLatches(BasicBlock *StoreBlock, Loop *L,
 static bool isLoadConditional(LoadInst *Load, Loop *L) {
   return Load->getParent() != L->getHeader();
 }
+
+namespace {
 
 /// \brief The per-loop class that does most of the work.
 class LoadEliminationForLoop {
@@ -177,8 +208,7 @@ public:
         continue;
 
       // Only progagate the value if they are of the same type.
-      if (Store->getPointerOperand()->getType() !=
-          Load->getPointerOperand()->getType())
+      if (Store->getPointerOperandType() != Load->getPointerOperandType())
         continue;
 
       Candidates.emplace_front(Load, Store);
@@ -222,8 +252,8 @@ public:
       std::forward_list<StoreToLoadForwardingCandidate> &Candidates) {
     // If Store is nullptr it means that we have multiple stores forwarding to
     // this store.
-    typedef DenseMap<LoadInst *, const StoreToLoadForwardingCandidate *>
-        LoadToSingleCandT;
+    using LoadToSingleCandT =
+        DenseMap<LoadInst *, const StoreToLoadForwardingCandidate *>;
     LoadToSingleCandT LoadToSingleCand;
 
     for (const auto &Cand : Candidates) {
@@ -354,15 +384,15 @@ public:
     const auto &AllChecks = LAI.getRuntimePointerChecking()->getChecks();
     SmallVector<RuntimePointerChecking::PointerCheck, 4> Checks;
 
-    std::copy_if(AllChecks.begin(), AllChecks.end(), std::back_inserter(Checks),
-                 [&](const RuntimePointerChecking::PointerCheck &Check) {
-                   for (auto PtrIdx1 : Check.first->Members)
-                     for (auto PtrIdx2 : Check.second->Members)
-                       if (needsChecking(PtrIdx1, PtrIdx2,
-                                         PtrsWrittenOnFwdingPath, CandLoadPtrs))
-                         return true;
-                   return false;
-                 });
+    copy_if(AllChecks, std::back_inserter(Checks),
+            [&](const RuntimePointerChecking::PointerCheck &Check) {
+              for (auto PtrIdx1 : Check.first->Members)
+                for (auto PtrIdx2 : Check.second->Members)
+                  if (needsChecking(PtrIdx1, PtrIdx2, PtrsWrittenOnFwdingPath,
+                                    CandLoadPtrs))
+                    return true;
+              return false;
+            });
 
     DEBUG(dbgs() << "\nPointer Checks (count: " << Checks.size() << "):\n");
     DEBUG(LAI.getRuntimePointerChecking()->printChecks(dbgs(), Checks));
@@ -374,7 +404,6 @@ public:
   void
   propagateStoredValueToLoadUsers(const StoreToLoadForwardingCandidate &Cand,
                                   SCEVExpander &SEE) {
-    //
     // loop:
     //      %x = load %gep_i
     //         = ... %x
@@ -396,7 +425,9 @@ public:
     Value *InitialPtr = SEE.expandCodeFor(PtrSCEV->getStart(), Ptr->getType(),
                                           PH->getTerminator());
     Value *Initial =
-        new LoadInst(InitialPtr, "load_initial", PH->getTerminator());
+        new LoadInst(InitialPtr, "load_initial", /* isVolatile */ false,
+                     Cand.Load->getAlignment(), PH->getTerminator());
+
     PHINode *PHI = PHINode::Create(Initial->getType(), 2, "store_forwarded",
                                    &L->getHeader()->front());
     PHI->addIncoming(Initial, PH);
@@ -410,6 +441,7 @@ public:
   bool processLoop() {
     DEBUG(dbgs() << "\nIn \"" << L->getHeader()->getParent()->getName()
                  << "\" checking " << *L << "\n");
+
     // Look for store-to-load forwarding cases across the
     // backedge. E.g.:
     //
@@ -498,6 +530,11 @@ public:
         return false;
       }
 
+      if (!L->isLoopSimplifyForm()) {
+        DEBUG(dbgs() << "Loop is not is loop-simplify form");
+        return false;
+      }
+
       // Point of no-return, start the transformation.  First, version the loop
       // if necessary.
 
@@ -532,10 +569,42 @@ private:
   PredicatedScalarEvolution PSE;
 };
 
+} // end anonymous namespace
+
+static bool
+eliminateLoadsAcrossLoops(Function &F, LoopInfo &LI, DominatorTree &DT,
+                          function_ref<const LoopAccessInfo &(Loop &)> GetLAI) {
+  // Build up a worklist of inner-loops to transform to avoid iterator
+  // invalidation.
+  // FIXME: This logic comes from other passes that actually change the loop
+  // nest structure. It isn't clear this is necessary (or useful) for a pass
+  // which merely optimizes the use of loads in a loop.
+  SmallVector<Loop *, 8> Worklist;
+
+  for (Loop *TopLevelLoop : LI)
+    for (Loop *L : depth_first(TopLevelLoop))
+      // We only handle inner-most loops.
+      if (L->empty())
+        Worklist.push_back(L);
+
+  // Now walk the identified inner loops.
+  bool Changed = false;
+  for (Loop *L : Worklist) {
+    // The actual work is performed by LoadEliminationForLoop.
+    LoadEliminationForLoop LEL(L, &LI, GetLAI(*L), &DT);
+    Changed |= LEL.processLoop();
+  }
+  return Changed;
+}
+
+namespace {
+
 /// \brief The pass.  Most of the work is delegated to the per-loop
 /// LoadEliminationForLoop class.
 class LoopLoadElimination : public FunctionPass {
 public:
+  static char ID;
+
   LoopLoadElimination() : FunctionPass(ID) {
     initializeLoopLoadEliminationPass(*PassRegistry::getPassRegistry());
   }
@@ -544,32 +613,14 @@ public:
     if (skipFunction(F))
       return false;
 
-    auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-    auto *LAA = &getAnalysis<LoopAccessLegacyAnalysis>();
-    auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-
-    // Build up a worklist of inner-loops to vectorize. This is necessary as the
-    // act of distributing a loop creates new loops and can invalidate iterators
-    // across the loops.
-    SmallVector<Loop *, 8> Worklist;
-
-    for (Loop *TopLevelLoop : *LI)
-      for (Loop *L : depth_first(TopLevelLoop))
-        // We only handle inner-most loops.
-        if (L->empty())
-          Worklist.push_back(L);
-
-    // Now walk the identified inner loops.
-    bool Changed = false;
-    for (Loop *L : Worklist) {
-      const LoopAccessInfo &LAI = LAA->getInfo(L);
-      // The actual work is performed by LoadEliminationForLoop.
-      LoadEliminationForLoop LEL(L, LI, LAI, DT);
-      Changed |= LEL.processLoop();
-    }
+    auto &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+    auto &LAA = getAnalysis<LoopAccessLegacyAnalysis>();
+    auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
 
     // Process each loop nest in the function.
-    return Changed;
+    return eliminateLoadsAcrossLoops(
+        F, LI, DT,
+        [&LAA](Loop &L) -> const LoopAccessInfo & { return LAA.getInfo(&L); });
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -580,13 +631,14 @@ public:
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addRequired<DominatorTreeWrapperPass>();
     AU.addPreserved<DominatorTreeWrapperPass>();
+    AU.addPreserved<GlobalsAAWrapperPass>();
   }
-
-  static char ID;
 };
-}
+
+} // end anonymous namespace
 
 char LoopLoadElimination::ID;
+
 static const char LLE_name[] = "Loop Load Elimination";
 
 INITIALIZE_PASS_BEGIN(LoopLoadElimination, LLE_OPTION, LLE_name, false, false)
@@ -597,8 +649,31 @@ INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_END(LoopLoadElimination, LLE_OPTION, LLE_name, false, false)
 
-namespace llvm {
-FunctionPass *createLoopLoadEliminationPass() {
+FunctionPass *llvm::createLoopLoadEliminationPass() {
   return new LoopLoadElimination();
 }
+
+PreservedAnalyses LoopLoadEliminationPass::run(Function &F,
+                                               FunctionAnalysisManager &AM) {
+  auto &SE = AM.getResult<ScalarEvolutionAnalysis>(F);
+  auto &LI = AM.getResult<LoopAnalysis>(F);
+  auto &TTI = AM.getResult<TargetIRAnalysis>(F);
+  auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
+  auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
+  auto &AA = AM.getResult<AAManager>(F);
+  auto &AC = AM.getResult<AssumptionAnalysis>(F);
+
+  auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+  bool Changed = eliminateLoadsAcrossLoops(
+      F, LI, DT, [&](Loop &L) -> const LoopAccessInfo & {
+        LoopStandardAnalysisResults AR = {AA, AC,  DT,  LI,
+                                          SE, TLI, TTI, nullptr};
+        return LAM.getResult<LoopAccessAnalysis>(L, AR);
+      });
+
+  if (!Changed)
+    return PreservedAnalyses::all();
+
+  PreservedAnalyses PA;
+  return PA;
 }

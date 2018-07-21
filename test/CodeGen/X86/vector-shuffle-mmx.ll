@@ -6,15 +6,15 @@
 
 define void @test0(<1 x i64>* %x) {
 ; X32-LABEL: test0:
-; X32:       ## BB#0: ## %entry
+; X32:       ## %bb.0: ## %entry
 ; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
 ; X32-NEXT:    movsd {{.*#+}} xmm0 = mem[0],zero
-; X32-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,2,3]
-; X32-NEXT:    movq %xmm0, (%eax)
+; X32-NEXT:    shufps {{.*#+}} xmm0 = xmm0[1,1,2,3]
+; X32-NEXT:    movlps %xmm0, (%eax)
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: test0:
-; X64:       ## BB#0: ## %entry
+; X64:       ## %bb.0: ## %entry
 ; X64-NEXT:    movq {{.*#+}} xmm0 = mem[0],zero
 ; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,2,3]
 ; X64-NEXT:    movq %xmm0, (%rdi)
@@ -30,22 +30,17 @@ entry:
 
 define void @test1() {
 ; X32-LABEL: test1:
-; X32:       ## BB#0: ## %entry
+; X32:       ## %bb.0: ## %entry
 ; X32-NEXT:    pushl %edi
-; X32-NEXT:  Ltmp0:
 ; X32-NEXT:    .cfi_def_cfa_offset 8
 ; X32-NEXT:    subl $16, %esp
-; X32-NEXT:  Ltmp1:
 ; X32-NEXT:    .cfi_def_cfa_offset 24
-; X32-NEXT:  Ltmp2:
 ; X32-NEXT:    .cfi_offset %edi, -8
 ; X32-NEXT:    xorps %xmm0, %xmm0
 ; X32-NEXT:    movlps %xmm0, (%esp)
 ; X32-NEXT:    movq (%esp), %mm0
-; X32-NEXT:    pshuflw {{.*#+}} xmm0 = mem[0,2,2,3,4,5,6,7]
-; X32-NEXT:    pshufhw {{.*#+}} xmm0 = xmm0[0,1,2,3,4,6,6,7]
-; X32-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,2,2,3]
-; X32-NEXT:    movq %xmm0, {{[0-9]+}}(%esp)
+; X32-NEXT:    movsd {{.*#+}} xmm0 = mem[0],zero
+; X32-NEXT:    movsd %xmm0, {{[0-9]+}}(%esp)
 ; X32-NEXT:    movq {{[0-9]+}}(%esp), %mm1
 ; X32-NEXT:    xorl %edi, %edi
 ; X32-NEXT:    maskmovq %mm1, %mm0
@@ -54,14 +49,12 @@ define void @test1() {
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: test1:
-; X64:       ## BB#0: ## %entry
+; X64:       ## %bb.0: ## %entry
 ; X64-NEXT:    xorps %xmm0, %xmm0
 ; X64-NEXT:    movlps %xmm0, -{{[0-9]+}}(%rsp)
 ; X64-NEXT:    movq -{{[0-9]+}}(%rsp), %mm0
-; X64-NEXT:    pshuflw {{.*#+}} xmm0 = mem[0,2,2,3,4,5,6,7]
-; X64-NEXT:    pshufhw {{.*#+}} xmm0 = xmm0[0,1,2,3,4,6,6,7]
-; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,2,2,3]
-; X64-NEXT:    movq %xmm0, -{{[0-9]+}}(%rsp)
+; X64-NEXT:    movq {{.*}}(%rip), %rax
+; X64-NEXT:    movq %rax, -{{[0-9]+}}(%rsp)
 ; X64-NEXT:    movq -{{[0-9]+}}(%rsp), %mm1
 ; X64-NEXT:    xorl %edi, %edi
 ; X64-NEXT:    maskmovq %mm1, %mm0
@@ -82,7 +75,7 @@ entry:
 
 define void @test2() nounwind {
 ; X32-LABEL: test2:
-; X32:       ## BB#0: ## %entry
+; X32:       ## %bb.0: ## %entry
 ; X32-NEXT:    movl L_tmp_V2i$non_lazy_ptr, %eax
 ; X32-NEXT:    movsd {{.*#+}} xmm0 = mem[0],zero
 ; X32-NEXT:    unpcklps {{.*#+}} xmm0 = xmm0[0,0,1,1]
@@ -90,7 +83,7 @@ define void @test2() nounwind {
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: test2:
-; X64:       ## BB#0: ## %entry
+; X64:       ## %bb.0: ## %entry
 ; X64-NEXT:    movq _tmp_V2i@{{.*}}(%rip), %rax
 ; X64-NEXT:    movq {{.*#+}} xmm0 = mem[0],zero
 ; X64-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[0,0,1,1]

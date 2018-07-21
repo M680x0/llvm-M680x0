@@ -1,4 +1,5 @@
 ; RUN: opt < %s -S -inline | FileCheck %s
+; RUN: opt < %s -S -passes='cgscc(inline)' | FileCheck %s
 ;
 ; The purpose of this test is to check that inline pass preserves debug info
 ; for variable using the dbg.declare intrinsic.
@@ -42,7 +43,7 @@ define void @bar(float* %dst) #0 !dbg !9 {
 entry:
 
 ; CHECK: [[x_addr_i:%[a-zA-Z0-9.]+]] = alloca float, align 4
-; CHECK-NEXT: void @llvm.dbg.declare(metadata float* [[x_addr_i]], metadata [[m23:![0-9]+]], metadata !{{[0-9]+}}), !dbg [[m24:![0-9]+]]
+; CHECK-NEXT: void @llvm.dbg.declare(metadata float* [[x_addr_i]], metadata [[m23:![0-9]+]], metadata !DIExpression()), !dbg [[m24:![0-9]+]]
 
   %dst.addr = alloca float*, align 4
   store float* %dst, float** %dst.addr, align 4

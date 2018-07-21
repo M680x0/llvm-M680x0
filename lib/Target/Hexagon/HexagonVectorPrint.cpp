@@ -1,4 +1,4 @@
-//===-- HexagonVectorPrint.cpp - Generate vector printing instructions -===//
+//===- HexagonVectorPrint.cpp - Generate vector printing instructions -----===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,42 +13,61 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "hexagon-vector-print"
-
-#include "HexagonTargetMachine.h"
+#include "HexagonInstrInfo.h"
+#include "HexagonSubtarget.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/IR/DebugLoc.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
+#include <string>
+#include <vector>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "hexagon-vector-print"
 
 static cl::opt<bool> TraceHexVectorStoresOnly("trace-hex-vector-stores-only",
   cl::Hidden, cl::ZeroOrMore, cl::init(false),
   cl::desc("Enables tracing of vector stores"));
 
 namespace llvm {
-  FunctionPass *createHexagonVectorPrint();
-  void initializeHexagonVectorPrintPass(PassRegistry&);
-}
 
+FunctionPass *createHexagonVectorPrint();
+void initializeHexagonVectorPrintPass(PassRegistry&);
+
+} // end namespace llvm
 
 namespace {
 
 class HexagonVectorPrint : public MachineFunctionPass {
-    const HexagonSubtarget     *QST;
-    const HexagonInstrInfo     *QII;
-    const HexagonRegisterInfo  *QRI;
+  const HexagonSubtarget *QST = nullptr;
+  const HexagonInstrInfo *QII = nullptr;
+  const HexagonRegisterInfo *QRI = nullptr;
 
- public:
-    static char ID;
-    HexagonVectorPrint() : MachineFunctionPass(ID),
-      QST(0), QII(0), QRI(0) {
-      initializeHexagonVectorPrintPass(*PassRegistry::getPassRegistry());
-    }
+public:
+  static char ID;
 
-    const char *getPassName() const override {
-      return "Hexagon VectorPrint pass";
-    }
-    bool runOnMachineFunction(MachineFunction &Fn) override;
+  HexagonVectorPrint() : MachineFunctionPass(ID) {
+    initializeHexagonVectorPrintPass(*PassRegistry::getPassRegistry());
+  }
+
+  StringRef getPassName() const override { return "Hexagon VectorPrint pass"; }
+
+  bool runOnMachineFunction(MachineFunction &Fn) override;
 };
+
+} // end anonymous namespace
 
 char HexagonVectorPrint::ID = 0;
 
@@ -58,7 +77,7 @@ static bool isVecReg(unsigned Reg) {
       || (Reg >= Hexagon::Q0 && Reg <= Hexagon::Q3);
 }
 
-std::string getStringReg(unsigned R) {
+static std::string getStringReg(unsigned R) {
   if (R >= Hexagon::V0 && R <= Hexagon::V31) {
     static const char* S[] = { "20", "21", "22", "23", "24", "25", "26", "27",
                         "28", "29", "2a", "2b", "2c", "2d", "2e", "2f",
@@ -78,9 +97,8 @@ static void addAsmInstr(MachineBasicBlock *MBB, unsigned Reg,
                         MachineBasicBlock::instr_iterator I,
                         const DebugLoc &DL, const HexagonInstrInfo *QII,
                         MachineFunction &Fn) {
-
   std::string VDescStr = ".long 0x1dffe0" + getStringReg(Reg);
-  const char *cstr = Fn.createExternalSymbolName(VDescStr.c_str());
+  const char *cstr = Fn.createExternalSymbolName(VDescStr);
   unsigned ExtraInfo = InlineAsm::Extra_HasSideEffects;
   BuildMI(*MBB, I, DL, QII->get(TargetOpcode::INLINEASM))
     .addExternalSymbol(cstr)
@@ -138,7 +156,7 @@ bool HexagonVectorPrint::runOnMachineFunction(MachineFunction &Fn) {
       }
     }
 
-  Changed = VecPrintList.size() > 0;
+  Changed = !VecPrintList.empty();
   if (!Changed)
     return Changed;
 
@@ -179,7 +197,6 @@ bool HexagonVectorPrint::runOnMachineFunction(MachineFunction &Fn) {
   return Changed;
 }
 
-}
 //===----------------------------------------------------------------------===//
 //                         Public Constructor Functions
 //===----------------------------------------------------------------------===//

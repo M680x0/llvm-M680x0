@@ -1,4 +1,4 @@
-//===-- ELFDumper.cpp - ELF-specific dumper ---------------------*- C++ -*-===//
+//===- ELFDumper.cpp - ELF-specific dumper --------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,24 +12,51 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "ARMAttributeParser.h"
 #include "ARMEHABIPrinter.h"
 #include "Error.h"
 #include "ObjDumper.h"
 #include "StackMapPrinter.h"
 #include "llvm-readobj.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/Object/ELF.h"
 #include "llvm/Object/ELFObjectFile.h"
+#include "llvm/Object/ELFTypes.h"
+#include "llvm/Object/Error.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/StackMapParser.h"
+#include "llvm/Support/AMDGPUMetadata.h"
+#include "llvm/Support/ARMAttributeParser.h"
 #include "llvm/Support/ARMBuildAttributes.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Endian.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MipsABIFlags.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cinttypes>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <system_error>
+#include <vector>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -49,21 +76,29 @@ using namespace ELF;
     return std::string(#enum).substr(3);
 
 #define TYPEDEF_ELF_TYPES(ELFT)                                                \
-  typedef ELFFile<ELFT> ELFO;                                                  \
-  typedef typename ELFO::Elf_Shdr Elf_Shdr;                                    \
-  typedef typename ELFO::Elf_Sym Elf_Sym;                                      \
-  typedef typename ELFO::Elf_Dyn Elf_Dyn;                                      \
-  typedef typename ELFO::Elf_Dyn_Range Elf_Dyn_Range;                          \
-  typedef typename ELFO::Elf_Rel Elf_Rel;                                      \
-  typedef typename ELFO::Elf_Rela Elf_Rela;                                    \
-  typedef typename ELFO::Elf_Rela_Range Elf_Rela_Range;                        \
-  typedef typename ELFO::Elf_Phdr Elf_Phdr;                                    \
-  typedef typename ELFO::Elf_Half Elf_Half;                                    \
-  typedef typename ELFO::Elf_Ehdr Elf_Ehdr;                                    \
-  typedef typename ELFO::Elf_Word Elf_Word;                                    \
-  typedef typename ELFO::Elf_Hash Elf_Hash;                                    \
-  typedef typename ELFO::Elf_GnuHash Elf_GnuHash;                              \
-  typedef typename ELFO::uintX_t uintX_t;
+  using ELFO = ELFFile<ELFT>;                                                  \
+  using Elf_Addr = typename ELFO::Elf_Addr;                                    \
+  using Elf_Shdr = typename ELFO::Elf_Shdr;                                    \
+  using Elf_Sym = typename ELFO::Elf_Sym;                                      \
+  using Elf_Dyn = typename ELFO::Elf_Dyn;                                      \
+  using Elf_Dyn_Range = typename ELFO::Elf_Dyn_Range;                          \
+  using Elf_Rel = typename ELFO::Elf_Rel;                                      \
+  using Elf_Rela = typename ELFO::Elf_Rela;                                    \
+  using Elf_Rel_Range = typename ELFO::Elf_Rel_Range;                          \
+  using Elf_Rela_Range = typename ELFO::Elf_Rela_Range;                        \
+  using Elf_Phdr = typename ELFO::Elf_Phdr;                                    \
+  using Elf_Half = typename ELFO::Elf_Half;                                    \
+  using Elf_Ehdr = typename ELFO::Elf_Ehdr;                                    \
+  using Elf_Word = typename ELFO::Elf_Word;                                    \
+  using Elf_Hash = typename ELFO::Elf_Hash;                                    \
+  using Elf_GnuHash = typename ELFO::Elf_GnuHash;                              \
+  using Elf_Sym_Range = typename ELFO::Elf_Sym_Range;                          \
+  using Elf_Versym = typename ELFO::Elf_Versym;                                \
+  using Elf_Verneed = typename ELFO::Elf_Verneed;                              \
+  using Elf_Vernaux = typename ELFO::Elf_Vernaux;                              \
+  using Elf_Verdef = typename ELFO::Elf_Verdef;                                \
+  using Elf_Verdaux = typename ELFO::Elf_Verdaux;                              \
+  using uintX_t = typename ELFO::uintX_t;
 
 namespace {
 
@@ -74,15 +109,16 @@ template <class ELFT> class DumpStyle;
 /// the size, entity size and virtual address are different entries in arbitrary
 /// order (DT_REL, DT_RELSZ, DT_RELENT for example).
 struct DynRegionInfo {
-  DynRegionInfo() : Addr(nullptr), Size(0), EntSize(0) {}
+  DynRegionInfo() = default;
   DynRegionInfo(const void *A, uint64_t S, uint64_t ES)
       : Addr(A), Size(S), EntSize(ES) {}
+
   /// \brief Address in current address space.
-  const void *Addr;
+  const void *Addr = nullptr;
   /// \brief Size in bytes of the region.
-  uint64_t Size;
+  uint64_t Size = 0;
   /// \brief Size of each entity in the region.
-  uint64_t EntSize;
+  uint64_t EntSize = 0;
 
   template <typename Type> ArrayRef<Type> getAsArrayRef() const {
     const Type *Start = reinterpret_cast<const Type *>(Addr);
@@ -126,30 +162,12 @@ public:
 
   void printHashHistogram() override;
 
+  void printNotes() override;
+
 private:
   std::unique_ptr<DumpStyle<ELFT>> ELFDumperStyle;
-  typedef ELFFile<ELFT> ELFO;
-  typedef typename ELFO::Elf_Shdr Elf_Shdr;
-  typedef typename ELFO::Elf_Sym Elf_Sym;
-  typedef typename ELFO::Elf_Sym_Range Elf_Sym_Range;
-  typedef typename ELFO::Elf_Dyn Elf_Dyn;
-  typedef typename ELFO::Elf_Dyn_Range Elf_Dyn_Range;
-  typedef typename ELFO::Elf_Rel Elf_Rel;
-  typedef typename ELFO::Elf_Rela Elf_Rela;
-  typedef typename ELFO::Elf_Rel_Range Elf_Rel_Range;
-  typedef typename ELFO::Elf_Rela_Range Elf_Rela_Range;
-  typedef typename ELFO::Elf_Phdr Elf_Phdr;
-  typedef typename ELFO::Elf_Half Elf_Half;
-  typedef typename ELFO::Elf_Hash Elf_Hash;
-  typedef typename ELFO::Elf_GnuHash Elf_GnuHash;
-  typedef typename ELFO::Elf_Ehdr Elf_Ehdr;
-  typedef typename ELFO::Elf_Word Elf_Word;
-  typedef typename ELFO::uintX_t uintX_t;
-  typedef typename ELFO::Elf_Versym Elf_Versym;
-  typedef typename ELFO::Elf_Verneed Elf_Verneed;
-  typedef typename ELFO::Elf_Vernaux Elf_Vernaux;
-  typedef typename ELFO::Elf_Verdef Elf_Verdef;
-  typedef typename ELFO::Elf_Verdaux Elf_Verdaux;
+
+  TYPEDEF_ELF_TYPES(ELFT)
 
   DynRegionInfo checkDRI(DynRegionInfo DRI) {
     if (DRI.Addr < Obj->base() ||
@@ -206,6 +224,7 @@ private:
         : PointerIntPair<const void *, 1>(verdef, 0) {}
     VersionMapEntry(const Elf_Vernaux *vernaux)
         : PointerIntPair<const void *, 1>(vernaux, 1) {}
+
     bool isNull() const { return getPointer() == nullptr; }
     bool isVerdef() const { return !isNull() && getInt() == 0; }
     bool isVernaux() const { return !isNull() && getInt() == 1; }
@@ -231,6 +250,9 @@ public:
   Elf_Rela_Range dyn_relas() const;
   std::string getFullSymbolName(const Elf_Sym *Symbol, StringRef StrTable,
                                 bool IsDynamic) const;
+  void getSectionNameIndex(const Elf_Sym *Symbol, const Elf_Sym *FirstSym,
+                           StringRef &SectionName,
+                           unsigned &SectionIndex) const;
 
   void printSymbolsHelper(bool IsDynamic) const;
   const Elf_Shdr *getDotSymtabSec() const { return DotSymtabSec; }
@@ -258,7 +280,7 @@ void ELFDumper<ELFT>::printSymbolsHelper(bool IsDynamic) const {
     if (!DotSymtabSec)
       return;
     StrTable = unwrapOrError(Obj->getStringTableForSymtab(*DotSymtabSec));
-    Syms = Obj->symbols(DotSymtabSec);
+    Syms = unwrapOrError(Obj->symbols(DotSymtabSec));
     SymtabName = unwrapOrError(Obj->getSectionName(DotSymtabSec));
     Entries = DotSymtabSec->getEntityCount();
   }
@@ -269,13 +291,16 @@ void ELFDumper<ELFT>::printSymbolsHelper(bool IsDynamic) const {
     ELFDumperStyle->printSymbol(Obj, &Sym, Syms.begin(), StrTable, IsDynamic);
 }
 
+template <class ELFT> class MipsGOTParser;
+
 template <typename ELFT> class DumpStyle {
 public:
   using Elf_Shdr = typename ELFFile<ELFT>::Elf_Shdr;
-  using Elf_Sym =  typename ELFFile<ELFT>::Elf_Sym;
+  using Elf_Sym = typename ELFFile<ELFT>::Elf_Sym;
 
   DumpStyle(ELFDumper<ELFT> *Dumper) : Dumper(Dumper) {}
-  virtual ~DumpStyle() {}
+  virtual ~DumpStyle() = default;
+
   virtual void printFileHeaders(const ELFFile<ELFT> *Obj) = 0;
   virtual void printGroupSections(const ELFFile<ELFT> *Obj) = 0;
   virtual void printRelocations(const ELFFile<ELFT> *Obj) = 0;
@@ -284,25 +309,30 @@ public:
   virtual void printDynamicSymbols(const ELFFile<ELFT> *Obj) = 0;
   virtual void printDynamicRelocations(const ELFFile<ELFT> *Obj) = 0;
   virtual void printSymtabMessage(const ELFFile<ELFT> *obj, StringRef Name,
-                                  size_t Offset) {
-    return;
-  }
+                                  size_t Offset) {}
   virtual void printSymbol(const ELFFile<ELFT> *Obj, const Elf_Sym *Symbol,
                            const Elf_Sym *FirstSym, StringRef StrTable,
                            bool IsDynamic) = 0;
   virtual void printProgramHeaders(const ELFFile<ELFT> *Obj) = 0;
   virtual void printHashHistogram(const ELFFile<ELFT> *Obj) = 0;
+  virtual void printNotes(const ELFFile<ELFT> *Obj) = 0;
+  virtual void printMipsGOT(const MipsGOTParser<ELFT> &Parser) = 0;
+  virtual void printMipsPLT(const MipsGOTParser<ELFT> &Parser) = 0;
   const ELFDumper<ELFT> *dumper() const { return Dumper; }
+
 private:
   const ELFDumper<ELFT> *Dumper;
 };
 
 template <typename ELFT> class GNUStyle : public DumpStyle<ELFT> {
   formatted_raw_ostream OS;
+
 public:
   TYPEDEF_ELF_TYPES(ELFT)
+
   GNUStyle(ScopedPrinter &W, ELFDumper<ELFT> *Dumper)
       : DumpStyle<ELFT>(Dumper), OS(W.getOStream()) {}
+
   void printFileHeaders(const ELFO *Obj) override;
   void printGroupSections(const ELFFile<ELFT> *Obj) override;
   void printRelocations(const ELFO *Obj) override;
@@ -310,15 +340,19 @@ public:
   void printSymbols(const ELFO *Obj) override;
   void printDynamicSymbols(const ELFO *Obj) override;
   void printDynamicRelocations(const ELFO *Obj) override;
-  virtual void printSymtabMessage(const ELFO *Obj, StringRef Name,
-                                  size_t Offset) override;
+  void printSymtabMessage(const ELFO *Obj, StringRef Name,
+                          size_t Offset) override;
   void printProgramHeaders(const ELFO *Obj) override;
   void printHashHistogram(const ELFFile<ELFT> *Obj) override;
+  void printNotes(const ELFFile<ELFT> *Obj) override;
+  void printMipsGOT(const MipsGOTParser<ELFT> &Parser) override;
+  void printMipsPLT(const MipsGOTParser<ELFT> &Parser) override;
 
 private:
   struct Field {
     StringRef Str;
     unsigned Column;
+
     Field(StringRef S, unsigned Col) : Str(S), Column(Col) {}
     Field(unsigned Col) : Str(""), Column(Col) {}
   };
@@ -338,6 +372,8 @@ private:
     OS.flush();
     return OS;
   }
+  void printHashedSymbol(const ELFO *Obj, const Elf_Sym *FirstSym, uint32_t Sym,
+                         StringRef StrTable, uint32_t Bucket);
   void printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
                        const Elf_Rela &R, bool IsRela);
   void printSymbol(const ELFO *Obj, const Elf_Sym *Symbol, const Elf_Sym *First,
@@ -354,6 +390,7 @@ private:
 template <typename ELFT> class LLVMStyle : public DumpStyle<ELFT> {
 public:
   TYPEDEF_ELF_TYPES(ELFT)
+
   LLVMStyle(ScopedPrinter &W, ELFDumper<ELFT> *Dumper)
       : DumpStyle<ELFT>(Dumper), W(W) {}
 
@@ -367,16 +404,20 @@ public:
   void printDynamicRelocations(const ELFO *Obj) override;
   void printProgramHeaders(const ELFO *Obj) override;
   void printHashHistogram(const ELFFile<ELFT> *Obj) override;
+  void printNotes(const ELFFile<ELFT> *Obj) override;
+  void printMipsGOT(const MipsGOTParser<ELFT> &Parser) override;
+  void printMipsPLT(const MipsGOTParser<ELFT> &Parser) override;
 
 private:
   void printRelocation(const ELFO *Obj, Elf_Rela Rel, const Elf_Shdr *SymTab);
   void printDynamicRelocation(const ELFO *Obj, Elf_Rela Rel);
   void printSymbol(const ELFO *Obj, const Elf_Sym *Symbol, const Elf_Sym *First,
                    StringRef StrTable, bool IsDynamic) override;
+
   ScopedPrinter &W;
 };
 
-} // namespace
+} // end anonymous namespace
 
 namespace llvm {
 
@@ -410,7 +451,7 @@ std::error_code createELFDumper(const object::ObjectFile *Obj,
   return readobj_error::unsupported_obj_file_format;
 }
 
-} // namespace llvm
+} // end namespace llvm
 
 // Iterate through the versions needed section, and place each Elf_Vernaux
 // in the VersionMap according to its index.
@@ -530,8 +571,8 @@ static void printVersionDefinitionSection(ELFDumper<ELFT> *Dumper,
                                           const ELFO *Obj,
                                           const typename ELFO::Elf_Shdr *Sec,
                                           ScopedPrinter &W) {
-  typedef typename ELFO::Elf_Verdef VerDef;
-  typedef typename ELFO::Elf_Verdaux VerdAux;
+  using VerDef = typename ELFO::Elf_Verdef;
+  using VerdAux = typename ELFO::Elf_Verdaux;
 
   DictScope SD(W, "SHT_GNU_verdef");
   if (!Sec)
@@ -586,8 +627,8 @@ static void printVersionDependencySection(ELFDumper<ELFT> *Dumper,
                                           const ELFO *Obj,
                                           const typename ELFO::Elf_Shdr *Sec,
                                           ScopedPrinter &W) {
-  typedef typename ELFO::Elf_Verneed VerNeed;
-  typedef typename ELFO::Elf_Vernaux VernAux;
+  using VerNeed = typename ELFO::Elf_Verneed;
+  using VernAux = typename ELFO::Elf_Vernaux;
 
   DictScope SD(W, "SHT_GNU_verneed");
   if (!Sec)
@@ -656,8 +697,8 @@ StringRef ELFDumper<ELFT>::getSymbolVersion(StringRef StrTab,
                        sizeof(Elf_Sym);
 
   // Get the corresponding version index entry
-  const Elf_Versym *vs =
-      Obj->template getEntry<Elf_Versym>(dot_gnu_version_sec, entry_index);
+  const Elf_Versym *vs = unwrapOrError(
+      Obj->template getEntry<Elf_Versym>(dot_gnu_version_sec, entry_index));
   size_t version_index = vs->vs_index & ELF::VERSYM_VERSION;
 
   // Special markers for unversioned symbols.
@@ -705,12 +746,11 @@ std::string ELFDumper<ELFT>::getFullSymbolName(const Elf_Sym *Symbol,
   return FullSymbolName;
 }
 
-template <typename ELFO>
-static void
-getSectionNameIndex(const ELFO &Obj, const typename ELFO::Elf_Sym *Symbol,
-                    const typename ELFO::Elf_Sym *FirstSym,
-                    ArrayRef<typename ELFO::Elf_Word> ShndxTable,
-                    StringRef &SectionName, unsigned &SectionIndex) {
+template <typename ELFT>
+void ELFDumper<ELFT>::getSectionNameIndex(const Elf_Sym *Symbol,
+                                          const Elf_Sym *FirstSym,
+                                          StringRef &SectionName,
+                                          unsigned &SectionIndex) const {
   SectionIndex = Symbol->st_shndx;
   if (Symbol->isUndefined())
     SectionName = "Undefined";
@@ -726,18 +766,18 @@ getSectionNameIndex(const ELFO &Obj, const typename ELFO::Elf_Sym *Symbol,
     SectionName = "Reserved";
   else {
     if (SectionIndex == SHN_XINDEX)
-      SectionIndex =
-          Obj.getExtendedSymbolTableIndex(Symbol, FirstSym, ShndxTable);
-    const typename ELFO::Elf_Shdr *Sec =
-        unwrapOrError(Obj.getSection(SectionIndex));
-    SectionName = unwrapOrError(Obj.getSectionName(Sec));
+      SectionIndex = unwrapOrError(object::getExtendedSymbolTableIndex<ELFT>(
+          Symbol, FirstSym, ShndxTable));
+    const typename ELFT::Shdr *Sec =
+        unwrapOrError(Obj->getSection(SectionIndex));
+    SectionName = unwrapOrError(Obj->getSectionName(Sec));
   }
 }
 
 template <class ELFO>
 static const typename ELFO::Elf_Shdr *
 findNotEmptySectionByAddress(const ELFO *Obj, uint64_t Addr) {
-  for (const auto &Shdr : Obj->sections())
+  for (const auto &Shdr : unwrapOrError(Obj->sections()))
     if (Shdr.sh_addr == Addr && Shdr.sh_size > 0)
       return &Shdr;
   return nullptr;
@@ -746,7 +786,7 @@ findNotEmptySectionByAddress(const ELFO *Obj, uint64_t Addr) {
 template <class ELFO>
 static const typename ELFO::Elf_Shdr *findSectionByName(const ELFO &Obj,
                                                         StringRef Name) {
-  for (const auto &Shdr : Obj.sections()) {
+  for (const auto &Shdr : unwrapOrError(Obj.sections())) {
     if (Name == unwrapOrError(Obj.getSectionName(&Shdr)))
       return &Shdr;
   }
@@ -791,10 +831,22 @@ static const EnumEntry<unsigned> ElfOSABI[] = {
   {"AROS",         "AROS",                 ELF::ELFOSABI_AROS},
   {"FenixOS",      "FenixOS",              ELF::ELFOSABI_FENIXOS},
   {"CloudABI",     "CloudABI",             ELF::ELFOSABI_CLOUDABI},
-  {"C6000_ELFABI", "Bare-metal C6000",     ELF::ELFOSABI_C6000_ELFABI},
-  {"C6000_LINUX",  "Linux C6000",          ELF::ELFOSABI_C6000_LINUX},
-  {"ARM",          "ARM",                  ELF::ELFOSABI_ARM},
   {"Standalone",   "Standalone App",       ELF::ELFOSABI_STANDALONE}
+};
+
+static const EnumEntry<unsigned> AMDGPUElfOSABI[] = {
+  {"AMDGPU_HSA",    "AMDGPU - HSA",    ELF::ELFOSABI_AMDGPU_HSA},
+  {"AMDGPU_PAL",    "AMDGPU - PAL",    ELF::ELFOSABI_AMDGPU_PAL},
+  {"AMDGPU_MESA3D", "AMDGPU - MESA3D", ELF::ELFOSABI_AMDGPU_MESA3D}
+};
+
+static const EnumEntry<unsigned> ARMElfOSABI[] = {
+  {"ARM", "ARM", ELF::ELFOSABI_ARM}
+};
+
+static const EnumEntry<unsigned> C6000ElfOSABI[] = {
+  {"C6000_ELFABI", "Bare-metal C6000", ELF::ELFOSABI_C6000_ELFABI},
+  {"C6000_LINUX",  "Linux C6000",      ELF::ELFOSABI_C6000_LINUX}
 };
 
 static const EnumEntry<unsigned> ElfMachineType[] = {
@@ -938,7 +990,7 @@ static const EnumEntry<unsigned> ElfMachineType[] = {
   ENUM_ENT(EM_L10M,          "EM_L10M"),
   ENUM_ENT(EM_K10M,          "EM_K10M"),
   ENUM_ENT(EM_AARCH64,       "AArch64"),
-  ENUM_ENT(EM_AVR32,         "Atmel AVR 8-bit microcontroller"),
+  ENUM_ENT(EM_AVR32,         "Atmel Corporation 32-bit microprocessor family"),
   ENUM_ENT(EM_STM8,          "STMicroeletronics STM8 8-bit microcontroller"),
   ENUM_ENT(EM_TILE64,        "Tilera TILE64 multicore architecture family"),
   ENUM_ENT(EM_TILEPRO,       "Tilera TILEPro multicore architecture family"),
@@ -954,6 +1006,7 @@ static const EnumEntry<unsigned> ElfMachineType[] = {
   ENUM_ENT(EM_78KOR,         "EM_78KOR"),
   ENUM_ENT(EM_56800EX,       "EM_56800EX"),
   ENUM_ENT(EM_AMDGPU,        "EM_AMDGPU"),
+  ENUM_ENT(EM_RISCV,         "RISC-V"),
   ENUM_ENT(EM_WEBASSEMBLY,   "EM_WEBASSEMBLY"),
   ENUM_ENT(EM_LANAI,         "EM_LANAI"),
   ENUM_ENT(EM_BPF,           "EM_BPF"),
@@ -982,60 +1035,8 @@ static const EnumEntry<unsigned> ElfSymbolTypes[] = {
     {"GNU_IFunc", "IFUNC",   ELF::STT_GNU_IFUNC}};
 
 static const EnumEntry<unsigned> AMDGPUSymbolTypes[] = {
-  { "AMDGPU_HSA_KERNEL",            ELF::STT_AMDGPU_HSA_KERNEL },
-  { "AMDGPU_HSA_INDIRECT_FUNCTION", ELF::STT_AMDGPU_HSA_INDIRECT_FUNCTION },
-  { "AMDGPU_HSA_METADATA",          ELF::STT_AMDGPU_HSA_METADATA }
+  { "AMDGPU_HSA_KERNEL",            ELF::STT_AMDGPU_HSA_KERNEL }
 };
-
-static const char *getElfSectionType(unsigned Arch, unsigned Type) {
-  switch (Arch) {
-  case ELF::EM_ARM:
-    switch (Type) {
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_ARM_EXIDX);
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_ARM_PREEMPTMAP);
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_ARM_ATTRIBUTES);
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_ARM_DEBUGOVERLAY);
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_ARM_OVERLAYSECTION);
-    }
-  case ELF::EM_HEXAGON:
-    switch (Type) { LLVM_READOBJ_ENUM_CASE(ELF, SHT_HEX_ORDERED); }
-  case ELF::EM_X86_64:
-    switch (Type) { LLVM_READOBJ_ENUM_CASE(ELF, SHT_X86_64_UNWIND); }
-  case ELF::EM_MIPS:
-  case ELF::EM_MIPS_RS3_LE:
-    switch (Type) {
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_MIPS_REGINFO);
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_MIPS_OPTIONS);
-    LLVM_READOBJ_ENUM_CASE(ELF, SHT_MIPS_ABIFLAGS);
-    }
-  }
-
-  switch (Type) {
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_NULL              );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_PROGBITS          );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_SYMTAB            );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_STRTAB            );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_RELA              );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_HASH              );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_DYNAMIC           );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_NOTE              );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_NOBITS            );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_REL               );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_SHLIB             );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_DYNSYM            );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_INIT_ARRAY        );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_FINI_ARRAY        );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_PREINIT_ARRAY     );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_GROUP             );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_SYMTAB_SHNDX      );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_GNU_ATTRIBUTES    );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_GNU_HASH          );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_GNU_verdef        );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_GNU_verneed       );
-  LLVM_READOBJ_ENUM_CASE(ELF, SHT_GNU_versym        );
-  default: return "";
-  }
-}
 
 static const char *getGroupType(uint32_t Flag) {
   if (Flag & ELF::GRP_COMDAT)
@@ -1066,11 +1067,8 @@ static const EnumEntry<unsigned> ElfXCoreSectionFlags[] = {
   LLVM_READOBJ_ENUM_ENT(ELF, XCORE_SHF_DP_SECTION)
 };
 
-static const EnumEntry<unsigned> ElfAMDGPUSectionFlags[] = {
-  LLVM_READOBJ_ENUM_ENT(ELF, SHF_AMDGPU_HSA_GLOBAL),
-  LLVM_READOBJ_ENUM_ENT(ELF, SHF_AMDGPU_HSA_READONLY),
-  LLVM_READOBJ_ENUM_ENT(ELF, SHF_AMDGPU_HSA_CODE),
-  LLVM_READOBJ_ENUM_ENT(ELF, SHF_AMDGPU_HSA_AGENT)
+static const EnumEntry<unsigned> ElfARMSectionFlags[] = {
+  LLVM_READOBJ_ENUM_ENT(ELF, SHF_ARM_PURECODE)
 };
 
 static const EnumEntry<unsigned> ElfHexagonSectionFlags[] = {
@@ -1127,13 +1125,6 @@ static const char *getElfSegmentType(unsigned Arch, unsigned Type) {
   // Check potentially overlapped processor-specific
   // program header type.
   switch (Arch) {
-  case ELF::EM_AMDGPU:
-    switch (Type) {
-    LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_GLOBAL_PROGRAM);
-    LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_GLOBAL_AGENT);
-    LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_READONLY_AGENT);
-    LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_CODE_AGENT);
-    }
   case ELF::EM_ARM:
     switch (Type) {
     LLVM_READOBJ_ENUM_CASE(ELF, PT_ARM_EXIDX);
@@ -1163,6 +1154,11 @@ static const char *getElfSegmentType(unsigned Arch, unsigned Type) {
 
   LLVM_READOBJ_ENUM_CASE(ELF, PT_GNU_STACK);
   LLVM_READOBJ_ENUM_CASE(ELF, PT_GNU_RELRO);
+
+  LLVM_READOBJ_ENUM_CASE(ELF, PT_OPENBSD_RANDOMIZE);
+  LLVM_READOBJ_ENUM_CASE(ELF, PT_OPENBSD_WXNEEDED);
+  LLVM_READOBJ_ENUM_CASE(ELF, PT_OPENBSD_BOOTDATA);
+
   default: return "";
   }
 }
@@ -1184,14 +1180,6 @@ static std::string getElfPtType(unsigned Arch, unsigned Type) {
   default:
     // All machine specific PT_* types
     switch (Arch) {
-    case ELF::EM_AMDGPU:
-      switch (Type) {
-        LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_GLOBAL_PROGRAM);
-        LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_GLOBAL_AGENT);
-        LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_READONLY_AGENT);
-        LLVM_READOBJ_ENUM_CASE(ELF, PT_AMDGPU_HSA_LOAD_CODE_AGENT);
-      }
-      return "";
     case ELF::EM_ARM:
       if (Type == ELF::PT_ARM_EXIDX)
         return "EXIDX";
@@ -1266,6 +1254,20 @@ static const EnumEntry<unsigned> ElfHeaderMipsFlags[] = {
   LLVM_READOBJ_ENUM_ENT(ELF, EF_MIPS_ARCH_64R6)
 };
 
+static const EnumEntry<unsigned> ElfHeaderAMDGPUFlags[] = {
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_ARCH_NONE),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_ARCH_R600),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_ARCH_GCN)
+};
+
+static const EnumEntry<unsigned> ElfHeaderRISCVFlags[] = {
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_RISCV_RVC),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_RISCV_FLOAT_ABI_SINGLE),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_RISCV_FLOAT_ABI_DOUBLE),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_RISCV_FLOAT_ABI_QUAD),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_RISCV_RVE)
+};
+
 static const EnumEntry<unsigned> ElfSymOtherFlags[] = {
   LLVM_READOBJ_ENUM_ENT(ELF, STV_INTERNAL),
   LLVM_READOBJ_ENUM_ENT(ELF, STV_HIDDEN),
@@ -1307,9 +1309,8 @@ static const char *getElfMipsOptionsOdkType(unsigned Odk) {
 template <typename ELFT>
 ELFDumper<ELFT>::ELFDumper(const ELFFile<ELFT> *Obj, ScopedPrinter &Writer)
     : ObjDumper(Writer), Obj(Obj) {
-
   SmallVector<const Elf_Phdr *, 4> LoadSegments;
-  for (const Elf_Phdr &Phdr : Obj->program_headers()) {
+  for (const Elf_Phdr &Phdr : unwrapOrError(Obj->program_headers())) {
     if (Phdr.p_type == ELF::PT_DYNAMIC) {
       DynamicTable = createDRIFrom(&Phdr, sizeof(Elf_Dyn));
       continue;
@@ -1319,19 +1320,20 @@ ELFDumper<ELFT>::ELFDumper(const ELFFile<ELFT> *Obj, ScopedPrinter &Writer)
     LoadSegments.push_back(&Phdr);
   }
 
-  for (const Elf_Shdr &Sec : Obj->sections()) {
+  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
     switch (Sec.sh_type) {
     case ELF::SHT_SYMTAB:
       if (DotSymtabSec != nullptr)
-        reportError("Multilpe SHT_SYMTAB");
+        reportError("Multiple SHT_SYMTAB");
       DotSymtabSec = &Sec;
       break;
     case ELF::SHT_DYNSYM:
       if (DynSymRegion.Size)
-        reportError("Multilpe SHT_DYNSYM");
+        reportError("Multiple SHT_DYNSYM");
       DynSymRegion = createDRIFrom(&Sec);
       // This is only used (if Elf_Shdr present)for naming section in GNU style
       DynSymtabName = unwrapOrError(Obj->getSectionName(&Sec));
+      DynamicStringTable = unwrapOrError(Obj->getStringTableForSymtab(Sec));
       break;
     case ELF::SHT_SYMTAB_SHNDX:
       ShndxTable = unwrapOrError(Obj->getSHNDXTable(Sec));
@@ -1348,7 +1350,7 @@ ELFDumper<ELFT>::ELFDumper(const ELFFile<ELFT> *Obj, ScopedPrinter &Writer)
       break;
     case ELF::SHT_GNU_verneed:
       if (dot_gnu_version_r_sec != nullptr)
-        reportError("Multilpe SHT_GNU_verneed");
+        reportError("Multiple SHT_GNU_verneed");
       dot_gnu_version_r_sec = &Sec;
       break;
     }
@@ -1366,8 +1368,11 @@ template <typename ELFT>
 void ELFDumper<ELFT>::parseDynamicTable(
     ArrayRef<const Elf_Phdr *> LoadSegments) {
   auto toMappedAddr = [&](uint64_t VAddr) -> const uint8_t * {
-    const Elf_Phdr *const *I = std::upper_bound(
-        LoadSegments.begin(), LoadSegments.end(), VAddr, compareAddr<ELFT>);
+    const Elf_Phdr *const *I =
+        std::upper_bound(LoadSegments.begin(), LoadSegments.end(), VAddr,
+                         [](uint64_t VAddr, const Elf_Phdr_Impl<ELFT> *Phdr) {
+                           return VAddr < Phdr->p_vaddr;
+                         });
     if (I == LoadSegments.begin())
       report_fatal_error("Virtual address is not in any segment");
     --I;
@@ -1491,11 +1496,42 @@ void ELFDumper<ELFT>::printDynamicSymbols() {
 template <class ELFT> void ELFDumper<ELFT>::printHashHistogram() {
   ELFDumperStyle->printHashHistogram(Obj);
 }
+
+template <class ELFT> void ELFDumper<ELFT>::printNotes() {
+  ELFDumperStyle->printNotes(Obj);
+}
+
 #define LLVM_READOBJ_TYPE_CASE(name) \
   case DT_##name: return #name
 
-static const char *getTypeString(uint64_t Type) {
+static const char *getTypeString(unsigned Arch, uint64_t Type) {
+  switch (Arch) {
+  case EM_HEXAGON:
+    switch (Type) {
+    LLVM_READOBJ_TYPE_CASE(HEXAGON_SYMSZ);
+    LLVM_READOBJ_TYPE_CASE(HEXAGON_VER);
+    LLVM_READOBJ_TYPE_CASE(HEXAGON_PLT);
+    }
+  case EM_MIPS:
+    switch (Type) {
+    LLVM_READOBJ_TYPE_CASE(MIPS_RLD_MAP_REL);
+    LLVM_READOBJ_TYPE_CASE(MIPS_RLD_VERSION);
+    LLVM_READOBJ_TYPE_CASE(MIPS_FLAGS);
+    LLVM_READOBJ_TYPE_CASE(MIPS_BASE_ADDRESS);
+    LLVM_READOBJ_TYPE_CASE(MIPS_LOCAL_GOTNO);
+    LLVM_READOBJ_TYPE_CASE(MIPS_SYMTABNO);
+    LLVM_READOBJ_TYPE_CASE(MIPS_UNREFEXTNO);
+    LLVM_READOBJ_TYPE_CASE(MIPS_GOTSYM);
+    LLVM_READOBJ_TYPE_CASE(MIPS_RLD_MAP);
+    LLVM_READOBJ_TYPE_CASE(MIPS_PLTGOT);
+    LLVM_READOBJ_TYPE_CASE(MIPS_OPTIONS);
+    }
+  }
   switch (Type) {
+  LLVM_READOBJ_TYPE_CASE(ANDROID_REL);
+  LLVM_READOBJ_TYPE_CASE(ANDROID_RELSZ);
+  LLVM_READOBJ_TYPE_CASE(ANDROID_RELA);
+  LLVM_READOBJ_TYPE_CASE(ANDROID_RELASZ);
   LLVM_READOBJ_TYPE_CASE(BIND_NOW);
   LLVM_READOBJ_TYPE_CASE(DEBUG);
   LLVM_READOBJ_TYPE_CASE(FINI);
@@ -1540,17 +1576,8 @@ static const char *getTypeString(uint64_t Type) {
   LLVM_READOBJ_TYPE_CASE(GNU_HASH);
   LLVM_READOBJ_TYPE_CASE(TLSDESC_PLT);
   LLVM_READOBJ_TYPE_CASE(TLSDESC_GOT);
-  LLVM_READOBJ_TYPE_CASE(MIPS_RLD_VERSION);
-  LLVM_READOBJ_TYPE_CASE(MIPS_RLD_MAP_REL);
-  LLVM_READOBJ_TYPE_CASE(MIPS_FLAGS);
-  LLVM_READOBJ_TYPE_CASE(MIPS_BASE_ADDRESS);
-  LLVM_READOBJ_TYPE_CASE(MIPS_LOCAL_GOTNO);
-  LLVM_READOBJ_TYPE_CASE(MIPS_SYMTABNO);
-  LLVM_READOBJ_TYPE_CASE(MIPS_UNREFEXTNO);
-  LLVM_READOBJ_TYPE_CASE(MIPS_GOTSYM);
-  LLVM_READOBJ_TYPE_CASE(MIPS_RLD_MAP);
-  LLVM_READOBJ_TYPE_CASE(MIPS_PLTGOT);
-  LLVM_READOBJ_TYPE_CASE(MIPS_OPTIONS);
+  LLVM_READOBJ_TYPE_CASE(AUXILIARY);
+  LLVM_READOBJ_TYPE_CASE(FILTER);
   default: return "unknown";
   }
 }
@@ -1619,8 +1646,8 @@ static const EnumEntry<unsigned> ElfDynamicDTMipsFlags[] = {
 
 template <typename T, typename TFlag>
 void printFlags(T Value, ArrayRef<EnumEntry<TFlag>> Flags, raw_ostream &OS) {
-  typedef EnumEntry<TFlag> FlagEntry;
-  typedef SmallVector<FlagEntry, 10> FlagVector;
+  using FlagEntry = EnumEntry<TFlag>;
+  using FlagVector = SmallVector<FlagEntry, 10>;
   FlagVector SetFlags;
 
   for (const auto &Flag : Flags) {
@@ -1641,6 +1668,10 @@ StringRef ELFDumper<ELFT>::getDynamicString(uint64_t Value) const {
   if (Value >= DynamicStringTable.size())
     reportError("Invalid dynamic string table reference");
   return StringRef(DynamicStringTable.data() + Value);
+}
+
+static void printLibrary(raw_ostream &OS, const Twine &Tag, const Twine &Name) {
+  OS << Tag << ": [" << Name << "]";
 }
 
 template <class ELFT>
@@ -1703,13 +1734,21 @@ void ELFDumper<ELFT>::printValue(uint64_t Type, uint64_t Value) {
   case DT_INIT_ARRAYSZ:
   case DT_FINI_ARRAYSZ:
   case DT_PREINIT_ARRAYSZ:
+  case DT_ANDROID_RELSZ:
+  case DT_ANDROID_RELASZ:
     OS << Value << " (bytes)";
     break;
   case DT_NEEDED:
-    OS << "SharedLibrary (" << getDynamicString(Value) << ")";
+    printLibrary(OS, "Shared library", getDynamicString(Value));
     break;
   case DT_SONAME:
-    OS << "LibrarySoname (" << getDynamicString(Value) << ")";
+    printLibrary(OS, "Library soname", getDynamicString(Value));
+    break;
+  case DT_AUXILIARY:
+    printLibrary(OS, "Auxiliary library", getDynamicString(Value));
+    break;
+  case DT_FILTER:
+    printLibrary(OS, "Filter library", getDynamicString(Value));
     break;
   case DT_RPATH:
   case DT_RUNPATH:
@@ -1736,6 +1775,7 @@ void ELFDumper<ELFT>::printUnwindInfo() {
 }
 
 namespace {
+
 template <> void ELFDumper<ELFType<support::little, false>>::printUnwindInfo() {
   const unsigned Machine = Obj->getHeader()->e_machine;
   if (Machine == EM_ARM) {
@@ -1745,7 +1785,8 @@ template <> void ELFDumper<ELFType<support::little, false>>::printUnwindInfo() {
   }
   W.startLine() << "UnwindInfo not implemented.\n";
 }
-}
+
+} // end anonymous namespace
 
 template<class ELFT>
 void ELFDumper<ELFT>::printDynamicTable() {
@@ -1779,7 +1820,7 @@ void ELFDumper<ELFT>::printDynamicTable() {
     uintX_t Tag = Entry.getTag();
     ++I;
     W.startLine() << "  " << format_hex(Tag, Is64 ? 18 : 10, opts::Output != opts::GNU) << " "
-                  << format("%-21s", getTypeString(Tag));
+                  << format("%-21s", getTypeString(Obj->getHeader()->e_machine, Tag));
     printValue(Tag, Entry.getVal());
     OS << "\n";
   }
@@ -1791,7 +1832,7 @@ template<class ELFT>
 void ELFDumper<ELFT>::printNeededLibraries() {
   ListScope D(W, "NeededLibraries");
 
-  typedef std::vector<StringRef> LibsTy;
+  using LibsTy = std::vector<StringRef>;
   LibsTy Libs;
 
   for (const auto &Entry : dynamic_table())
@@ -1845,6 +1886,7 @@ void ELFDumper<ELFT>::printAttributes() {
 }
 
 namespace {
+
 template <> void ELFDumper<ELFType<support::little, false>>::printAttributes() {
   if (Obj->getHeader()->e_machine != EM_ARM) {
     W.startLine() << "Attributes not implemented.\n";
@@ -1852,14 +1894,14 @@ template <> void ELFDumper<ELFType<support::little, false>>::printAttributes() {
   }
 
   DictScope BA(W, "BuildAttributes");
-  for (const ELFO::Elf_Shdr &Sec : Obj->sections()) {
+  for (const ELFO::Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
     if (Sec.sh_type != ELF::SHT_ARM_ATTRIBUTES)
       continue;
 
     ArrayRef<uint8_t> Contents = unwrapOrError(Obj->getSectionContents(&Sec));
     if (Contents[0] != ARMBuildAttrs::Format_Version) {
-      errs() << "unrecognised FormatVersion: 0x" << utohexstr(Contents[0])
-             << '\n';
+      errs() << "unrecognised FormatVersion: 0x"
+             << Twine::utohexstr(Contents[0]) << '\n';
       continue;
     }
 
@@ -1867,58 +1909,90 @@ template <> void ELFDumper<ELFType<support::little, false>>::printAttributes() {
     if (Contents.size() == 1)
       continue;
 
-    ARMAttributeParser(W).Parse(Contents);
+    ARMAttributeParser(&W).Parse(Contents, true);
   }
 }
-}
 
-namespace {
 template <class ELFT> class MipsGOTParser {
 public:
-  typedef object::ELFFile<ELFT> ELFO;
-  typedef typename ELFO::Elf_Shdr Elf_Shdr;
-  typedef typename ELFO::Elf_Sym Elf_Sym;
-  typedef typename ELFO::Elf_Dyn_Range Elf_Dyn_Range;
-  typedef typename ELFO::Elf_Addr GOTEntry;
-  typedef typename ELFO::Elf_Rel Elf_Rel;
-  typedef typename ELFO::Elf_Rela Elf_Rela;
+  TYPEDEF_ELF_TYPES(ELFT)
+  using Entry = typename ELFO::Elf_Addr;
+  using Entries = ArrayRef<Entry>;
 
-  MipsGOTParser(ELFDumper<ELFT> *Dumper, const ELFO *Obj,
-                Elf_Dyn_Range DynTable, ScopedPrinter &W);
+  const bool IsStatic;
+  const ELFO * const Obj;
 
-  void parseGOT();
-  void parsePLT();
+  MipsGOTParser(const ELFO *Obj, Elf_Dyn_Range DynTable, Elf_Sym_Range DynSyms);
+
+  bool hasGot() const { return !GotEntries.empty(); }
+  bool hasPlt() const { return !PltEntries.empty(); }
+
+  uint64_t getGp() const;
+
+  const Entry *getGotLazyResolver() const;
+  const Entry *getGotModulePointer() const;
+  const Entry *getPltLazyResolver() const;
+  const Entry *getPltModulePointer() const;
+
+  Entries getLocalEntries() const;
+  Entries getGlobalEntries() const;
+  Entries getOtherEntries() const;
+  Entries getPltEntries() const;
+
+  uint64_t getGotAddress(const Entry * E) const;
+  int64_t getGotOffset(const Entry * E) const;
+  const Elf_Sym *getGotSym(const Entry *E) const;
+
+  uint64_t getPltAddress(const Entry * E) const;
+  const Elf_Sym *getPltSym(const Entry *E) const;
+
+  StringRef getPltStrTable() const { return PltStrTable; }
 
 private:
-  ELFDumper<ELFT> *Dumper;
-  const ELFO *Obj;
-  ScopedPrinter &W;
-  llvm::Optional<uint64_t> DtPltGot;
-  llvm::Optional<uint64_t> DtLocalGotNum;
-  llvm::Optional<uint64_t> DtGotSym;
-  llvm::Optional<uint64_t> DtMipsPltGot;
-  llvm::Optional<uint64_t> DtJmpRel;
+  const Elf_Shdr *GotSec;
+  size_t LocalNum;
+  size_t GlobalNum;
 
-  std::size_t getGOTTotal(ArrayRef<uint8_t> GOT) const;
-  const GOTEntry *makeGOTIter(ArrayRef<uint8_t> GOT, std::size_t EntryNum);
+  const Elf_Shdr *PltSec;
+  const Elf_Shdr *PltRelSec;
+  const Elf_Shdr *PltSymTable;
+  Elf_Sym_Range GotDynSyms;
+  StringRef PltStrTable;
 
-  void printGotEntry(uint64_t GotAddr, const GOTEntry *BeginIt,
-                     const GOTEntry *It);
-  void printGlobalGotEntry(uint64_t GotAddr, const GOTEntry *BeginIt,
-                           const GOTEntry *It, const Elf_Sym *Sym,
-                           StringRef StrTable, bool IsDynamic);
-  void printPLTEntry(uint64_t PLTAddr, const GOTEntry *BeginIt,
-                     const GOTEntry *It, StringRef Purpose);
-  void printPLTEntry(uint64_t PLTAddr, const GOTEntry *BeginIt,
-                     const GOTEntry *It, StringRef StrTable,
-                     const Elf_Sym *Sym);
+  Entries GotEntries;
+  Entries PltEntries;
 };
-}
+
+} // end anonymous namespace
 
 template <class ELFT>
-MipsGOTParser<ELFT>::MipsGOTParser(ELFDumper<ELFT> *Dumper, const ELFO *Obj,
-                                   Elf_Dyn_Range DynTable, ScopedPrinter &W)
-    : Dumper(Dumper), Obj(Obj), W(W) {
+MipsGOTParser<ELFT>::MipsGOTParser(const ELFO *Obj, Elf_Dyn_Range DynTable,
+                                   Elf_Sym_Range DynSyms)
+    : IsStatic(DynTable.empty()), Obj(Obj), GotSec(nullptr), LocalNum(0),
+      GlobalNum(0), PltSec(nullptr), PltRelSec(nullptr), PltSymTable(nullptr) {
+  // See "Global Offset Table" in Chapter 5 in the following document
+  // for detailed GOT description.
+  // ftp://www.linux-mips.org/pub/linux/mips/doc/ABI/mipsabi.pdf
+
+  // Find static GOT secton.
+  if (IsStatic) {
+    GotSec = findSectionByName(*Obj, ".got");
+    if (!GotSec)
+      reportError("Cannot find .got section");
+
+    ArrayRef<uint8_t> Content = unwrapOrError(Obj->getSectionContents(GotSec));
+    GotEntries = Entries(reinterpret_cast<const Entry *>(Content.data()),
+                         Content.size() / sizeof(Entry));
+    LocalNum = GotEntries.size();
+    return;
+  }
+
+  // Lookup dynamic table tags which define GOT/PLT layouts.
+  Optional<uint64_t> DtPltGot;
+  Optional<uint64_t> DtLocalGotNum;
+  Optional<uint64_t> DtGotSym;
+  Optional<uint64_t> DtMipsPltGot;
+  Optional<uint64_t> DtJmpRel;
   for (const auto &Entry : DynTable) {
     switch (Entry.getTag()) {
     case ELF::DT_PLTGOT:
@@ -1938,239 +2012,175 @@ MipsGOTParser<ELFT>::MipsGOTParser(ELFDumper<ELFT> *Dumper, const ELFO *Obj,
       break;
     }
   }
+
+  // Find dynamic GOT section.
+  if (DtPltGot || DtLocalGotNum || DtGotSym) {
+    if (!DtPltGot)
+      report_fatal_error("Cannot find PLTGOT dynamic table tag.");
+    if (!DtLocalGotNum)
+      report_fatal_error("Cannot find MIPS_LOCAL_GOTNO dynamic table tag.");
+    if (!DtGotSym)
+      report_fatal_error("Cannot find MIPS_GOTSYM dynamic table tag.");
+
+    size_t DynSymTotal = DynSyms.size();
+    if (*DtGotSym > DynSymTotal)
+      reportError("MIPS_GOTSYM exceeds a number of dynamic symbols");
+
+    GotSec = findNotEmptySectionByAddress(Obj, *DtPltGot);
+    if (!GotSec)
+      reportError("There is no not empty GOT section at 0x" +
+                  Twine::utohexstr(*DtPltGot));
+
+    LocalNum = *DtLocalGotNum;
+    GlobalNum = DynSymTotal - *DtGotSym;
+
+    ArrayRef<uint8_t> Content = unwrapOrError(Obj->getSectionContents(GotSec));
+    GotEntries = Entries(reinterpret_cast<const Entry *>(Content.data()),
+                         Content.size() / sizeof(Entry));
+    GotDynSyms = DynSyms.drop_front(*DtGotSym);
+  }
+
+  // Find PLT section.
+  if (DtMipsPltGot || DtJmpRel) {
+    if (!DtMipsPltGot)
+      report_fatal_error("Cannot find MIPS_PLTGOT dynamic table tag.");
+    if (!DtJmpRel)
+      report_fatal_error("Cannot find JMPREL dynamic table tag.");
+
+    PltSec = findNotEmptySectionByAddress(Obj, *DtMipsPltGot);
+    if (!PltSec)
+      report_fatal_error("There is no not empty PLTGOT section at 0x " +
+                         Twine::utohexstr(*DtMipsPltGot));
+
+    PltRelSec = findNotEmptySectionByAddress(Obj, *DtJmpRel);
+    if (!PltRelSec)
+      report_fatal_error("There is no not empty RELPLT section at 0x" +
+                         Twine::utohexstr(*DtJmpRel));
+
+    ArrayRef<uint8_t> PltContent =
+        unwrapOrError(Obj->getSectionContents(PltSec));
+    PltEntries = Entries(reinterpret_cast<const Entry *>(PltContent.data()),
+                         PltContent.size() / sizeof(Entry));
+
+    PltSymTable = unwrapOrError(Obj->getSection(PltRelSec->sh_link));
+    PltStrTable = unwrapOrError(Obj->getStringTableForSymtab(*PltSymTable));
+  }
 }
 
-template <class ELFT> void MipsGOTParser<ELFT>::parseGOT() {
-  // See "Global Offset Table" in Chapter 5 in the following document
-  // for detailed GOT description.
-  // ftp://www.linux-mips.org/pub/linux/mips/doc/ABI/mipsabi.pdf
-  if (!DtPltGot) {
-    W.startLine() << "Cannot find PLTGOT dynamic table tag.\n";
-    return;
-  }
-  if (!DtLocalGotNum) {
-    W.startLine() << "Cannot find MIPS_LOCAL_GOTNO dynamic table tag.\n";
-    return;
-  }
-  if (!DtGotSym) {
-    W.startLine() << "Cannot find MIPS_GOTSYM dynamic table tag.\n";
-    return;
-  }
-
-  StringRef StrTable = Dumper->getDynamicStringTable();
-  const Elf_Sym *DynSymBegin = Dumper->dynamic_symbols().begin();
-  const Elf_Sym *DynSymEnd = Dumper->dynamic_symbols().end();
-  std::size_t DynSymTotal = std::size_t(std::distance(DynSymBegin, DynSymEnd));
-
-  if (*DtGotSym > DynSymTotal)
-    report_fatal_error("MIPS_GOTSYM exceeds a number of dynamic symbols");
-
-  std::size_t GlobalGotNum = DynSymTotal - *DtGotSym;
-
-  if (*DtLocalGotNum + GlobalGotNum == 0) {
-    W.startLine() << "GOT is empty.\n";
-    return;
-  }
-
-  const Elf_Shdr *GOTShdr = findNotEmptySectionByAddress(Obj, *DtPltGot);
-  if (!GOTShdr)
-    report_fatal_error("There is no not empty GOT section at 0x" +
-                       Twine::utohexstr(*DtPltGot));
-
-  ArrayRef<uint8_t> GOT = unwrapOrError(Obj->getSectionContents(GOTShdr));
-
-  if (*DtLocalGotNum + GlobalGotNum > getGOTTotal(GOT))
-    report_fatal_error("Number of GOT entries exceeds the size of GOT section");
-
-  const GOTEntry *GotBegin = makeGOTIter(GOT, 0);
-  const GOTEntry *GotLocalEnd = makeGOTIter(GOT, *DtLocalGotNum);
-  const GOTEntry *It = GotBegin;
-
-  DictScope GS(W, "Primary GOT");
-
-  W.printHex("Canonical gp value", GOTShdr->sh_addr + 0x7ff0);
-  {
-    ListScope RS(W, "Reserved entries");
-
-    {
-      DictScope D(W, "Entry");
-      printGotEntry(GOTShdr->sh_addr, GotBegin, It++);
-      W.printString("Purpose", StringRef("Lazy resolver"));
-    }
-
-    if (It != GotLocalEnd && (*It >> (sizeof(GOTEntry) * 8 - 1)) != 0) {
-      DictScope D(W, "Entry");
-      printGotEntry(GOTShdr->sh_addr, GotBegin, It++);
-      W.printString("Purpose", StringRef("Module pointer (GNU extension)"));
-    }
-  }
-  {
-    ListScope LS(W, "Local entries");
-    for (; It != GotLocalEnd; ++It) {
-      DictScope D(W, "Entry");
-      printGotEntry(GOTShdr->sh_addr, GotBegin, It);
-    }
-  }
-  {
-    ListScope GS(W, "Global entries");
-
-    const GOTEntry *GotGlobalEnd =
-        makeGOTIter(GOT, *DtLocalGotNum + GlobalGotNum);
-    const Elf_Sym *GotDynSym = DynSymBegin + *DtGotSym;
-    for (; It != GotGlobalEnd; ++It) {
-      DictScope D(W, "Entry");
-      printGlobalGotEntry(GOTShdr->sh_addr, GotBegin, It, GotDynSym++, StrTable,
-                          true);
-    }
-  }
-
-  std::size_t SpecGotNum = getGOTTotal(GOT) - *DtLocalGotNum - GlobalGotNum;
-  W.printNumber("Number of TLS and multi-GOT entries", uint64_t(SpecGotNum));
-}
-
-template <class ELFT> void MipsGOTParser<ELFT>::parsePLT() {
-  if (!DtMipsPltGot) {
-    W.startLine() << "Cannot find MIPS_PLTGOT dynamic table tag.\n";
-    return;
-  }
-  if (!DtJmpRel) {
-    W.startLine() << "Cannot find JMPREL dynamic table tag.\n";
-    return;
-  }
-
-  const Elf_Shdr *PLTShdr = findNotEmptySectionByAddress(Obj, *DtMipsPltGot);
-  if (!PLTShdr)
-    report_fatal_error("There is no not empty PLTGOT section at 0x " +
-                       Twine::utohexstr(*DtMipsPltGot));
-  ArrayRef<uint8_t> PLT = unwrapOrError(Obj->getSectionContents(PLTShdr));
-
-  const Elf_Shdr *PLTRelShdr = findNotEmptySectionByAddress(Obj, *DtJmpRel);
-  if (!PLTRelShdr)
-    report_fatal_error("There is no not empty RELPLT section at 0x" +
-                       Twine::utohexstr(*DtJmpRel));
-  const Elf_Shdr *SymTable =
-      unwrapOrError(Obj->getSection(PLTRelShdr->sh_link));
-  StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*SymTable));
-
-  const GOTEntry *PLTBegin = makeGOTIter(PLT, 0);
-  const GOTEntry *PLTEnd = makeGOTIter(PLT, getGOTTotal(PLT));
-  const GOTEntry *It = PLTBegin;
-
-  DictScope GS(W, "PLT GOT");
-  {
-    ListScope RS(W, "Reserved entries");
-    printPLTEntry(PLTShdr->sh_addr, PLTBegin, It++, "PLT lazy resolver");
-    if (It != PLTEnd)
-      printPLTEntry(PLTShdr->sh_addr, PLTBegin, It++, "Module pointer");
-  }
-  {
-    ListScope GS(W, "Entries");
-
-    switch (PLTRelShdr->sh_type) {
-    case ELF::SHT_REL:
-      for (const Elf_Rel *RI = Obj->rel_begin(PLTRelShdr),
-                         *RE = Obj->rel_end(PLTRelShdr);
-           RI != RE && It != PLTEnd; ++RI, ++It) {
-        const Elf_Sym *Sym = Obj->getRelocationSymbol(&*RI, SymTable);
-        printPLTEntry(PLTShdr->sh_addr, PLTBegin, It, StrTable, Sym);
-      }
-      break;
-    case ELF::SHT_RELA:
-      for (const Elf_Rela *RI = Obj->rela_begin(PLTRelShdr),
-                          *RE = Obj->rela_end(PLTRelShdr);
-           RI != RE && It != PLTEnd; ++RI, ++It) {
-        const Elf_Sym *Sym = Obj->getRelocationSymbol(&*RI, SymTable);
-        printPLTEntry(PLTShdr->sh_addr, PLTBegin, It, StrTable, Sym);
-      }
-      break;
-    }
-  }
+template <class ELFT> uint64_t MipsGOTParser<ELFT>::getGp() const {
+  return GotSec->sh_addr + 0x7ff0;
 }
 
 template <class ELFT>
-std::size_t MipsGOTParser<ELFT>::getGOTTotal(ArrayRef<uint8_t> GOT) const {
-  return GOT.size() / sizeof(GOTEntry);
+const typename MipsGOTParser<ELFT>::Entry *
+MipsGOTParser<ELFT>::getGotLazyResolver() const {
+  return LocalNum > 0 ? &GotEntries[0] : nullptr;
 }
 
 template <class ELFT>
-const typename MipsGOTParser<ELFT>::GOTEntry *
-MipsGOTParser<ELFT>::makeGOTIter(ArrayRef<uint8_t> GOT, std::size_t EntryNum) {
-  const char *Data = reinterpret_cast<const char *>(GOT.data());
-  return reinterpret_cast<const GOTEntry *>(Data + EntryNum * sizeof(GOTEntry));
+const typename MipsGOTParser<ELFT>::Entry *
+MipsGOTParser<ELFT>::getGotModulePointer() const {
+  if (LocalNum < 2)
+    return nullptr;
+  const Entry &E = GotEntries[1];
+  if ((E >> (sizeof(Entry) * 8 - 1)) == 0)
+    return nullptr;
+  return &E;
 }
 
 template <class ELFT>
-void MipsGOTParser<ELFT>::printGotEntry(uint64_t GotAddr,
-                                        const GOTEntry *BeginIt,
-                                        const GOTEntry *It) {
-  int64_t Offset = std::distance(BeginIt, It) * sizeof(GOTEntry);
-  W.printHex("Address", GotAddr + Offset);
-  W.printNumber("Access", Offset - 0x7ff0);
-  W.printHex("Initial", *It);
+typename MipsGOTParser<ELFT>::Entries
+MipsGOTParser<ELFT>::getLocalEntries() const {
+  size_t Skip = getGotModulePointer() ? 2 : 1;
+  if (LocalNum - Skip <= 0)
+    return Entries();
+  return GotEntries.slice(Skip, LocalNum - Skip);
 }
 
 template <class ELFT>
-void MipsGOTParser<ELFT>::printGlobalGotEntry(
-    uint64_t GotAddr, const GOTEntry *BeginIt, const GOTEntry *It,
-    const Elf_Sym *Sym, StringRef StrTable, bool IsDynamic) {
-  printGotEntry(GotAddr, BeginIt, It);
-
-  W.printHex("Value", Sym->st_value);
-  W.printEnum("Type", Sym->getType(), makeArrayRef(ElfSymbolTypes));
-
-  unsigned SectionIndex = 0;
-  StringRef SectionName;
-  getSectionNameIndex(*Obj, Sym, Dumper->dynamic_symbols().begin(),
-                      Dumper->getShndxTable(), SectionName, SectionIndex);
-  W.printHex("Section", SectionName, SectionIndex);
-
-  std::string FullSymbolName =
-      Dumper->getFullSymbolName(Sym, StrTable, IsDynamic);
-  W.printNumber("Name", FullSymbolName, Sym->st_name);
+typename MipsGOTParser<ELFT>::Entries
+MipsGOTParser<ELFT>::getGlobalEntries() const {
+  if (GlobalNum == 0)
+    return Entries();
+  return GotEntries.slice(LocalNum, GlobalNum);
 }
 
 template <class ELFT>
-void MipsGOTParser<ELFT>::printPLTEntry(uint64_t PLTAddr,
-                                        const GOTEntry *BeginIt,
-                                        const GOTEntry *It, StringRef Purpose) {
-  DictScope D(W, "Entry");
-  int64_t Offset = std::distance(BeginIt, It) * sizeof(GOTEntry);
-  W.printHex("Address", PLTAddr + Offset);
-  W.printHex("Initial", *It);
-  W.printString("Purpose", Purpose);
+typename MipsGOTParser<ELFT>::Entries
+MipsGOTParser<ELFT>::getOtherEntries() const {
+  size_t OtherNum = GotEntries.size() - LocalNum - GlobalNum;
+  if (OtherNum == 0)
+    return Entries();
+  return GotEntries.slice(LocalNum + GlobalNum, OtherNum);
 }
 
 template <class ELFT>
-void MipsGOTParser<ELFT>::printPLTEntry(uint64_t PLTAddr,
-                                        const GOTEntry *BeginIt,
-                                        const GOTEntry *It, StringRef StrTable,
-                                        const Elf_Sym *Sym) {
-  DictScope D(W, "Entry");
-  int64_t Offset = std::distance(BeginIt, It) * sizeof(GOTEntry);
-  W.printHex("Address", PLTAddr + Offset);
-  W.printHex("Initial", *It);
-  W.printHex("Value", Sym->st_value);
-  W.printEnum("Type", Sym->getType(), makeArrayRef(ElfSymbolTypes));
+uint64_t MipsGOTParser<ELFT>::getGotAddress(const Entry *E) const {
+  int64_t Offset = std::distance(GotEntries.data(), E) * sizeof(Entry);
+  return GotSec->sh_addr + Offset;
+}
 
-  unsigned SectionIndex = 0;
-  StringRef SectionName;
-  getSectionNameIndex(*Obj, Sym, Dumper->dynamic_symbols().begin(),
-                      Dumper->getShndxTable(), SectionName, SectionIndex);
-  W.printHex("Section", SectionName, SectionIndex);
+template <class ELFT>
+int64_t MipsGOTParser<ELFT>::getGotOffset(const Entry *E) const {
+  int64_t Offset = std::distance(GotEntries.data(), E) * sizeof(Entry);
+  return Offset - 0x7ff0;
+}
 
-  std::string FullSymbolName = Dumper->getFullSymbolName(Sym, StrTable, true);
-  W.printNumber("Name", FullSymbolName, Sym->st_name);
+template <class ELFT>
+const typename MipsGOTParser<ELFT>::Elf_Sym *
+MipsGOTParser<ELFT>::getGotSym(const Entry *E) const {
+  int64_t Offset = std::distance(GotEntries.data(), E);
+  return &GotDynSyms[Offset - LocalNum];
+}
+
+template <class ELFT>
+const typename MipsGOTParser<ELFT>::Entry *
+MipsGOTParser<ELFT>::getPltLazyResolver() const {
+  return PltEntries.empty() ? nullptr : &PltEntries[0];
+}
+
+template <class ELFT>
+const typename MipsGOTParser<ELFT>::Entry *
+MipsGOTParser<ELFT>::getPltModulePointer() const {
+  return PltEntries.size() < 2 ? nullptr : &PltEntries[1];
+}
+
+template <class ELFT>
+typename MipsGOTParser<ELFT>::Entries
+MipsGOTParser<ELFT>::getPltEntries() const {
+  if (PltEntries.size() <= 2)
+    return Entries();
+  return PltEntries.slice(2, PltEntries.size() - 2);
+}
+
+template <class ELFT>
+uint64_t MipsGOTParser<ELFT>::getPltAddress(const Entry *E) const {
+  int64_t Offset = std::distance(PltEntries.data(), E) * sizeof(Entry);
+  return PltSec->sh_addr + Offset;
+}
+
+template <class ELFT>
+const typename MipsGOTParser<ELFT>::Elf_Sym *
+MipsGOTParser<ELFT>::getPltSym(const Entry *E) const {
+  int64_t Offset = std::distance(getPltEntries().data(), E);
+  if (PltRelSec->sh_type == ELF::SHT_REL) {
+    Elf_Rel_Range Rels = unwrapOrError(Obj->rels(PltRelSec));
+    return unwrapOrError(Obj->getRelocationSymbol(&Rels[Offset], PltSymTable));
+  } else {
+    Elf_Rela_Range Rels = unwrapOrError(Obj->relas(PltRelSec));
+    return unwrapOrError(Obj->getRelocationSymbol(&Rels[Offset], PltSymTable));
+  }
 }
 
 template <class ELFT> void ELFDumper<ELFT>::printMipsPLTGOT() {
-  if (Obj->getHeader()->e_machine != EM_MIPS) {
-    W.startLine() << "MIPS PLT GOT is available for MIPS targets only.\n";
-    return;
-  }
+  if (Obj->getHeader()->e_machine != EM_MIPS)
+    reportError("MIPS PLT GOT is available for MIPS targets only");
 
-  MipsGOTParser<ELFT> GOTParser(this, Obj, dynamic_table(), W);
-  GOTParser.parseGOT();
-  GOTParser.parsePLT();
+  MipsGOTParser<ELFT> Parser(Obj, dynamic_table(), dynamic_symbols());
+  if (Parser.hasGot())
+    ELFDumperStyle->printMipsGOT(Parser);
+  if (Parser.hasPlt())
+    ELFDumperStyle->printMipsPLT(Parser);
 }
 
 static const EnumEntry<unsigned> ElfMipsISAExtType[] = {
@@ -2337,7 +2347,7 @@ template <class ELFT> void ELFDumper<ELFT>::printMipsOptions() {
 
 template <class ELFT> void ELFDumper<ELFT>::printStackMap() const {
   const Elf_Shdr *StackMapSection = nullptr;
-  for (const auto &Sec : Obj->sections()) {
+  for (const auto &Sec : unwrapOrError(Obj->sections())) {
     StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
     if (Name == ".llvm_stackmaps") {
       StackMapSection = &Sec;
@@ -2348,12 +2358,11 @@ template <class ELFT> void ELFDumper<ELFT>::printStackMap() const {
   if (!StackMapSection)
     return;
 
-  StringRef StackMapContents;
   ArrayRef<uint8_t> StackMapContentsArray =
       unwrapOrError(Obj->getSectionContents(StackMapSection));
 
-  prettyPrintStackMap(llvm::outs(), StackMapV1Parser<ELFT::TargetEndianness>(
-                                        StackMapContentsArray));
+  prettyPrintStackMap(outs(), StackMapV2Parser<ELFT::TargetEndianness>(
+                                  StackMapContentsArray));
 }
 
 template <class ELFT> void ELFDumper<ELFT>::printGroupSections() {
@@ -2390,8 +2399,7 @@ template <class ELFT> void GNUStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
   OS << "\n";
   Str = printEnum(e->e_ident[ELF::EI_OSABI], makeArrayRef(ElfOSABI));
   printFields(OS, "OS/ABI:", Str);
-  Str = "0x" + to_hexString(e->e_version);
-  Str = to_hexString(e->e_ident[ELF::EI_ABIVERSION]);
+  Str = "0x" + to_hexString(e->e_ident[ELF::EI_ABIVERSION]);
   printFields(OS, "ABI Version:", Str);
   Str = printEnum(e->e_type, makeArrayRef(ElfObjectFileType));
   printFields(OS, "Type:", Str);
@@ -2421,41 +2429,98 @@ template <class ELFT> void GNUStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
   printFields(OS, "Section header string table index:", Str);
 }
 
-template <class ELFT> void GNUStyle<ELFT>::printGroupSections(const ELFO *Obj) {
-  uint32_t SectionIndex = 0;
-  bool HasGroups = false;
-  for (const Elf_Shdr &Sec : Obj->sections()) {
-    if (Sec.sh_type == ELF::SHT_GROUP) {
-      HasGroups = true;
-      const Elf_Shdr *Symtab = unwrapOrError(Obj->getSection(Sec.sh_link));
-      StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*Symtab));
-      const Elf_Sym *Signature =
-          Obj->template getEntry<Elf_Sym>(Symtab, Sec.sh_info);
-      ArrayRef<Elf_Word> Data = unwrapOrError(
-          Obj->template getSectionContentsAsArray<Elf_Word>(&Sec));
-      StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
-      OS << "\n" << getGroupType(Data[0]) << " group section ["
-         << format_decimal(SectionIndex, 5) << "] `" << Name << "' ["
-         << StrTable.data() + Signature->st_name << "] contains "
-         << (Data.size() - 1) << " sections:\n"
-         << "   [Index]    Name\n";
-      for (auto &Ndx : Data.slice(1)) {
-        auto Sec = unwrapOrError(Obj->getSection(Ndx));
-        const StringRef Name = unwrapOrError(Obj->getSectionName(Sec));
-        OS << "   [" << format_decimal(Ndx, 5) << "]   " << Name
-           << "\n";
-      }
+namespace {
+struct GroupMember {
+  StringRef Name;
+  uint64_t Index;
+};
+
+struct GroupSection {
+  StringRef Name;
+  StringRef Signature;
+  uint64_t ShName;
+  uint64_t Index;
+  uint32_t Type;
+  std::vector<GroupMember> Members;
+};
+
+template <class ELFT>
+std::vector<GroupSection> getGroups(const ELFFile<ELFT> *Obj) {
+  using Elf_Shdr = typename ELFFile<ELFT>::Elf_Shdr;
+  using Elf_Sym = typename ELFFile<ELFT>::Elf_Sym;
+  using Elf_Word = typename ELFFile<ELFT>::Elf_Word;
+
+  std::vector<GroupSection> Ret;
+  uint64_t I = 0;
+  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
+    ++I;
+    if (Sec.sh_type != ELF::SHT_GROUP)
+      continue;
+
+    const Elf_Shdr *Symtab = unwrapOrError(Obj->getSection(Sec.sh_link));
+    StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*Symtab));
+    const Elf_Sym *Sym =
+        unwrapOrError(Obj->template getEntry<Elf_Sym>(Symtab, Sec.sh_info));
+    auto Data =
+        unwrapOrError(Obj->template getSectionContentsAsArray<Elf_Word>(&Sec));
+
+    StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
+    StringRef Signature = StrTable.data() + Sym->st_name;
+    Ret.push_back({Name, Signature, Sec.sh_name, I - 1, Data[0], {}});
+
+    std::vector<GroupMember> &GM = Ret.back().Members;
+    for (uint32_t Ndx : Data.slice(1)) {
+      auto Sec = unwrapOrError(Obj->getSection(Ndx));
+      const StringRef Name = unwrapOrError(Obj->getSectionName(Sec));
+      GM.push_back({Name, Ndx});
     }
-    ++SectionIndex;
   }
-  if (!HasGroups)
+  return Ret;
+}
+
+DenseMap<uint64_t, const GroupSection *>
+mapSectionsToGroups(ArrayRef<GroupSection> Groups) {
+  DenseMap<uint64_t, const GroupSection *> Ret;
+  for (const GroupSection &G : Groups)
+    for (const GroupMember &GM : G.Members)
+      Ret.insert({GM.Index, &G});
+  return Ret;
+}
+
+} // namespace
+
+template <class ELFT> void GNUStyle<ELFT>::printGroupSections(const ELFO *Obj) {
+  std::vector<GroupSection> V = getGroups<ELFT>(Obj);
+  DenseMap<uint64_t, const GroupSection *> Map = mapSectionsToGroups(V);
+  for (const GroupSection &G : V) {
+    OS << "\n"
+       << getGroupType(G.Type) << " group section ["
+       << format_decimal(G.Index, 5) << "] `" << G.Name << "' [" << G.Signature
+       << "] contains " << G.Members.size() << " sections:\n"
+       << "   [Index]    Name\n";
+    for (const GroupMember &GM : G.Members) {
+      const GroupSection *MainGroup = Map[GM.Index];
+      if (MainGroup != &G) {
+        OS.flush();
+        errs() << "Error: section [" << format_decimal(GM.Index, 5)
+               << "] in group section [" << format_decimal(G.Index, 5)
+               << "] already in group section ["
+               << format_decimal(MainGroup->Index, 5) << "]";
+        errs().flush();
+        continue;
+      }
+      OS << "   [" << format_decimal(GM.Index, 5) << "]   " << GM.Name << "\n";
+    }
+  }
+
+  if (V.empty())
     OS << "There are no section groups in this file.\n";
 }
 
 template <class ELFT>
 void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
                                      const Elf_Rela &R, bool IsRela) {
-  std::string Offset, Info, Addend = "", Value;
+  std::string Offset, Info, Addend, Value;
   SmallString<32> RelocName;
   StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*SymTab));
   StringRef TargetName;
@@ -2467,7 +2532,7 @@ void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
   // fixed width.
   Field Fields[5] = {0, 10 + Bias, 19 + 2 * Bias, 42 + 2 * Bias, 53 + 2 * Bias};
   Obj->getRelocationTypeName(R.getType(Obj->isMips64EL()), RelocName);
-  Sym = Obj->getRelocationSymbol(&R, SymTab);
+  Sym = unwrapOrError(Obj->getRelocationSymbol(&R, SymTab));
   if (Sym && Sym->getType() == ELF::STT_SECTION) {
     const Elf_Shdr *Sec = unwrapOrError(
         Obj->getSection(Sym, SymTab, this->dumper()->getShndxTable()));
@@ -2518,8 +2583,10 @@ static inline void printRelocHeader(raw_ostream &OS, bool Is64, bool IsRela) {
 
 template <class ELFT> void GNUStyle<ELFT>::printRelocations(const ELFO *Obj) {
   bool HasRelocSections = false;
-  for (const Elf_Shdr &Sec : Obj->sections()) {
-    if (Sec.sh_type != ELF::SHT_REL && Sec.sh_type != ELF::SHT_RELA)
+  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
+    if (Sec.sh_type != ELF::SHT_REL && Sec.sh_type != ELF::SHT_RELA &&
+        Sec.sh_type != ELF::SHT_ANDROID_REL &&
+        Sec.sh_type != ELF::SHT_ANDROID_RELA)
       continue;
     HasRelocSections = true;
     StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
@@ -2528,19 +2595,29 @@ template <class ELFT> void GNUStyle<ELFT>::printRelocations(const ELFO *Obj) {
     OS << "\nRelocation section '" << Name << "' at offset 0x"
        << to_hexString(Offset, false) << " contains " << Entries
        << " entries:\n";
-    printRelocHeader(OS,  ELFT::Is64Bits, (Sec.sh_type == ELF::SHT_RELA));
+    printRelocHeader(OS, ELFT::Is64Bits,
+                     Sec.sh_type == ELF::SHT_RELA ||
+                         Sec.sh_type == ELF::SHT_ANDROID_RELA);
     const Elf_Shdr *SymTab = unwrapOrError(Obj->getSection(Sec.sh_link));
-    if (Sec.sh_type == ELF::SHT_REL) {
-      for (const auto &R : Obj->rels(&Sec)) {
+    switch (Sec.sh_type) {
+    case ELF::SHT_REL:
+      for (const auto &R : unwrapOrError(Obj->rels(&Sec))) {
         Elf_Rela Rela;
         Rela.r_offset = R.r_offset;
         Rela.r_info = R.r_info;
         Rela.r_addend = 0;
         printRelocation(Obj, SymTab, Rela, false);
       }
-    } else {
-      for (const auto &R : Obj->relas(&Sec))
+      break;
+    case ELF::SHT_RELA:
+      for (const auto &R : unwrapOrError(Obj->relas(&Sec)))
         printRelocation(Obj, SymTab, R, true);
+      break;
+    case ELF::SHT_ANDROID_REL:
+    case ELF::SHT_ANDROID_RELA:
+      for (const auto &R : unwrapOrError(Obj->android_relas(&Sec)))
+        printRelocation(Obj, SymTab, R, Sec.sh_type == ELF::SHT_ANDROID_RELA);
+      break;
     }
   }
   if (!HasRelocSections)
@@ -2549,6 +2626,7 @@ template <class ELFT> void GNUStyle<ELFT>::printRelocations(const ELFO *Obj) {
 
 std::string getSectionTypeString(unsigned Arch, unsigned Type) {
   using namespace ELF;
+
   switch (Arch) {
   case EM_ARM:
     switch (Type) {
@@ -2577,6 +2655,8 @@ std::string getSectionTypeString(unsigned Arch, unsigned Type) {
       return "MIPS_OPTIONS";
     case SHT_MIPS_ABIFLAGS:
       return "MIPS_ABIFLAGS";
+    case SHT_MIPS_DWARF:
+      return "SHT_MIPS_DWARF";
     }
   }
   switch (Type) {
@@ -2614,6 +2694,8 @@ std::string getSectionTypeString(unsigned Arch, unsigned Type) {
     return "GROUP";
   case SHT_SYMTAB_SHNDX:
     return "SYMTAB SECTION INDICES";
+  case SHT_LLVM_ODRTAB:
+    return "LLVM_ODRTAB";
   // FIXME: Parse processor specific GNU attributes
   case SHT_GNU_ATTRIBUTES:
     return "ATTRIBUTES";
@@ -2664,7 +2746,7 @@ template <class ELFT> void GNUStyle<ELFT>::printSections(const ELFO *Obj) {
     printField(f);
   OS << "\n";
 
-  for (const Elf_Shdr &Sec : Obj->sections()) {
+  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
     Number = to_string(SectionIndex);
     Fields[0].Str = Number;
     Fields[1].Str = unwrapOrError(Obj->getSectionName(&Sec));
@@ -2713,7 +2795,7 @@ template <class ELFT> void GNUStyle<ELFT>::printSections(const ELFO *Obj) {
 template <class ELFT>
 void GNUStyle<ELFT>::printSymtabMessage(const ELFO *Obj, StringRef Name,
                                         size_t Entries) {
-  if (Name.size())
+  if (!Name.empty())
     OS << "\nSymbol table '" << Name << "' contains " << Entries
        << " entries:\n";
   else
@@ -2738,8 +2820,9 @@ std::string GNUStyle<ELFT>::getSymbolSectionNdx(const ELFO *Obj,
   case ELF::SHN_COMMON:
     return "COM";
   case ELF::SHN_XINDEX:
-    SectionIndex = Obj->getExtendedSymbolTableIndex(
-        Symbol, FirstSym, this->dumper()->getShndxTable());
+    SectionIndex = unwrapOrError(object::getExtendedSymbolTableIndex<ELFT>(
+        Symbol, FirstSym, this->dumper()->getShndxTable()));
+    LLVM_FALLTHROUGH;
   default:
     // Find if:
     // Processor specific
@@ -2812,15 +2895,120 @@ void GNUStyle<ELFT>::printSymbol(const ELFO *Obj, const Elf_Sym *Symbol,
     printField(Entry);
   OS << "\n";
 }
+template <class ELFT>
+void GNUStyle<ELFT>::printHashedSymbol(const ELFO *Obj, const Elf_Sym *FirstSym,
+                                       uint32_t Sym, StringRef StrTable,
+                                       uint32_t Bucket) {
+  std::string Num, Buc, Name, Value, Size, Binding, Type, Visibility, Section;
+  unsigned Width, Bias = 0;
+  if (ELFT::Is64Bits) {
+    Bias = 8;
+    Width = 16;
+  } else {
+    Bias = 0;
+    Width = 8;
+  }
+  Field Fields[9] = {0,         6,         11,        20 + Bias, 25 + Bias,
+                     34 + Bias, 41 + Bias, 49 + Bias, 53 + Bias};
+  Num = to_string(format_decimal(Sym, 5));
+  Buc = to_string(format_decimal(Bucket, 3)) + ":";
+
+  const auto Symbol = FirstSym + Sym;
+  Value = to_string(format_hex_no_prefix(Symbol->st_value, Width));
+  Size = to_string(format_decimal(Symbol->st_size, 5));
+  unsigned char SymbolType = Symbol->getType();
+  if (Obj->getHeader()->e_machine == ELF::EM_AMDGPU &&
+      SymbolType >= ELF::STT_LOOS && SymbolType < ELF::STT_HIOS)
+    Type = printEnum(SymbolType, makeArrayRef(AMDGPUSymbolTypes));
+  else
+    Type = printEnum(SymbolType, makeArrayRef(ElfSymbolTypes));
+  unsigned Vis = Symbol->getVisibility();
+  Binding = printEnum(Symbol->getBinding(), makeArrayRef(ElfSymbolBindings));
+  Visibility = printEnum(Vis, makeArrayRef(ElfSymbolVisibilities));
+  Section = getSymbolSectionNdx(Obj, Symbol, FirstSym);
+  Name = this->dumper()->getFullSymbolName(Symbol, StrTable, true);
+  Fields[0].Str = Num;
+  Fields[1].Str = Buc;
+  Fields[2].Str = Value;
+  Fields[3].Str = Size;
+  Fields[4].Str = Type;
+  Fields[5].Str = Binding;
+  Fields[6].Str = Visibility;
+  Fields[7].Str = Section;
+  Fields[8].Str = Name;
+  for (auto &Entry : Fields)
+    printField(Entry);
+  OS << "\n";
+}
 
 template <class ELFT> void GNUStyle<ELFT>::printSymbols(const ELFO *Obj) {
+  if (opts::DynamicSymbols)
+    return;
   this->dumper()->printSymbolsHelper(true);
   this->dumper()->printSymbolsHelper(false);
 }
 
 template <class ELFT>
 void GNUStyle<ELFT>::printDynamicSymbols(const ELFO *Obj) {
-  this->dumper()->printSymbolsHelper(true);
+  if (this->dumper()->getDynamicStringTable().empty())
+    return;
+  auto StringTable = this->dumper()->getDynamicStringTable();
+  auto DynSyms = this->dumper()->dynamic_symbols();
+  auto GnuHash = this->dumper()->getGnuHashTable();
+  auto SysVHash = this->dumper()->getHashTable();
+
+  // If no hash or .gnu.hash found, try using symbol table
+  if (GnuHash == nullptr && SysVHash == nullptr)
+    this->dumper()->printSymbolsHelper(true);
+
+  // Try printing .hash
+  if (this->dumper()->getHashTable()) {
+    OS << "\n Symbol table of .hash for image:\n";
+    if (ELFT::Is64Bits)
+      OS << "  Num Buc:    Value          Size   Type   Bind Vis      Ndx Name";
+    else
+      OS << "  Num Buc:    Value  Size   Type   Bind Vis      Ndx Name";
+    OS << "\n";
+
+    uint32_t NBuckets = SysVHash->nbucket;
+    uint32_t NChains = SysVHash->nchain;
+    auto Buckets = SysVHash->buckets();
+    auto Chains = SysVHash->chains();
+    for (uint32_t Buc = 0; Buc < NBuckets; Buc++) {
+      if (Buckets[Buc] == ELF::STN_UNDEF)
+        continue;
+      for (uint32_t Ch = Buckets[Buc]; Ch < NChains; Ch = Chains[Ch]) {
+        if (Ch == ELF::STN_UNDEF)
+          break;
+        printHashedSymbol(Obj, &DynSyms[0], Ch, StringTable, Buc);
+      }
+    }
+  }
+
+  // Try printing .gnu.hash
+  if (GnuHash) {
+    OS << "\n Symbol table of .gnu.hash for image:\n";
+    if (ELFT::Is64Bits)
+      OS << "  Num Buc:    Value          Size   Type   Bind Vis      Ndx Name";
+    else
+      OS << "  Num Buc:    Value  Size   Type   Bind Vis      Ndx Name";
+    OS << "\n";
+    uint32_t NBuckets = GnuHash->nbuckets;
+    auto Buckets = GnuHash->buckets();
+    for (uint32_t Buc = 0; Buc < NBuckets; Buc++) {
+      if (Buckets[Buc] == ELF::STN_UNDEF)
+        continue;
+      uint32_t Index = Buckets[Buc];
+      uint32_t GnuHashable = Index - GnuHash->symndx;
+      // Print whole chain
+      while (true) {
+        printHashedSymbol(Obj, &DynSyms[0], Index++, StringTable, Buc);
+        // Chain ends at symbol with stopper bit
+        if ((GnuHash->values(DynSyms.size())[GnuHashable++] & 1) == 1)
+          break;
+      }
+    }
+  }
 }
 
 static inline std::string printPhdrFlags(unsigned Flag) {
@@ -2912,7 +3100,7 @@ void GNUStyle<ELFT>::printProgramHeaders(const ELFO *Obj) {
   else
     OS << "  Type           Offset   VirtAddr   PhysAddr   FileSiz "
        << "MemSiz  Flg Align\n";
-  for (const auto &Phdr : Obj->program_headers()) {
+  for (const auto &Phdr : unwrapOrError(Obj->program_headers())) {
     Type = getElfPtType(Header->e_machine, Phdr.p_type);
     Offset = to_string(format_hex(Phdr.p_offset, 8));
     VMA = to_string(format_hex(Phdr.p_vaddr, Width));
@@ -2939,10 +3127,10 @@ void GNUStyle<ELFT>::printProgramHeaders(const ELFO *Obj) {
   }
   OS << "\n Section to Segment mapping:\n  Segment Sections...\n";
   int Phnum = 0;
-  for (const Elf_Phdr &Phdr : Obj->program_headers()) {
+  for (const Elf_Phdr &Phdr : unwrapOrError(Obj->program_headers())) {
     std::string Sections;
     OS << format("   %2.2d     ", Phnum++);
-    for (const Elf_Shdr &Sec : Obj->sections()) {
+    for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
       // Check if each section is in a segment and then print mapping.
       // readelf additionally makes sure it does not print zero sized sections
       // at end of segments and for PT_DYNAMIC both start and end of section
@@ -2976,19 +3164,19 @@ void GNUStyle<ELFT>::printDynamicRelocation(const ELFO *Obj, Elf_Rela R,
   Obj->getRelocationTypeName(R.getType(Obj->isMips64EL()), RelocName);
   SymbolName =
       unwrapOrError(Sym->getName(this->dumper()->getDynamicStringTable()));
-  std::string Addend = "", Info, Offset, Value;
+  std::string Addend, Info, Offset, Value;
   Offset = to_string(format_hex_no_prefix(R.r_offset, Width));
   Info = to_string(format_hex_no_prefix(R.r_info, Width));
   Value = to_string(format_hex_no_prefix(Sym->getValue(), Width));
   int64_t RelAddend = R.r_addend;
-  if (SymbolName.size() && IsRela) {
+  if (!SymbolName.empty() && IsRela) {
     if (R.r_addend < 0)
       Addend = " - ";
     else
       Addend = " + ";
   }
 
-  if (!SymbolName.size() && Sym->getValue() == 0)
+  if (SymbolName.empty() && Sym->getValue() == 0)
     Value = "";
 
   if (IsRela)
@@ -3123,7 +3311,7 @@ void GNUStyle<ELFT>::printHashHistogram(const ELFFile<ELFT> *Obj) {
     size_t MaxChain = 1;
     size_t CumulativeNonZero = 0;
 
-    if (Chains.size() == 0 || NBucket == 0)
+    if (Chains.empty() || NBucket == 0)
       return;
 
     std::vector<size_t> ChainLen(NBucket, 0);
@@ -3161,6 +3349,328 @@ void GNUStyle<ELFT>::printHashHistogram(const ELFFile<ELFT> *Obj) {
   }
 }
 
+static std::string getGNUNoteTypeName(const uint32_t NT) {
+  static const struct {
+    uint32_t ID;
+    const char *Name;
+  } Notes[] = {
+      {ELF::NT_GNU_ABI_TAG, "NT_GNU_ABI_TAG (ABI version tag)"},
+      {ELF::NT_GNU_HWCAP, "NT_GNU_HWCAP (DSO-supplied software HWCAP info)"},
+      {ELF::NT_GNU_BUILD_ID, "NT_GNU_BUILD_ID (unique build ID bitstring)"},
+      {ELF::NT_GNU_GOLD_VERSION, "NT_GNU_GOLD_VERSION (gold version)"},
+  };
+
+  for (const auto &Note : Notes)
+    if (Note.ID == NT)
+      return std::string(Note.Name);
+
+  std::string string;
+  raw_string_ostream OS(string);
+  OS << format("Unknown note type (0x%08x)", NT);
+  return OS.str();
+}
+
+static std::string getFreeBSDNoteTypeName(const uint32_t NT) {
+  static const struct {
+    uint32_t ID;
+    const char *Name;
+  } Notes[] = {
+      {ELF::NT_FREEBSD_THRMISC, "NT_THRMISC (thrmisc structure)"},
+      {ELF::NT_FREEBSD_PROCSTAT_PROC, "NT_PROCSTAT_PROC (proc data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_FILES, "NT_PROCSTAT_FILES (files data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_VMMAP, "NT_PROCSTAT_VMMAP (vmmap data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_GROUPS, "NT_PROCSTAT_GROUPS (groups data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_UMASK, "NT_PROCSTAT_UMASK (umask data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_RLIMIT, "NT_PROCSTAT_RLIMIT (rlimit data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_OSREL, "NT_PROCSTAT_OSREL (osreldate data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_PSSTRINGS,
+       "NT_PROCSTAT_PSSTRINGS (ps_strings data)"},
+      {ELF::NT_FREEBSD_PROCSTAT_AUXV, "NT_PROCSTAT_AUXV (auxv data)"},
+  };
+
+  for (const auto &Note : Notes)
+    if (Note.ID == NT)
+      return std::string(Note.Name);
+
+  std::string string;
+  raw_string_ostream OS(string);
+  OS << format("Unknown note type (0x%08x)", NT);
+  return OS.str();
+}
+
+static std::string getAMDGPUNoteTypeName(const uint32_t NT) {
+  static const struct {
+    uint32_t ID;
+    const char *Name;
+  } Notes[] = {
+    {ELF::NT_AMD_AMDGPU_HSA_METADATA,
+     "NT_AMD_AMDGPU_HSA_METADATA (HSA Metadata)"},
+    {ELF::NT_AMD_AMDGPU_ISA,
+     "NT_AMD_AMDGPU_ISA (ISA Version)"},
+    {ELF::NT_AMD_AMDGPU_PAL_METADATA,
+     "NT_AMD_AMDGPU_PAL_METADATA (PAL Metadata)"}
+  };
+
+  for (const auto &Note : Notes)
+    if (Note.ID == NT)
+      return std::string(Note.Name);
+
+  std::string string;
+  raw_string_ostream OS(string);
+  OS << format("Unknown note type (0x%08x)", NT);
+  return OS.str();
+}
+
+template <typename ELFT>
+static void printGNUNote(raw_ostream &OS, uint32_t NoteType,
+                         ArrayRef<typename ELFFile<ELFT>::Elf_Word> Words,
+                         size_t Size) {
+  switch (NoteType) {
+  default:
+    return;
+  case ELF::NT_GNU_ABI_TAG: {
+    static const char *OSNames[] = {
+        "Linux", "Hurd", "Solaris", "FreeBSD", "NetBSD", "Syllable", "NaCl",
+    };
+
+    StringRef OSName = "Unknown";
+    if (Words[0] < array_lengthof(OSNames))
+      OSName = OSNames[Words[0]];
+    uint32_t Major = Words[1], Minor = Words[2], Patch = Words[3];
+
+    if (Words.size() < 4)
+      OS << "    <corrupt GNU_ABI_TAG>";
+    else
+      OS << "    OS: " << OSName << ", ABI: " << Major << "." << Minor << "."
+         << Patch;
+    break;
+  }
+  case ELF::NT_GNU_BUILD_ID: {
+    OS << "    Build ID: ";
+    ArrayRef<uint8_t> ID(reinterpret_cast<const uint8_t *>(Words.data()), Size);
+    for (const auto &B : ID)
+      OS << format_hex_no_prefix(B, 2);
+    break;
+  }
+  case ELF::NT_GNU_GOLD_VERSION:
+    OS << "    Version: "
+       << StringRef(reinterpret_cast<const char *>(Words.data()), Size);
+    break;
+  }
+
+  OS << '\n';
+}
+
+template <typename ELFT>
+static void printAMDGPUNote(raw_ostream &OS, uint32_t NoteType,
+                            ArrayRef<typename ELFFile<ELFT>::Elf_Word> Words,
+                            size_t Size) {
+  switch (NoteType) {
+  default:
+    return;
+    case ELF::NT_AMD_AMDGPU_HSA_METADATA:
+      OS << "    HSA Metadata:\n"
+         << StringRef(reinterpret_cast<const char *>(Words.data()), Size);
+      break;
+    case ELF::NT_AMD_AMDGPU_ISA:
+      OS << "    ISA Version:\n"
+         << "        "
+         << StringRef(reinterpret_cast<const char *>(Words.data()), Size);
+      break;
+    case ELF::NT_AMD_AMDGPU_PAL_METADATA:
+      const uint32_t *PALMetadataBegin = reinterpret_cast<const uint32_t *>(Words.data());
+      const uint32_t *PALMetadataEnd = PALMetadataBegin + Size;
+      std::vector<uint32_t> PALMetadata(PALMetadataBegin, PALMetadataEnd);
+      std::string PALMetadataString;
+      auto Error = AMDGPU::PALMD::toString(PALMetadata, PALMetadataString);
+      OS << "    PAL Metadata:\n";
+      if (Error) {
+        OS << "        Invalid";
+        return;
+      }
+      OS << PALMetadataString;
+      break;
+  }
+  OS.flush();
+}
+
+template <class ELFT>
+void GNUStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
+  const Elf_Ehdr *e = Obj->getHeader();
+  bool IsCore = e->e_type == ELF::ET_CORE;
+
+  auto process = [&](const typename ELFFile<ELFT>::Elf_Off Offset,
+                     const typename ELFFile<ELFT>::Elf_Addr Size) {
+    if (Size <= 0)
+      return;
+
+    const auto *P = static_cast<const uint8_t *>(Obj->base() + Offset);
+    const auto *E = P + Size;
+
+    OS << "Displaying notes found at file offset " << format_hex(Offset, 10)
+       << " with length " << format_hex(Size, 10) << ":\n"
+       << "  Owner                 Data size\tDescription\n";
+
+    while (P < E) {
+      const Elf_Word *Words = reinterpret_cast<const Elf_Word *>(&P[0]);
+
+      uint32_t NameSize = Words[0];
+      uint32_t DescriptorSize = Words[1];
+      uint32_t Type = Words[2];
+
+      ArrayRef<Elf_Word> Descriptor(&Words[3 + (alignTo<4>(NameSize) / 4)],
+                                    alignTo<4>(DescriptorSize) / 4);
+
+      StringRef Name;
+      if (NameSize)
+        Name =
+            StringRef(reinterpret_cast<const char *>(&Words[3]), NameSize - 1);
+
+      OS << "  " << Name << std::string(22 - NameSize, ' ')
+         << format_hex(DescriptorSize, 10) << '\t';
+
+      if (Name == "GNU") {
+        OS << getGNUNoteTypeName(Type) << '\n';
+        printGNUNote<ELFT>(OS, Type, Descriptor, DescriptorSize);
+      } else if (Name == "FreeBSD") {
+        OS << getFreeBSDNoteTypeName(Type) << '\n';
+      } else if (Name == "AMD") {
+        OS << getAMDGPUNoteTypeName(Type) << '\n';
+        printAMDGPUNote<ELFT>(OS, Type, Descriptor, DescriptorSize);
+      } else {
+        OS << "Unknown note type: (" << format_hex(Type, 10) << ')';
+      }
+      OS << '\n';
+
+      P = P + 3 * sizeof(Elf_Word) + alignTo<4>(NameSize) +
+          alignTo<4>(DescriptorSize);
+    }
+  };
+
+  if (IsCore) {
+    for (const auto &P : unwrapOrError(Obj->program_headers()))
+      if (P.p_type == PT_NOTE)
+        process(P.p_offset, P.p_filesz);
+  } else {
+    for (const auto &S : unwrapOrError(Obj->sections()))
+      if (S.sh_type == SHT_NOTE)
+        process(S.sh_offset, S.sh_size);
+  }
+}
+
+template <class ELFT>
+void GNUStyle<ELFT>::printMipsGOT(const MipsGOTParser<ELFT> &Parser) {
+  size_t Bias = ELFT::Is64Bits ? 8 : 0;
+  auto PrintEntry = [&](const Elf_Addr *E, StringRef Purpose) {
+    OS.PadToColumn(2);
+    OS << format_hex_no_prefix(Parser.getGotAddress(E), 8 + Bias);
+    OS.PadToColumn(11 + Bias);
+    OS << format_decimal(Parser.getGotOffset(E), 6) << "(gp)";
+    OS.PadToColumn(22 + Bias);
+    OS << format_hex_no_prefix(*E, 8 + Bias);
+    OS.PadToColumn(31 + 2 * Bias);
+    OS << Purpose << "\n";
+  };
+
+  OS << (Parser.IsStatic ? "Static GOT:\n" : "Primary GOT:\n");
+  OS << " Canonical gp value: "
+     << format_hex_no_prefix(Parser.getGp(), 8 + Bias) << "\n\n";
+
+  OS << " Reserved entries:\n";
+  OS << "   Address     Access  Initial Purpose\n";
+  PrintEntry(Parser.getGotLazyResolver(), "Lazy resolver");
+  if (Parser.getGotModulePointer())
+    PrintEntry(Parser.getGotModulePointer(), "Module pointer (GNU extension)");
+
+  if (!Parser.getLocalEntries().empty()) {
+    OS << "\n";
+    OS << " Local entries:\n";
+    OS << "   Address     Access  Initial\n";
+    for (auto &E : Parser.getLocalEntries())
+      PrintEntry(&E, "");
+  }
+
+  if (Parser.IsStatic)
+    return;
+
+  if (!Parser.getGlobalEntries().empty()) {
+    OS << "\n";
+    OS << " Global entries:\n";
+    OS << "   Address     Access  Initial Sym.Val. Type    Ndx Name\n";
+    for (auto &E : Parser.getGlobalEntries()) {
+      const Elf_Sym *Sym = Parser.getGotSym(&E);
+      std::string SymName = this->dumper()->getFullSymbolName(
+          Sym, this->dumper()->getDynamicStringTable(), false);
+
+      OS.PadToColumn(2);
+      OS << to_string(format_hex_no_prefix(Parser.getGotAddress(&E), 8 + Bias));
+      OS.PadToColumn(11 + Bias);
+      OS << to_string(format_decimal(Parser.getGotOffset(&E), 6)) + "(gp)";
+      OS.PadToColumn(22 + Bias);
+      OS << to_string(format_hex_no_prefix(E, 8 + Bias));
+      OS.PadToColumn(31 + 2 * Bias);
+      OS << to_string(format_hex_no_prefix(Sym->st_value, 8 + Bias));
+      OS.PadToColumn(40 + 3 * Bias);
+      OS << printEnum(Sym->getType(), makeArrayRef(ElfSymbolTypes));
+      OS.PadToColumn(48 + 3 * Bias);
+      OS << getSymbolSectionNdx(Parser.Obj, Sym,
+                                this->dumper()->dynamic_symbols().begin());
+      OS.PadToColumn(52 + 3 * Bias);
+      OS << SymName << "\n";
+    }
+  }
+
+  if (!Parser.getOtherEntries().empty())
+    OS << "\n Number of TLS and multi-GOT entries "
+       << Parser.getOtherEntries().size() << "\n";
+}
+
+template <class ELFT>
+void GNUStyle<ELFT>::printMipsPLT(const MipsGOTParser<ELFT> &Parser) {
+  size_t Bias = ELFT::Is64Bits ? 8 : 0;
+  auto PrintEntry = [&](const Elf_Addr *E, StringRef Purpose) {
+    OS.PadToColumn(2);
+    OS << format_hex_no_prefix(Parser.getGotAddress(E), 8 + Bias);
+    OS.PadToColumn(11 + Bias);
+    OS << format_hex_no_prefix(*E, 8 + Bias);
+    OS.PadToColumn(20 + 2 * Bias);
+    OS << Purpose << "\n";
+  };
+
+  OS << "PLT GOT:\n\n";
+
+  OS << " Reserved entries:\n";
+  OS << "   Address  Initial Purpose\n";
+  PrintEntry(Parser.getPltLazyResolver(), "PLT lazy resolver");
+  if (Parser.getPltModulePointer())
+    PrintEntry(Parser.getGotModulePointer(), "Module pointer");
+
+  if (!Parser.getPltEntries().empty()) {
+    OS << "\n";
+    OS << " Entries:\n";
+    OS << "   Address  Initial Sym.Val. Type    Ndx Name\n";
+    for (auto &E : Parser.getPltEntries()) {
+      const Elf_Sym *Sym = Parser.getPltSym(&E);
+      std::string SymName = this->dumper()->getFullSymbolName(
+          Sym, this->dumper()->getDynamicStringTable(), false);
+
+      OS.PadToColumn(2);
+      OS << to_string(format_hex_no_prefix(Parser.getGotAddress(&E), 8 + Bias));
+      OS.PadToColumn(11 + Bias);
+      OS << to_string(format_hex_no_prefix(E, 8 + Bias));
+      OS.PadToColumn(20 + 2 * Bias);
+      OS << to_string(format_hex_no_prefix(Sym->st_value, 8 + Bias));
+      OS.PadToColumn(29 + 3 * Bias);
+      OS << printEnum(Sym->getType(), makeArrayRef(ElfSymbolTypes));
+      OS.PadToColumn(37 + 3 * Bias);
+      OS << getSymbolSectionNdx(Parser.Obj, Sym,
+                                this->dumper()->dynamic_symbols().begin());
+      OS.PadToColumn(41 + 3 * Bias);
+      OS << SymName << "\n";
+    }
+  }
+}
+
 template <class ELFT> void LLVMStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
   const Elf_Ehdr *e = Obj->getHeader();
   {
@@ -3173,13 +3683,22 @@ template <class ELFT> void LLVMStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
                   makeArrayRef(ElfDataEncoding));
       W.printNumber("FileVersion", e->e_ident[ELF::EI_VERSION]);
 
-      // Handle architecture specific OS/ABI values.
-      if (e->e_machine == ELF::EM_AMDGPU &&
-          e->e_ident[ELF::EI_OSABI] == ELF::ELFOSABI_AMDGPU_HSA)
-        W.printHex("OS/ABI", "AMDGPU_HSA", ELF::ELFOSABI_AMDGPU_HSA);
-      else
-        W.printEnum("OS/ABI", e->e_ident[ELF::EI_OSABI],
-                    makeArrayRef(ElfOSABI));
+      auto OSABI = makeArrayRef(ElfOSABI);
+      if (e->e_ident[ELF::EI_OSABI] >= ELF::ELFOSABI_FIRST_ARCH &&
+          e->e_ident[ELF::EI_OSABI] <= ELF::ELFOSABI_LAST_ARCH) {
+        switch (e->e_machine) {
+        case ELF::EM_AMDGPU:
+          OSABI = makeArrayRef(AMDGPUElfOSABI);
+          break;
+        case ELF::EM_ARM:
+          OSABI = makeArrayRef(ARMElfOSABI);
+          break;
+        case ELF::EM_TI_C6000:
+          OSABI = makeArrayRef(C6000ElfOSABI);
+          break;
+        }
+      }
+      W.printEnum("OS/ABI", e->e_ident[ELF::EI_OSABI], OSABI);
       W.printNumber("ABIVersion", e->e_ident[ELF::EI_ABIVERSION]);
       W.printBinary("Unused", makeArrayRef(e->e_ident).slice(ELF::EI_PAD));
     }
@@ -3194,6 +3713,11 @@ template <class ELFT> void LLVMStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
       W.printFlags("Flags", e->e_flags, makeArrayRef(ElfHeaderMipsFlags),
                    unsigned(ELF::EF_MIPS_ARCH), unsigned(ELF::EF_MIPS_ABI),
                    unsigned(ELF::EF_MIPS_MACH));
+    else if (e->e_machine == EM_AMDGPU)
+      W.printFlags("Flags", e->e_flags, makeArrayRef(ElfHeaderAMDGPUFlags),
+                   unsigned(ELF::EF_AMDGPU_ARCH));
+    else if (e->e_machine == EM_RISCV)
+      W.printFlags("Flags", e->e_flags, makeArrayRef(ElfHeaderRISCVFlags));
     else
       W.printFlags("Flags", e->e_flags);
     W.printNumber("HeaderSize", e->e_ehsize);
@@ -3208,35 +3732,32 @@ template <class ELFT> void LLVMStyle<ELFT>::printFileHeaders(const ELFO *Obj) {
 template <class ELFT>
 void LLVMStyle<ELFT>::printGroupSections(const ELFO *Obj) {
   DictScope Lists(W, "Groups");
-  uint32_t SectionIndex = 0;
-  bool HasGroups = false;
-  for (const Elf_Shdr &Sec : Obj->sections()) {
-    if (Sec.sh_type == ELF::SHT_GROUP) {
-      HasGroups = true;
-      const Elf_Shdr *Symtab = unwrapOrError(Obj->getSection(Sec.sh_link));
-      StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*Symtab));
-      const Elf_Sym *Sym = Obj->template getEntry<Elf_Sym>(Symtab, Sec.sh_info);
-      auto Data = unwrapOrError(
-          Obj->template getSectionContentsAsArray<Elf_Word>(&Sec));
-      DictScope D(W, "Group");
-      StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
-      W.printNumber("Name", Name, Sec.sh_name);
-      W.printNumber("Index", SectionIndex);
-      W.printHex("Type", getGroupType(Data[0]), Data[0]);
-      W.startLine() << "Signature: " << StrTable.data() + Sym->st_name << "\n";
-      {
-        ListScope L(W, "Section(s) in group");
-        size_t Member = 1;
-        while (Member < Data.size()) {
-          auto Sec = unwrapOrError(Obj->getSection(Data[Member]));
-          const StringRef Name = unwrapOrError(Obj->getSectionName(Sec));
-          W.startLine() << Name << " (" << Data[Member++] << ")\n";
-        }
+  std::vector<GroupSection> V = getGroups<ELFT>(Obj);
+  DenseMap<uint64_t, const GroupSection *> Map = mapSectionsToGroups(V);
+  for (const GroupSection &G : V) {
+    DictScope D(W, "Group");
+    W.printNumber("Name", G.Name, G.ShName);
+    W.printNumber("Index", G.Index);
+    W.printHex("Type", getGroupType(G.Type), G.Type);
+    W.startLine() << "Signature: " << G.Signature << "\n";
+
+    ListScope L(W, "Section(s) in group");
+    for (const GroupMember &GM : G.Members) {
+      const GroupSection *MainGroup = Map[GM.Index];
+      if (MainGroup != &G) {
+        W.flush();
+        errs() << "Error: " << GM.Name << " (" << GM.Index
+               << ") in a group " + G.Name + " (" << G.Index
+               << ") is already in a group " + MainGroup->Name + " ("
+               << MainGroup->Index << ")\n";
+        errs().flush();
+        continue;
       }
+      W.startLine() << GM.Name << " (" << GM.Index << ")\n";
     }
-    ++SectionIndex;
   }
-  if (!HasGroups)
+
+  if (V.empty())
     W.startLine() << "There are no group sections in the file.\n";
 }
 
@@ -3244,10 +3765,12 @@ template <class ELFT> void LLVMStyle<ELFT>::printRelocations(const ELFO *Obj) {
   ListScope D(W, "Relocations");
 
   int SectionNumber = -1;
-  for (const Elf_Shdr &Sec : Obj->sections()) {
+  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
     ++SectionNumber;
 
-    if (Sec.sh_type != ELF::SHT_REL && Sec.sh_type != ELF::SHT_RELA)
+    if (Sec.sh_type != ELF::SHT_REL && Sec.sh_type != ELF::SHT_RELA &&
+        Sec.sh_type != ELF::SHT_ANDROID_REL &&
+        Sec.sh_type != ELF::SHT_ANDROID_RELA)
       continue;
 
     StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
@@ -3268,7 +3791,7 @@ void LLVMStyle<ELFT>::printRelocations(const Elf_Shdr *Sec, const ELFO *Obj) {
 
   switch (Sec->sh_type) {
   case ELF::SHT_REL:
-    for (const Elf_Rel &R : Obj->rels(Sec)) {
+    for (const Elf_Rel &R : unwrapOrError(Obj->rels(Sec))) {
       Elf_Rela Rela;
       Rela.r_offset = R.r_offset;
       Rela.r_info = R.r_info;
@@ -3277,7 +3800,12 @@ void LLVMStyle<ELFT>::printRelocations(const Elf_Shdr *Sec, const ELFO *Obj) {
     }
     break;
   case ELF::SHT_RELA:
-    for (const Elf_Rela &R : Obj->relas(Sec))
+    for (const Elf_Rela &R : unwrapOrError(Obj->relas(Sec)))
+      printRelocation(Obj, R, SymTab);
+    break;
+  case ELF::SHT_ANDROID_REL:
+  case ELF::SHT_ANDROID_RELA:
+    for (const Elf_Rela &R : unwrapOrError(Obj->android_relas(Sec)))
       printRelocation(Obj, R, SymTab);
     break;
   }
@@ -3289,7 +3817,7 @@ void LLVMStyle<ELFT>::printRelocation(const ELFO *Obj, Elf_Rela Rel,
   SmallString<32> RelocName;
   Obj->getRelocationTypeName(Rel.getType(Obj->isMips64EL()), RelocName);
   StringRef TargetName;
-  const Elf_Sym *Sym = Obj->getRelocationSymbol(&Rel, SymTab);
+  const Elf_Sym *Sym = unwrapOrError(Obj->getRelocationSymbol(&Rel, SymTab));
   if (Sym && Sym->getType() == ELF::STT_SECTION) {
     const Elf_Shdr *Sec = unwrapOrError(
         Obj->getSection(Sym, SymTab, this->dumper()->getShndxTable()));
@@ -3303,13 +3831,13 @@ void LLVMStyle<ELFT>::printRelocation(const ELFO *Obj, Elf_Rela Rel,
     DictScope Group(W, "Relocation");
     W.printHex("Offset", Rel.r_offset);
     W.printNumber("Type", RelocName, (int)Rel.getType(Obj->isMips64EL()));
-    W.printNumber("Symbol", TargetName.size() > 0 ? TargetName : "-",
+    W.printNumber("Symbol", !TargetName.empty() ? TargetName : "-",
                   Rel.getSymbol(Obj->isMips64EL()));
     W.printHex("Addend", Rel.r_addend);
   } else {
     raw_ostream &OS = W.startLine();
     OS << W.hex(Rel.r_offset) << " " << RelocName << " "
-       << (TargetName.size() > 0 ? TargetName : "-") << " "
+       << (!TargetName.empty() ? TargetName : "-") << " "
        << W.hex(Rel.r_addend) << "\n";
   }
 }
@@ -3318,7 +3846,7 @@ template <class ELFT> void LLVMStyle<ELFT>::printSections(const ELFO *Obj) {
   ListScope SectionsD(W, "Sections");
 
   int SectionIndex = -1;
-  for (const Elf_Shdr &Sec : Obj->sections()) {
+  for (const Elf_Shdr &Sec : unwrapOrError(Obj->sections())) {
     ++SectionIndex;
 
     StringRef Name = unwrapOrError(Obj->getSectionName(&Sec));
@@ -3326,15 +3854,16 @@ template <class ELFT> void LLVMStyle<ELFT>::printSections(const ELFO *Obj) {
     DictScope SectionD(W, "Section");
     W.printNumber("Index", SectionIndex);
     W.printNumber("Name", Name, Sec.sh_name);
-    W.printHex("Type",
-               getElfSectionType(Obj->getHeader()->e_machine, Sec.sh_type),
-               Sec.sh_type);
+    W.printHex(
+        "Type",
+        object::getELFSectionTypeName(Obj->getHeader()->e_machine, Sec.sh_type),
+        Sec.sh_type);
     std::vector<EnumEntry<unsigned>> SectionFlags(std::begin(ElfSectionFlags),
                                                   std::end(ElfSectionFlags));
     switch (Obj->getHeader()->e_machine) {
-    case EM_AMDGPU:
-      SectionFlags.insert(SectionFlags.end(), std::begin(ElfAMDGPUSectionFlags),
-                          std::end(ElfAMDGPUSectionFlags));
+    case EM_ARM:
+      SectionFlags.insert(SectionFlags.end(), std::begin(ElfARMSectionFlags),
+                          std::end(ElfARMSectionFlags));
       break;
     case EM_HEXAGON:
       SectionFlags.insert(SectionFlags.end(),
@@ -3376,11 +3905,12 @@ template <class ELFT> void LLVMStyle<ELFT>::printSections(const ELFO *Obj) {
       const Elf_Shdr *Symtab = this->dumper()->getDotSymtabSec();
       StringRef StrTable = unwrapOrError(Obj->getStringTableForSymtab(*Symtab));
 
-      for (const Elf_Sym &Sym : Obj->symbols(Symtab)) {
+      for (const Elf_Sym &Sym : unwrapOrError(Obj->symbols(Symtab))) {
         const Elf_Shdr *SymSec = unwrapOrError(
             Obj->getSection(&Sym, Symtab, this->dumper()->getShndxTable()));
         if (SymSec == &Sec)
-          printSymbol(Obj, &Sym, Obj->symbol_begin(Symtab), StrTable, false);
+          printSymbol(Obj, &Sym, unwrapOrError(Obj->symbols(Symtab)).begin(),
+                      StrTable, false);
       }
     }
 
@@ -3398,8 +3928,7 @@ void LLVMStyle<ELFT>::printSymbol(const ELFO *Obj, const Elf_Sym *Symbol,
                                   bool IsDynamic) {
   unsigned SectionIndex = 0;
   StringRef SectionName;
-  getSectionNameIndex(*Obj, Symbol, First, this->dumper()->getShndxTable(),
-                      SectionName, SectionIndex);
+  this->dumper()->getSectionNameIndex(Symbol, First, SectionName, SectionIndex);
   std::string FullSymbolName =
       this->dumper()->getFullSymbolName(Symbol, StrTable, IsDynamic);
   unsigned char SymbolType = Symbol->getType();
@@ -3498,12 +4027,12 @@ void LLVMStyle<ELFT>::printDynamicRelocation(const ELFO *Obj, Elf_Rela Rel) {
     DictScope Group(W, "Relocation");
     W.printHex("Offset", Rel.r_offset);
     W.printNumber("Type", RelocName, (int)Rel.getType(Obj->isMips64EL()));
-    W.printString("Symbol", SymbolName.size() > 0 ? SymbolName : "-");
+    W.printString("Symbol", !SymbolName.empty() ? SymbolName : "-");
     W.printHex("Addend", Rel.r_addend);
   } else {
     raw_ostream &OS = W.startLine();
     OS << W.hex(Rel.r_offset) << " " << RelocName << " "
-       << (SymbolName.size() > 0 ? SymbolName : "-") << " "
+       << (!SymbolName.empty() ? SymbolName : "-") << " "
        << W.hex(Rel.r_addend) << "\n";
   }
 }
@@ -3512,7 +4041,7 @@ template <class ELFT>
 void LLVMStyle<ELFT>::printProgramHeaders(const ELFO *Obj) {
   ListScope L(W, "ProgramHeaders");
 
-  for (const Elf_Phdr &Phdr : Obj->program_headers()) {
+  for (const Elf_Phdr &Phdr : unwrapOrError(Obj->program_headers())) {
     DictScope P(W, "ProgramHeader");
     W.printHex("Type",
                getElfSegmentType(Obj->getHeader()->e_machine, Phdr.p_type),
@@ -3526,7 +4055,124 @@ void LLVMStyle<ELFT>::printProgramHeaders(const ELFO *Obj) {
     W.printNumber("Alignment", Phdr.p_align);
   }
 }
+
 template <class ELFT>
 void LLVMStyle<ELFT>::printHashHistogram(const ELFFile<ELFT> *Obj) {
   W.startLine() << "Hash Histogram not implemented!\n";
+}
+
+template <class ELFT>
+void LLVMStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
+  W.startLine() << "printNotes not implemented!\n";
+}
+
+template <class ELFT>
+void LLVMStyle<ELFT>::printMipsGOT(const MipsGOTParser<ELFT> &Parser) {
+  auto PrintEntry = [&](const Elf_Addr *E) {
+    W.printHex("Address", Parser.getGotAddress(E));
+    W.printNumber("Access", Parser.getGotOffset(E));
+    W.printHex("Initial", *E);
+  };
+
+  DictScope GS(W, Parser.IsStatic ? "Static GOT" : "Primary GOT");
+
+  W.printHex("Canonical gp value", Parser.getGp());
+  {
+    ListScope RS(W, "Reserved entries");
+    {
+      DictScope D(W, "Entry");
+      PrintEntry(Parser.getGotLazyResolver());
+      W.printString("Purpose", StringRef("Lazy resolver"));
+    }
+
+    if (Parser.getGotModulePointer()) {
+      DictScope D(W, "Entry");
+      PrintEntry(Parser.getGotModulePointer());
+      W.printString("Purpose", StringRef("Module pointer (GNU extension)"));
+    }
+  }
+  {
+    ListScope LS(W, "Local entries");
+    for (auto &E : Parser.getLocalEntries()) {
+      DictScope D(W, "Entry");
+      PrintEntry(&E);
+    }
+  }
+
+  if (Parser.IsStatic)
+    return;
+
+  {
+    ListScope GS(W, "Global entries");
+    for (auto &E : Parser.getGlobalEntries()) {
+      DictScope D(W, "Entry");
+
+      PrintEntry(&E);
+
+      const Elf_Sym *Sym = Parser.getGotSym(&E);
+      W.printHex("Value", Sym->st_value);
+      W.printEnum("Type", Sym->getType(), makeArrayRef(ElfSymbolTypes));
+
+      unsigned SectionIndex = 0;
+      StringRef SectionName;
+      this->dumper()->getSectionNameIndex(
+          Sym, this->dumper()->dynamic_symbols().begin(), SectionName,
+          SectionIndex);
+      W.printHex("Section", SectionName, SectionIndex);
+
+      std::string SymName = this->dumper()->getFullSymbolName(
+          Sym, this->dumper()->getDynamicStringTable(), true);
+      W.printNumber("Name", SymName, Sym->st_name);
+    }
+  }
+
+  W.printNumber("Number of TLS and multi-GOT entries",
+                uint64_t(Parser.getOtherEntries().size()));
+}
+
+template <class ELFT>
+void LLVMStyle<ELFT>::printMipsPLT(const MipsGOTParser<ELFT> &Parser) {
+  auto PrintEntry = [&](const Elf_Addr *E) {
+    W.printHex("Address", Parser.getPltAddress(E));
+    W.printHex("Initial", *E);
+  };
+
+  DictScope GS(W, "PLT GOT");
+
+  {
+    ListScope RS(W, "Reserved entries");
+    {
+      DictScope D(W, "Entry");
+      PrintEntry(Parser.getPltLazyResolver());
+      W.printString("Purpose", StringRef("PLT lazy resolver"));
+    }
+
+    if (auto E = Parser.getPltModulePointer()) {
+      DictScope D(W, "Entry");
+      PrintEntry(E);
+      W.printString("Purpose", StringRef("Module pointer"));
+    }
+  }
+  {
+    ListScope LS(W, "Entries");
+    for (auto &E : Parser.getPltEntries()) {
+      DictScope D(W, "Entry");
+      PrintEntry(&E);
+
+      const Elf_Sym *Sym = Parser.getPltSym(&E);
+      W.printHex("Value", Sym->st_value);
+      W.printEnum("Type", Sym->getType(), makeArrayRef(ElfSymbolTypes));
+
+      unsigned SectionIndex = 0;
+      StringRef SectionName;
+      this->dumper()->getSectionNameIndex(
+          Sym, this->dumper()->dynamic_symbols().begin(), SectionName,
+          SectionIndex);
+      W.printHex("Section", SectionName, SectionIndex);
+
+      std::string SymName =
+          this->dumper()->getFullSymbolName(Sym, Parser.getPltStrTable(), true);
+      W.printNumber("Name", SymName, Sym->st_name);
+    }
+  }
 }

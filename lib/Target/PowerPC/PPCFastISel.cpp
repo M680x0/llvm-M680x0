@@ -13,10 +13,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PPC.h"
 #include "MCTargetDesc/PPCPredicates.h"
-#include "PPCCallingConv.h"
+#include "PPC.h"
 #include "PPCCCState.h"
+#include "PPCCallingConv.h"
 #include "PPCISelLowering.h"
 #include "PPCMachineFunctionInfo.h"
 #include "PPCSubtarget.h"
@@ -29,6 +29,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/GlobalAlias.h"
@@ -36,7 +37,6 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetMachine.h"
 
 //===----------------------------------------------------------------------===//
@@ -358,7 +358,7 @@ bool PPCFastISel::PPCComputeAddress(const Value *Obj, Address &Addr) {
       for (User::const_op_iterator II = U->op_begin() + 1, IE = U->op_end();
            II != IE; ++II, ++GTI) {
         const Value *Op = *II;
-        if (StructType *STy = dyn_cast<StructType>(*GTI)) {
+        if (StructType *STy = GTI.getStructTypeOrNull()) {
           const StructLayout *SL = DL.getStructLayout(STy);
           unsigned Idx = cast<ConstantInt>(Op)->getZExtValue();
           TmpOffset += SL->getElementOffset(Idx);
@@ -1330,7 +1330,7 @@ bool PPCFastISel::processCallArgs(SmallVectorImpl<Value*> &Args,
   // Issue CALLSEQ_START.
   BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc,
           TII.get(TII.getCallFrameSetupOpcode()))
-    .addImm(NumBytes);
+    .addImm(NumBytes).addImm(0);
 
   // Prepare to assign register arguments.  Every argument uses up a
   // GPR protocol register even if it's passed in a floating-point
@@ -1930,7 +1930,7 @@ unsigned PPCFastISel::PPCMaterializeFP(const ConstantFP *CFP, MVT VT) {
 
   PPCFuncInfo->setUsesTOCBasePtr();
   // For small code model, generate a LF[SD](0, LDtocCPT(Idx, X2)).
-  if (CModel == CodeModel::Small || CModel == CodeModel::JITDefault) {
+  if (CModel == CodeModel::Small) {
     BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc, TII.get(PPC::LDtocCPT),
             TmpReg)
       .addConstantPoolIndex(Idx).addReg(PPC::X2);
@@ -1981,7 +1981,7 @@ unsigned PPCFastISel::PPCMaterializeGV(const GlobalValue *GV, MVT VT) {
 
   PPCFuncInfo->setUsesTOCBasePtr();
   // For small code model, generate a simple TOC load.
-  if (CModel == CodeModel::Small || CModel == CodeModel::JITDefault)
+  if (CModel == CodeModel::Small)
     BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc, TII.get(PPC::LDtoc),
             DestReg)
         .addGlobalAddress(GV)
@@ -1991,9 +1991,9 @@ unsigned PPCFastISel::PPCMaterializeGV(const GlobalValue *GV, MVT VT) {
     // or externally available linkage, a non-local function address, or a
     // jump table address (not yet needed), or if we are generating code
     // for large code model, we generate:
-    //       LDtocL(GV, ADDIStocHA(%X2, GV))
+    //       LDtocL(GV, ADDIStocHA(%x2, GV))
     // Otherwise we generate:
-    //       ADDItocL(ADDIStocHA(%X2, GV), GV)
+    //       ADDItocL(ADDIStocHA(%x2, GV), GV)
     // Either way, start with the ADDIStocHA:
     unsigned HighPartReg = createResultReg(RC);
     BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc, TII.get(PPC::ADDIStocHA),
@@ -2157,7 +2157,12 @@ unsigned PPCFastISel::fastMaterializeConstant(const Constant *C) {
   else if (const GlobalValue *GV = dyn_cast<GlobalValue>(C))
     return PPCMaterializeGV(GV, VT);
   else if (const ConstantInt *CI = dyn_cast<ConstantInt>(C))
-    return PPCMaterializeInt(CI, VT, VT != MVT::i1);
+    // Note that the code in FunctionLoweringInfo::ComputePHILiveOutRegInfo
+    // assumes that constant PHI operands will be zero extended, and failure to
+    // match that assumption will cause problems if we sign extend here but
+    // some user of a PHI is in a block for which we fall back to full SDAG
+    // instruction selection.
+    return PPCMaterializeInt(CI, VT, false);
 
   return 0;
 }
@@ -2241,6 +2246,7 @@ bool PPCFastISel::tryToFoldLoadIntoMI(MachineInstr *MI, unsigned OpNo,
     }
 
     case PPC::EXTSW:
+    case PPC::EXTSW_32:
     case PPC::EXTSW_32_64: {
       if (VT != MVT::i32 && VT != MVT::i16 && VT != MVT::i8)
         return false;

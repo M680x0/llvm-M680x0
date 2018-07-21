@@ -19,9 +19,9 @@
 #include "PPCInstrInfo.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCInstrItineraries.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <string>
 
 #define GET_SUBTARGETINFO_HEADER
@@ -91,7 +91,7 @@ protected:
   bool Has64BitSupport;
   bool Use64BitRegs;
   bool UseCRBits;
-  bool UseSoftFloat;
+  bool HasHardFloat;
   bool IsPPC64;
   bool HasAltivec;
   bool HasSPE;
@@ -205,7 +205,7 @@ public:
   /// instructions, regardless of whether we are in 32-bit or 64-bit mode.
   bool has64BitSupport() const { return Has64BitSupport; }
   // useSoftFloat - Return true if soft-float option is turned on.
-  bool useSoftFloat() const { return UseSoftFloat; }
+  bool useSoftFloat() const { return !HasHardFloat; }
 
   /// use64BitRegs - Return true if in 64-bit mode or if we should use 64-bit
   /// registers in 32-bit mode when possible.  This can only true if
@@ -272,11 +272,21 @@ public:
 
     return 16;
   }
+
+  // DarwinABI has a 224-byte red zone. PPC32 SVR4ABI(Non-DarwinABI) has no
+  // red zone and PPC64 SVR4ABI has a 288-byte red zone.
+  unsigned  getRedZoneSize() const {
+    return isDarwinABI() ? 224 : (isPPC64() ? 288 : 0);
+  }
+
   bool hasHTM() const { return HasHTM; }
   bool hasFusion() const { return HasFusion; }
   bool hasFloat128() const { return HasFloat128; }
   bool isISA3_0() const { return IsISA3_0; }
   bool useLongCalls() const { return UseLongCalls; }
+  bool needsSwapsForVSXMemOps() const {
+    return hasVSX() && isLittleEndian() && !hasP9Vector();
+  }
 
   POPCNTDKind hasPOPCNTD() const { return HasPOPCNTD; }
 
@@ -295,7 +305,9 @@ public:
   bool isSVR4ABI() const { return !isDarwinABI(); }
   bool isELFv2ABI() const;
 
-  bool enableEarlyIfConversion() const override { return hasISEL(); }
+  /// Originally, this function return hasISEL(). Now we always enable it,
+  /// but may expand the ISEL instruction later.
+  bool enableEarlyIfConversion() const override { return true; }
 
   // Scheduling customization.
   bool enableMachineScheduler() const override;
@@ -313,6 +325,8 @@ public:
   /// classifyGlobalReference - Classify a global variable reference for the
   /// current subtarget accourding to how we should reference it.
   unsigned char classifyGlobalReference(const GlobalValue *GV) const;
+
+  bool isXRaySupported() const override { return IsPPC64 && IsLittleEndian; }
 };
 } // End llvm namespace
 

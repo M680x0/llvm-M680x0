@@ -14,8 +14,10 @@
 #ifndef LLVM_LIB_TARGET_BPF_MCTARGETDESC_BPFMCTARGETDESC_H
 #define LLVM_LIB_TARGET_BPF_MCTARGETDESC_BPFMCTARGETDESC_H
 
-#include "llvm/Support/DataTypes.h"
 #include "llvm/Config/config.h"
+#include "llvm/Support/DataTypes.h"
+
+#include <memory>
 
 namespace llvm {
 class MCAsmBackend;
@@ -32,9 +34,9 @@ class Triple;
 class raw_ostream;
 class raw_pwrite_stream;
 
-extern Target TheBPFleTarget;
-extern Target TheBPFbeTarget;
-extern Target TheBPFTarget;
+Target &getTheBPFleTarget();
+Target &getTheBPFbeTarget();
+Target &getTheBPFTarget();
 
 MCCodeEmitter *createBPFMCCodeEmitter(const MCInstrInfo &MCII,
                                       const MCRegisterInfo &MRI,
@@ -50,8 +52,9 @@ MCAsmBackend *createBPFbeAsmBackend(const Target &T, const MCRegisterInfo &MRI,
                                     const Triple &TT, StringRef CPU,
                                     const MCTargetOptions &Options);
 
-MCObjectWriter *createBPFELFObjectWriter(raw_pwrite_stream &OS,
-                                         uint8_t OSABI, bool IsLittleEndian);
+std::unique_ptr<MCObjectWriter> createBPFELFObjectWriter(raw_pwrite_stream &OS,
+                                                         uint8_t OSABI,
+                                                         bool IsLittleEndian);
 }
 
 // Defines symbolic names for BPF registers.  This defines a mapping from

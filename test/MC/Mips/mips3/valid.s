@@ -83,6 +83,8 @@ a:
         dsll      $zero,18             # CHECK: dsll $zero, $zero, 18       # encoding: [0x00,0x00,0x04,0xb8]
         dsll      $zero,$s4,18         # CHECK: dsll $zero, $20, 18         # encoding: [0x00,0x14,0x04,0xb8]
         dsll      $zero,$s4,$12        # CHECK: dsllv $zero, $20, $12       # encoding: [0x01,0x94,0x00,0x14]
+        dsll      $4, $5               # CHECK: dsllv $4, $4, $5            # encoding: [0x00,0xa4,0x20,0x14]
+        dsll      $4, $5, $5           # CHECK: dsllv $4, $5, $5            # encoding: [0x00,0xa5,0x20,0x14]
         dsll32    $zero,18             # CHECK: dsll32 $zero, $zero, 18     # encoding: [0x00,0x00,0x04,0xbc]
         dsll32    $zero,$zero,18       # CHECK: dsll32 $zero, $zero, 18     # encoding: [0x00,0x00,0x04,0xbc]
         dsllv     $zero,$s4,$12        # CHECK: dsllv $zero, $20, $12       # encoding: [0x01,0x94,0x00,0x14]
@@ -95,6 +97,8 @@ a:
         dsrl      $s3,23               # CHECK: dsrl $19, $19, 23           # encoding: [0x00,0x13,0x9d,0xfa]
         dsrl      $s3,$6,23            # CHECK: dsrl $19, $6, 23            # encoding: [0x00,0x06,0x9d,0xfa]
         dsrl      $s3,$6,$s4           # CHECK: dsrlv $19, $6, $20          # encoding: [0x02,0x86,0x98,0x16]
+        dsrl      $4, $5               # CHECK: dsrlv $4, $4, $5            # encoding: [0x00,0xa4,0x20,0x16]
+        dsrl      $4, $4, $5           # CHECK: dsrlv $4, $4, $5            # encoding: [0x00,0xa4,0x20,0x16]
         dsrl32    $s3,23               # CHECK: dsrl32 $19, $19, 23         # encoding: [0x00,0x13,0x9d,0xfe]
         dsrl32    $s3,$6,23            # CHECK: dsrl32 $19, $6, 23          # encoding: [0x00,0x06,0x9d,0xfe]
         dsrlv     $s3,$6,$s4           # CHECK: dsrlv $19, $6, $20          # encoding: [0x02,0x86,0x98,0x16]
@@ -167,6 +171,8 @@ a:
         neg.s     $f1,$f15
         nop
         nor       $a3,$zero,$a3
+        not       $3, $4               # CHECK: not $3, $4             # encoding: [0x00,0x80,0x18,0x27]
+        not       $3                   # CHECK: not $3, $3             # encoding: [0x00,0x60,0x18,0x27]
         or        $12,$s0,$sp
         or        $2, 4                # CHECK: ori $2, $2, 4          # encoding: [0x34,0x42,0x00,0x04]
         round.l.d $f12,$f1
@@ -223,6 +229,7 @@ a:
         swl       $15,13694($s3)
         swr       $s1,-26590($14)
         sync                           # CHECK: sync                   # encoding: [0x00,0x00,0x00,0x0f]
+        sync 0                         # CHECK: sync                   # encoding: [0x00,0x00,0x00,0x0f]
         syscall                        # CHECK: syscall                # encoding: [0x00,0x00,0x00,0x0c]
         syscall   256                  # CHECK: syscall 256            # encoding: [0x00,0x00,0x40,0x0c]
         teq       $0,$3                # CHECK: teq $zero, $3          # encoding: [0x00,0x03,0x00,0x34]

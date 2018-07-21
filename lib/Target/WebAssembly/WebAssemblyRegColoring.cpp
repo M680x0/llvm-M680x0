@@ -19,7 +19,7 @@
 
 #include "WebAssembly.h"
 #include "WebAssemblyMachineFunctionInfo.h"
-#include "llvm/CodeGen/LiveIntervalAnalysis.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h"
@@ -35,7 +35,7 @@ public:
   static char ID; // Pass identification, replacement for typeid
   WebAssemblyRegColoring() : MachineFunctionPass(ID) {}
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "WebAssembly Register Coloring";
   }
 
@@ -140,8 +140,7 @@ bool WebAssemblyRegColoring::runOnMachineFunction(MachineFunction &MF) {
 
     // Check if it's possible to reuse any of the used colors.
     if (!MRI->isLiveIn(Old))
-      for (int C(UsedColors.find_first()); C != -1;
-           C = UsedColors.find_next(C)) {
+      for (unsigned C : UsedColors.set_bits()) {
         if (MRI->getRegClass(SortedIntervals[C]->reg) != RC)
           continue;
         for (LiveInterval *OtherLI : Assignments[C])

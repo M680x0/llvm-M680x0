@@ -1,5 +1,6 @@
 ; RUN: llc -march=amdgcn -mcpu=bonaire -show-mc-encoding < %s | FileCheck -check-prefix=GCN -check-prefix=CI -check-prefix=ALL %s
 ; RUN: llc -march=amdgcn -mcpu=carrizo --show-mc-encoding < %s | FileCheck -check-prefix=GCN -check-prefix=VI -check-prefix=ALL %s
+; RUN: llc -march=amdgcn -mcpu=gfx900 --show-mc-encoding < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 -check-prefix=ALL %s
 ; RUN: llc -march=amdgcn -mcpu=bonaire -mtriple=amdgcn-unknown-amdhsa < %s -mattr=-flat-for-global | FileCheck -check-prefix=GCNHSA -check-prefix=CIHSA -check-prefix=ALL %s
 ; RUN: llc -march=amdgcn -mcpu=carrizo -mtriple=amdgcn-unknown-amdhsa -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCNHSA -check-prefix=VIHSA -check-prefix=ALL %s
 
@@ -14,17 +15,18 @@
 ; GCN-DAG: s_mov_b32 s{{[0-9]+}}, -1
 ; CI-DAG: s_mov_b32 s{{[0-9]+}}, 0xe8f000
 ; VI-DAG: s_mov_b32 s{{[0-9]+}}, 0xe80000
+; GFX9-DAG: s_mov_b32 s{{[0-9]+}}, 0xe00000
 
 
 ; GCNHSA: .amd_kernel_code_t
 
-; GCNHSA: compute_pgm_rsrc2_scratch_en = 1
-; GCNHSA: compute_pgm_rsrc2_user_sgpr = 8
-; GCNHSA: compute_pgm_rsrc2_tgid_x_en = 1
-; GCNHSA: compute_pgm_rsrc2_tgid_y_en = 0
-; GCNHSA: compute_pgm_rsrc2_tgid_z_en = 0
-; GCNHSA: compute_pgm_rsrc2_tg_size_en = 0
-; GCNHSA: compute_pgm_rsrc2_tidig_comp_cnt = 0
+; GCNHSA: enable_sgpr_private_segment_wave_byte_offset = 1
+; GCNHSA: user_sgpr_count = 8
+; GCNHSA: enable_sgpr_workgroup_id_x = 1
+; GCNHSA: enable_sgpr_workgroup_id_y = 0
+; GCNHSA: enable_sgpr_workgroup_id_z = 0
+; GCNHSA: enable_sgpr_workgroup_info = 0
+; GCNHSA: enable_vgpr_workitem_id = 0
 
 ; GCNHSA: enable_sgpr_private_segment_buffer = 1
 ; GCNHSA: enable_sgpr_dispatch_ptr = 0
@@ -46,7 +48,7 @@
 
 ; Scratch size = alloca size + emergency stack slot
 ; ALL: ; ScratchSize: 32772
-define void @large_alloca_compute_shader(i32 %x, i32 %y) #0 {
+define amdgpu_kernel void @large_alloca_compute_shader(i32 %x, i32 %y) #0 {
   %large = alloca [8192 x i32], align 4
   %gep = getelementptr [8192 x i32], [8192 x i32]* %large, i32 0, i32 8191
   store volatile i32 %x, i32* %gep

@@ -76,7 +76,6 @@
 ; CHECK-NOT: {{DW_TAG|DW_AT}}
 ; CHECK: NULL
 
-
 ; CHECK: .debug_ranges contents:
 
 ; ... some addresses (depends on platform (such as platforms with function
@@ -88,13 +87,8 @@
 
 
 ; Check that we don't emit any pubnames or pubtypes under -gmlt
-; CHECK: .debug_pubnames contents:
-; CHECK-NOT: Offset
-
-; CHECK: .debug_pubtypes contents:
-; CHECK-NOT: Offset
-
-; CHECK: .apple{{.*}} contents:
+; CHECK-NOT: .debug_pubnames contents:
+; CHECK-NOT: .debug_pubtypes contents:
 
 ; Function Attrs: nounwind uwtable
 define void @_Z2f1v() #0 !dbg !4 {

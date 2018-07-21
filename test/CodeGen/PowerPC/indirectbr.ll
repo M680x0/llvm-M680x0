@@ -1,6 +1,6 @@
-; RUN: llc < %s -relocation-model=pic -march=ppc32 -mtriple=powerpc-apple-darwin | FileCheck %s -check-prefix=PIC
-; RUN: llc < %s -relocation-model=static -march=ppc32 -mtriple=powerpc-apple-darwin | FileCheck %s -check-prefix=STATIC
-; RUN: llc < %s -relocation-model=pic -march=ppc64 -mtriple=powerpc64-apple-darwin | FileCheck %s -check-prefix=PPC64
+; RUN: llc < %s -relocation-model=pic -mtriple=powerpc-apple-darwin | FileCheck %s -check-prefix=PIC
+; RUN: llc < %s -relocation-model=static -mtriple=powerpc-apple-darwin | FileCheck %s -check-prefix=STATIC
+; RUN: llc < %s -relocation-model=pic -mtriple=powerpc64-apple-darwin | FileCheck %s -check-prefix=PPC64
 
 @nextaddr = global i8* null                       ; <i8**> [#uses=2]
 @C.0.2070 = private constant [5 x i8*] [i8* blockaddress(@foo, %L1), i8* blockaddress(@foo, %L2), i8* blockaddress(@foo, %L3), i8* blockaddress(@foo, %L4), i8* blockaddress(@foo, %L5)] ; <[5 x i8*]*> [#uses=1]
@@ -17,23 +17,35 @@ entry:
 bb2:                                              ; preds = %entry, %bb3
   %gotovar.4.0 = phi i8* [ %gotovar.4.0.pre, %bb3 ], [ %0, %entry ] ; <i8*> [#uses=1]
 ; PIC: mtctr
-; PIC-NEXT: li
-; PIC-NEXT: li
-; PIC-NEXT: li
-; PIC-NEXT: li
 ; PIC-NEXT: bctr
+; PIC: li
+; PIC: b LBB
+; PIC: li
+; PIC: b LBB
+; PIC: li
+; PIC: b LBB
+; PIC: li
+; PIC: b LBB
 ; STATIC: mtctr
-; STATIC-NEXT: li
-; STATIC-NEXT: li
-; STATIC-NEXT: li
-; STATIC-NEXT: li
 ; STATIC-NEXT: bctr
+; STATIC: li
+; STATIC: b LBB
+; STATIC: li
+; STATIC: b LBB
+; STATIC: li
+; STATIC: b LBB
+; STATIC: li
+; STATIC: b LBB
 ; PPC64: mtctr
-; PPC64-NEXT: li
-; PPC64-NEXT: li
-; PPC64-NEXT: li
-; PPC64-NEXT: li
 ; PPC64-NEXT: bctr
+; PPC64: li
+; PPC64: b LBB
+; PPC64: li
+; PPC64: b LBB
+; PPC64: li
+; PPC64: b LBB
+; PPC64: li
+; PPC64: b LBB
   indirectbr i8* %gotovar.4.0, [label %L5, label %L4, label %L3, label %L2, label %L1]
 
 bb3:                                              ; preds = %entry

@@ -55,6 +55,8 @@ void DecodePSRLDQMask(MVT VT, unsigned Imm, SmallVectorImpl<int> &ShuffleMask);
 
 void DecodePALIGNRMask(MVT VT, unsigned Imm, SmallVectorImpl<int> &ShuffleMask);
 
+void DecodeVALIGNMask(MVT VT, unsigned Imm, SmallVectorImpl<int> &ShuffleMask);
+
 /// Decodes the shuffle masks for pshufd/pshufw/vpermilpd/vpermilps.
 /// VT indicates the type of the vector allowing it to handle different
 /// datatypes and vector widths.
@@ -132,12 +134,12 @@ void DecodeZeroMoveLowMask(MVT VT, SmallVectorImpl<int> &ShuffleMask);
 void DecodeScalarMoveMask(MVT VT, bool IsLoad,
                           SmallVectorImpl<int> &ShuffleMask);
 
-/// Decode a SSE4A EXTRQ instruction as a v16i8 shuffle mask.
-void DecodeEXTRQIMask(int Len, int Idx,
+/// Decode a SSE4A EXTRQ instruction as a shuffle mask.
+void DecodeEXTRQIMask(MVT VT, int Len, int Idx,
                       SmallVectorImpl<int> &ShuffleMask);
 
-/// Decode a SSE4A INSERTQ instruction as a v16i8 shuffle mask.
-void DecodeINSERTQIMask(int Len, int Idx,
+/// Decode a SSE4A INSERTQ instruction as a shuffle mask.
+void DecodeINSERTQIMask(MVT VT, int Len, int Idx,
                         SmallVectorImpl<int> &ShuffleMask);
 
 /// Decode a VPERMILPD/VPERMILPS variable mask from a raw array of constants.

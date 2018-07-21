@@ -1,4 +1,4 @@
-//===-- Local.h - Functions to perform local transformations ----*- C++ -*-===//
+//===- Local.h - Functions to perform local transformations -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -15,38 +15,95 @@
 #ifndef LLVM_TRANSFORMS_UTILS_LOCAL_H
 #define LLVM_TRANSFORMS_UTILS_LOCAL_H
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Operator.h"
-#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/User.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/Casting.h"
+#include <cstdint>
+#include <limits>
 
 namespace llvm {
 
-class User;
-class BasicBlock;
-class Function;
-class BranchInst;
-class Instruction;
-class CallInst;
-class DbgDeclareInst;
-class StoreInst;
-class LoadInst;
-class Value;
-class PHINode;
 class AllocaInst;
 class AssumptionCache;
-class ConstantExpr;
-class DataLayout;
+class BasicBlock;
+class BranchInst;
+class CallInst;
+class DbgInfoIntrinsic;
+class DbgValueInst;
+class DIBuilder;
+class Function;
+class Instruction;
+class LazyValueInfo;
+class LoadInst;
+class MDNode;
+class PHINode;
+class StoreInst;
 class TargetLibraryInfo;
 class TargetTransformInfo;
-class DIBuilder;
-class DominatorTree;
-class LazyValueInfo;
 
-template<typename T> class SmallVectorImpl;
+/// A set of parameters used to control the transforms in the SimplifyCFG pass.
+/// Options may change depending on the position in the optimization pipeline.
+/// For example, canonical form that includes switches and branches may later be
+/// replaced by lookup tables and selects.
+struct SimplifyCFGOptions {
+  int BonusInstThreshold;
+  bool ForwardSwitchCondToPhi;
+  bool ConvertSwitchToLookupTable;
+  bool NeedCanonicalLoop;
+  bool SinkCommonInsts;
+  AssumptionCache *AC;
+
+  SimplifyCFGOptions(unsigned BonusThreshold = 1,
+                     bool ForwardSwitchCond = false,
+                     bool SwitchToLookup = false, bool CanonicalLoops = true,
+                     bool SinkCommon = false,
+                     AssumptionCache *AssumpCache = nullptr)
+      : BonusInstThreshold(BonusThreshold),
+        ForwardSwitchCondToPhi(ForwardSwitchCond),
+        ConvertSwitchToLookupTable(SwitchToLookup),
+        NeedCanonicalLoop(CanonicalLoops),
+        SinkCommonInsts(SinkCommon),
+        AC(AssumpCache) {}
+
+  // Support 'builder' pattern to set members by name at construction time.
+  SimplifyCFGOptions &bonusInstThreshold(int I) {
+    BonusInstThreshold = I;
+    return *this;
+  }
+  SimplifyCFGOptions &forwardSwitchCondToPhi(bool B) {
+    ForwardSwitchCondToPhi = B;
+    return *this;
+  }
+  SimplifyCFGOptions &convertSwitchToLookupTable(bool B) {
+    ConvertSwitchToLookupTable = B;
+    return *this;
+  }
+  SimplifyCFGOptions &needCanonicalLoops(bool B) {
+    NeedCanonicalLoop = B;
+    return *this;
+  }
+  SimplifyCFGOptions &sinkCommonInsts(bool B) {
+    SinkCommonInsts = B;
+    return *this;
+  }
+  SimplifyCFGOptions &setAssumptionCache(AssumptionCache *Cache) {
+    AC = Cache;
+    return *this;
+  }
+};
 
 //===----------------------------------------------------------------------===//
 //  Local constant propagation.
@@ -70,6 +127,12 @@ bool ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions = false,
 /// instruction has no side effects.
 bool isInstructionTriviallyDead(Instruction *I,
                                 const TargetLibraryInfo *TLI = nullptr);
+
+/// Return true if the result produced by the instruction would have no side
+/// effects if it was not used. This is equivalent to checking whether
+/// isInstructionTriviallyDead would be true if the use count was 0.
+bool wouldInstructionBeTriviallyDead(Instruction *I,
+                                     const TargetLibraryInfo *TLI = nullptr);
 
 /// If the specified value is a trivially dead instruction, delete it.
 /// If that makes any of its operands trivially dead, delete them too,
@@ -126,15 +189,14 @@ bool TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB);
 /// values, but instcombine orders them so it usually won't matter.
 bool EliminateDuplicatePHINodes(BasicBlock *BB);
 
-/// This function is used to do simplification of a CFG.  For
-/// example, it adjusts branches to branches to eliminate the extra hop, it
-/// eliminates unreachable basic blocks, and does other "peephole" optimization
-/// of the CFG.  It returns true if a modification was made, possibly deleting
-/// the basic block that was pointed to. LoopHeaders is an optional input
-/// parameter, providing the set of loop header that SimplifyCFG should not
-/// eliminate.
-bool SimplifyCFG(BasicBlock *BB, const TargetTransformInfo &TTI,
-                 unsigned BonusInstThreshold, AssumptionCache *AC = nullptr,
+/// This function is used to do simplification of a CFG.  For example, it
+/// adjusts branches to branches to eliminate the extra hop, it eliminates
+/// unreachable basic blocks, and does other peephole optimization of the CFG.
+/// It returns true if a modification was made, possibly deleting the basic
+/// block that was pointed to. LoopHeaders is an optional input parameter
+/// providing the set of loop headers that SimplifyCFG should not eliminate.
+bool simplifyCFG(BasicBlock *BB, const TargetTransformInfo &TTI,
+                 const SimplifyCFGOptions &Options = {},
                  SmallPtrSetImpl<BasicBlock *> *LoopHeaders = nullptr);
 
 /// This function is used to flatten a CFG. For example, it uses parallel-and
@@ -161,10 +223,15 @@ AllocaInst *DemoteRegToStack(Instruction &X,
 /// deleted and it returns the pointer to the alloca inserted.
 AllocaInst *DemotePHIToStack(PHINode *P, Instruction *AllocaPoint = nullptr);
 
-/// If the specified pointer has an alignment that we can determine, return it,
-/// otherwise return 0. If PrefAlign is specified, and it is more than the
-/// alignment of the ultimate object, see if we can increase the alignment of
-/// the ultimate object, making this check succeed.
+/// Try to ensure that the alignment of \p V is at least \p PrefAlign bytes. If
+/// the owning object can be modified and has an alignment less than \p
+/// PrefAlign, it will be increased and \p PrefAlign returned. If the alignment
+/// cannot be increased, the known alignment of the value is returned.
+///
+/// It is not always possible to modify the alignment of the underlying object,
+/// so if alignment is important, a more reliable approach is to simply align
+/// all global variables and allocation instructions to their preferred
+/// alignment from the beginning.
 unsigned getOrEnforceKnownAlignment(Value *V, unsigned PrefAlign,
                                     const DataLayout &DL,
                                     const Instruction *CxtI = nullptr,
@@ -172,10 +239,10 @@ unsigned getOrEnforceKnownAlignment(Value *V, unsigned PrefAlign,
                                     const DominatorTree *DT = nullptr);
 
 /// Try to infer an alignment for the specified pointer.
-static inline unsigned getKnownAlignment(Value *V, const DataLayout &DL,
-                                         const Instruction *CxtI = nullptr,
-                                         AssumptionCache *AC = nullptr,
-                                         const DominatorTree *DT = nullptr) {
+inline unsigned getKnownAlignment(Value *V, const DataLayout &DL,
+                                  const Instruction *CxtI = nullptr,
+                                  AssumptionCache *AC = nullptr,
+                                  const DominatorTree *DT = nullptr) {
   return getOrEnforceKnownAlignment(V, 0, DL, CxtI, AC, DT);
 }
 
@@ -197,7 +264,8 @@ Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &DL, User *GEP,
 
   // Build a mask for high order bits.
   unsigned IntPtrWidth = IntPtrTy->getScalarType()->getIntegerBitWidth();
-  uint64_t PtrSizeMask = ~0ULL >> (64 - IntPtrWidth);
+  uint64_t PtrSizeMask =
+      std::numeric_limits<uint64_t>::max() >> (64 - IntPtrWidth);
 
   gep_type_iterator GTI = gep_type_begin(GEP);
   for (User::op_iterator i = GEP->op_begin() + 1, e = GEP->op_end(); i != e;
@@ -209,7 +277,7 @@ Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &DL, User *GEP,
         continue;
 
       // Handle a struct index, which adds its field offset to the pointer.
-      if (StructType *STy = dyn_cast<StructType>(*GTI)) {
+      if (StructType *STy = GTI.getStructTypeOrNull()) {
         if (OpC->getType()->isVectorTy())
           OpC = OpC->getSplatValue();
 
@@ -249,38 +317,50 @@ Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &DL, User *GEP,
 ///
 
 /// Inserts a llvm.dbg.value intrinsic before a store to an alloca'd value
-/// that has an associated llvm.dbg.decl intrinsic.
-bool ConvertDebugDeclareToDebugValue(DbgDeclareInst *DDI,
+/// that has an associated llvm.dbg.declare or llvm.dbg.addr intrinsic.
+void ConvertDebugDeclareToDebugValue(DbgInfoIntrinsic *DII,
                                      StoreInst *SI, DIBuilder &Builder);
 
 /// Inserts a llvm.dbg.value intrinsic before a load of an alloca'd value
-/// that has an associated llvm.dbg.decl intrinsic.
-bool ConvertDebugDeclareToDebugValue(DbgDeclareInst *DDI,
+/// that has an associated llvm.dbg.declare or llvm.dbg.addr intrinsic.
+void ConvertDebugDeclareToDebugValue(DbgInfoIntrinsic *DII,
                                      LoadInst *LI, DIBuilder &Builder);
+
+/// Inserts a llvm.dbg.value intrinsic after a phi that has an associated
+/// llvm.dbg.declare or llvm.dbg.addr intrinsic.
+void ConvertDebugDeclareToDebugValue(DbgInfoIntrinsic *DII,
+                                     PHINode *LI, DIBuilder &Builder);
 
 /// Lowers llvm.dbg.declare intrinsics into appropriate set of
 /// llvm.dbg.value intrinsics.
 bool LowerDbgDeclare(Function &F);
 
-/// Finds the llvm.dbg.declare intrinsic corresponding to an alloca, if any.
-DbgDeclareInst *FindAllocaDbgDeclare(Value *V);
+/// Finds all intrinsics declaring local variables as living in the memory that
+/// 'V' points to. This may include a mix of dbg.declare and
+/// dbg.addr intrinsics.
+TinyPtrVector<DbgInfoIntrinsic *> FindDbgAddrUses(Value *V);
 
-/// Replaces llvm.dbg.declare instruction when the address it describes
-/// is replaced with a new value. If Deref is true, an additional DW_OP_deref is
-/// prepended to the expression. If Offset is non-zero, a constant displacement
-/// is added to the expression (after the optional Deref). Offset can be
-/// negative.
+/// Finds the llvm.dbg.value intrinsics describing a value.
+void findDbgValues(SmallVectorImpl<DbgValueInst *> &DbgValues, Value *V);
+
+/// Replaces llvm.dbg.declare instruction when the address it
+/// describes is replaced with a new value. If Deref is true, an
+/// additional DW_OP_deref is prepended to the expression. If Offset
+/// is non-zero, a constant displacement is added to the expression
+/// (between the optional Deref operations). Offset can be negative.
 bool replaceDbgDeclare(Value *Address, Value *NewAddress,
                        Instruction *InsertBefore, DIBuilder &Builder,
-                       bool Deref, int Offset);
+                       bool DerefBefore, int Offset, bool DerefAfter);
 
 /// Replaces llvm.dbg.declare instruction when the alloca it describes
-/// is replaced with a new value. If Deref is true, an additional DW_OP_deref is
-/// prepended to the expression. If Offset is non-zero, a constant displacement
-/// is added to the expression (after the optional Deref). Offset can be
-/// negative. New llvm.dbg.declare is inserted immediately before AI.
+/// is replaced with a new value. If Deref is true, an additional
+/// DW_OP_deref is prepended to the expression. If Offset is non-zero,
+/// a constant displacement is added to the expression (between the
+/// optional Deref operations). Offset can be negative. The new
+/// llvm.dbg.declare is inserted immediately before AI.
 bool replaceDbgDeclareForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
-                                DIBuilder &Builder, bool Deref, int Offset = 0);
+                                DIBuilder &Builder, bool DerefBefore,
+                                int Offset, bool DerefAfter);
 
 /// Replaces multiple llvm.dbg.value instructions when the alloca it describes
 /// is replaced with a new value. If Offset is non-zero, a constant displacement
@@ -290,13 +370,26 @@ bool replaceDbgDeclareForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
 void replaceDbgValueForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
                               DIBuilder &Builder, int Offset = 0);
 
+/// Assuming the instruction \p I is going to be deleted, attempt to salvage any
+/// dbg.value intrinsics referring to \p I by rewriting its effect into a
+/// DIExpression.
+void salvageDebugInfo(Instruction &I);
+
 /// Remove all instructions from a basic block other than it's terminator
 /// and any present EH pad instructions.
 unsigned removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB);
 
 /// Insert an unreachable instruction before the specified
 /// instruction, making it and the rest of the code in the block dead.
-unsigned changeToUnreachable(Instruction *I, bool UseLLVMTrap);
+unsigned changeToUnreachable(Instruction *I, bool UseLLVMTrap,
+                             bool PreserveLCSSA = false);
+
+/// Convert the CallInst to InvokeInst with the specified unwind edge basic
+/// block.  This also splits the basic block where CI is located, because
+/// InvokeInst is a terminator instruction.  Returns the newly split basic
+/// block.
+BasicBlock *changeToInvokeAndSplitBasicBlock(CallInst *CI,
+                                             BasicBlock *UnwindEdge);
 
 /// Replace 'BB's terminator with one that does not have an unwind successor
 /// block. Rewrites `invoke` to `call`, etc. Updates any PHIs in unwind
@@ -322,6 +415,10 @@ void combineMetadata(Instruction *K, const Instruction *J, ArrayRef<unsigned> Kn
 /// Unknown metadata is removed.
 void combineMetadataForCSE(Instruction *K, const Instruction *J);
 
+// Replace each use of 'From' with 'To', if that use does not belong to basic
+// block where 'From' is defined. Returns the number of replacements made.
+unsigned replaceNonLocalUsesWith(Instruction *From, Value *To);
+
 /// Replace each use of 'From' with 'To' if that use is dominated by
 /// the given edge.  Returns the number of replacements made.
 unsigned replaceDominatedUsesWith(Value *From, Value *To, DominatorTree &DT,
@@ -331,7 +428,6 @@ unsigned replaceDominatedUsesWith(Value *From, Value *To, DominatorTree &DT,
 unsigned replaceDominatedUsesWith(Value *From, Value *To, DominatorTree &DT,
                                   const BasicBlock *BB);
 
-
 /// Return true if the CallSite CS calls a gc leaf function.
 ///
 /// A leaf function is a function that does not safepoint the thread during its
@@ -340,13 +436,26 @@ unsigned replaceDominatedUsesWith(Value *From, Value *To, DominatorTree &DT,
 ///
 /// Most passes can and should ignore this information, and it is only used
 /// during lowering by the GC infrastructure.
-bool callsGCLeafFunction(ImmutableCallSite CS);
+bool callsGCLeafFunction(ImmutableCallSite CS, const TargetLibraryInfo &TLI);
+
+/// Copy a nonnull metadata node to a new load instruction.
+///
+/// This handles mapping it to range metadata if the new load is an integer
+/// load instead of a pointer load.
+void copyNonnullMetadata(const LoadInst &OldLI, MDNode *N, LoadInst &NewLI);
+
+/// Copy a range metadata node to a new load instruction.
+///
+/// This handles mapping it to nonnull metadata if the new load is a pointer
+/// load instead of an integer load and the range doesn't cover null.
+void copyRangeMetadata(const DataLayout &DL, const LoadInst &OldLI, MDNode *N,
+                       LoadInst &NewLI);
 
 //===----------------------------------------------------------------------===//
 //  Intrinsic pattern matching
 //
 
-/// Try and match a bswap or bitreverse idiom.
+/// Try to match a bswap or bitreverse idiom.
 ///
 /// If an idiom is matched, an intrinsic call is inserted before \c I. Any added
 /// instructions are returned in \c InsertedInsts. They will all have been added
@@ -372,6 +481,14 @@ bool recognizeBSwapOrBitReverseIdiom(
 void maybeMarkSanitizerLibraryCallNoBuiltin(CallInst *CI,
                                             const TargetLibraryInfo *TLI);
 
-} // End llvm namespace
+//===----------------------------------------------------------------------===//
+//  Transform predicates
+//
 
-#endif
+/// Given an instruction, is it legal to set operand OpIdx to a non-constant
+/// value?
+bool canReplaceOperandWithVariable(const Instruction *I, unsigned OpIdx);
+
+} // end namespace llvm
+
+#endif // LLVM_TRANSFORMS_UTILS_LOCAL_H

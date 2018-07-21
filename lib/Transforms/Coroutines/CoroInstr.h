@@ -23,6 +23,9 @@
 // the Coroutine library.
 //===----------------------------------------------------------------------===//
 
+#ifndef LLVM_LIB_TRANSFORMS_COROUTINES_COROINSTR_H
+#define LLVM_LIB_TRANSFORMS_COROUTINES_COROINSTR_H
+
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IntrinsicInst.h"
 
@@ -55,10 +58,10 @@ public:
   }
 
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_subfn_addr;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -67,10 +70,10 @@ public:
 class LLVM_LIBRARY_VISIBILITY CoroAllocInst : public IntrinsicInst {
 public:
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_alloc;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -80,6 +83,46 @@ class LLVM_LIBRARY_VISIBILITY CoroIdInst : public IntrinsicInst {
   enum { AlignArg, PromiseArg, CoroutineArg, InfoArg };
 
 public:
+  CoroAllocInst *getCoroAlloc() {
+    for (User *U : users())
+      if (auto *CA = dyn_cast<CoroAllocInst>(U))
+        return CA;
+    return nullptr;
+  }
+
+  IntrinsicInst *getCoroBegin() {
+    for (User *U : users())
+      if (auto *II = dyn_cast<IntrinsicInst>(U))
+        if (II->getIntrinsicID() == Intrinsic::coro_begin)
+          return II;
+    llvm_unreachable("no coro.begin associated with coro.id");
+  }
+
+  AllocaInst *getPromise() const {
+    Value *Arg = getArgOperand(PromiseArg);
+    return isa<ConstantPointerNull>(Arg)
+               ? nullptr
+               : cast<AllocaInst>(Arg->stripPointerCasts());
+  }
+
+  void clearPromise() {
+    Value *Arg = getArgOperand(PromiseArg);
+    setArgOperand(PromiseArg,
+                  ConstantPointerNull::get(Type::getInt8PtrTy(getContext())));
+    if (isa<AllocaInst>(Arg))
+      return;
+    assert((isa<BitCastInst>(Arg) || isa<GetElementPtrInst>(Arg)) &&
+           "unexpected instruction designating the promise");
+    // TODO: Add a check that any remaining users of Inst are after coro.begin
+    // or add code to move the users after coro.begin.
+    auto *Inst = cast<Instruction>(Arg);
+    if (Inst->use_empty()) {
+      Inst->eraseFromParent();
+      return;
+    }
+    Inst->moveBefore(getCoroBegin()->getNextNode());
+  }
+
   // Info argument of coro.id is
   //   fresh out of the frontend: null ;
   //   outlined                 : {Init, Return, Susp1, Susp2, ...} ;
@@ -132,10 +175,10 @@ public:
   }
 
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_id;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -144,10 +187,10 @@ public:
 class LLVM_LIBRARY_VISIBILITY CoroFrameInst : public IntrinsicInst {
 public:
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_frame;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -160,10 +203,10 @@ public:
   Value *getFrame() const { return getArgOperand(FrameArg); }
 
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_free;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -178,10 +221,10 @@ public:
   Value *getMem() const { return getArgOperand(MemArg); }
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_begin;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -190,10 +233,31 @@ public:
 class LLVM_LIBRARY_VISIBILITY CoroSaveInst : public IntrinsicInst {
 public:
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_save;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
+    return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+  }
+};
+
+/// This represents the llvm.coro.promise instruction.
+class LLVM_LIBRARY_VISIBILITY CoroPromiseInst : public IntrinsicInst {
+  enum { FrameArg, AlignArg, FromArg };
+
+public:
+  bool isFromPromise() const {
+    return cast<Constant>(getArgOperand(FromArg))->isOneValue();
+  }
+  unsigned getAlignment() const {
+    return cast<ConstantInt>(getArgOperand(AlignArg))->getZExtValue();
+  }
+
+  // Methods to support type inquiry through isa, cast, and dyn_cast:
+  static bool classof(const IntrinsicInst *I) {
+    return I->getIntrinsicID() == Intrinsic::coro_promise;
+  }
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -215,10 +279,10 @@ public:
   }
 
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_suspend;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -227,10 +291,10 @@ public:
 class LLVM_LIBRARY_VISIBILITY CoroSizeInst : public IntrinsicInst {
 public:
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_size;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
@@ -246,12 +310,14 @@ public:
   }
 
   // Methods to support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const IntrinsicInst *I) {
+  static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::coro_end;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 };
 
 } // End namespace llvm.
+
+#endif

@@ -12,12 +12,13 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssembly.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "WebAssembly.h"
 #include "WebAssemblyTargetMachine.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/IR/Function.h" // To access function attributes.
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/KnownBits.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -42,14 +43,13 @@ public:
       : SelectionDAGISel(tm, OptLevel), Subtarget(nullptr), ForCodeSize(false) {
   }
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "WebAssembly Instruction Selection";
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-    ForCodeSize =
-        MF.getFunction()->hasFnAttribute(Attribute::OptimizeForSize) ||
-        MF.getFunction()->hasFnAttribute(Attribute::MinSize);
+    ForCodeSize = MF.getFunction().hasFnAttribute(Attribute::OptimizeForSize) ||
+                  MF.getFunction().hasFnAttribute(Attribute::MinSize);
     Subtarget = &MF.getSubtarget<WebAssemblySubtarget>();
     return SelectionDAGISel::runOnMachineFunction(MF);
   }

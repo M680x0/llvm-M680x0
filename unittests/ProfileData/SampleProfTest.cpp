@@ -7,13 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/ProfileData/ProfileCommon.h"
-#include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ProfileData/SampleProfReader.h"
 #include "llvm/ProfileData/SampleProfWriter.h"
 #include "llvm/Support/Casting.h"
@@ -21,12 +20,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
-#include <algorithm>
-#include <cstdint>
-#include <limits>
-#include <memory>
 #include <string>
-#include <system_error>
 #include <vector>
 
 using namespace llvm;

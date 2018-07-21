@@ -222,3 +222,38 @@ define i32 @test15(i32 %X1, i32 %X2, i32 %X3) {
 ; CHECK-LABEL: @test15
 ; CHECK: and i1 %A, %B
 }
+
+; PR30256 - previously this asserted.
+; CHECK-LABEL: @test16
+; CHECK: %[[FACTOR:.*]] = mul i64 %a, -4
+; CHECK-NEXT: %[[RES:.*]] = add i64 %[[FACTOR]], %b
+; CHECK-NEXT: ret i64 %[[RES]]
+define i64 @test16(i1 %cmp, i64 %a, i64 %b) {
+entry:
+  %shl = shl i64 %a, 1
+  %shl.neg = sub i64 0, %shl
+  br i1 %cmp, label %if.then, label %if.end
+
+if.then:                                          ; preds = %entry
+  %add1 = add i64 %shl.neg, %shl.neg
+  %add2 = add i64 %add1, %b
+  ret i64 %add2
+
+if.end:                                           ; preds = %entry
+  ret i64 0
+}
+
+; CHECK-LABEL: @test17
+; CHECK: %[[A:.*]] = mul i32 %X4, %X3
+; CHECK-NEXT:  %[[C:.*]] = mul i32 %[[A]], %X1
+; CHECK-NEXT: %[[D:.*]] = mul i32 %[[A]], %X2
+; CHECK-NEXT: %[[E:.*]] = xor i32 %[[C]], %[[D]]
+; CHECK-NEXT: ret i32 %[[E]]
+define i32 @test17(i32 %X1, i32 %X2, i32 %X3, i32 %X4) {
+  %A = mul i32 %X3, %X1
+  %B = mul i32 %X3, %X2
+  %C = mul i32 %A, %X4
+  %D = mul i32 %B, %X4
+  %E = xor i32 %C, %D
+  ret i32 %E
+}

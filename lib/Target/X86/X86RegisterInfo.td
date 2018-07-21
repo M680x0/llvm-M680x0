@@ -189,22 +189,22 @@ def XMM13: X86Reg<"xmm13", 13>, DwarfRegNum<[30, -2, -2]>;
 def XMM14: X86Reg<"xmm14", 14>, DwarfRegNum<[31, -2, -2]>;
 def XMM15: X86Reg<"xmm15", 15>, DwarfRegNum<[32, -2, -2]>;
 
-def XMM16:  X86Reg<"xmm16", 16>, DwarfRegNum<[60, -2, -2]>;
-def XMM17:  X86Reg<"xmm17", 17>, DwarfRegNum<[61, -2, -2]>;
-def XMM18:  X86Reg<"xmm18", 18>, DwarfRegNum<[62, -2, -2]>;
-def XMM19:  X86Reg<"xmm19", 19>, DwarfRegNum<[63, -2, -2]>;
-def XMM20:  X86Reg<"xmm20", 20>, DwarfRegNum<[64, -2, -2]>;
-def XMM21:  X86Reg<"xmm21", 21>, DwarfRegNum<[65, -2, -2]>;
-def XMM22:  X86Reg<"xmm22", 22>, DwarfRegNum<[66, -2, -2]>;
-def XMM23:  X86Reg<"xmm23", 23>, DwarfRegNum<[67, -2, -2]>;
-def XMM24:  X86Reg<"xmm24", 24>, DwarfRegNum<[68, -2, -2]>;
-def XMM25:  X86Reg<"xmm25", 25>, DwarfRegNum<[69, -2, -2]>;
-def XMM26:  X86Reg<"xmm26", 26>, DwarfRegNum<[70, -2, -2]>;
-def XMM27:  X86Reg<"xmm27", 27>, DwarfRegNum<[71, -2, -2]>;
-def XMM28:  X86Reg<"xmm28", 28>, DwarfRegNum<[72, -2, -2]>;
-def XMM29:  X86Reg<"xmm29", 29>, DwarfRegNum<[73, -2, -2]>;
-def XMM30:  X86Reg<"xmm30", 30>, DwarfRegNum<[74, -2, -2]>;
-def XMM31:  X86Reg<"xmm31", 31>, DwarfRegNum<[75, -2, -2]>;
+def XMM16:  X86Reg<"xmm16", 16>, DwarfRegNum<[67, -2, -2]>;
+def XMM17:  X86Reg<"xmm17", 17>, DwarfRegNum<[68, -2, -2]>;
+def XMM18:  X86Reg<"xmm18", 18>, DwarfRegNum<[69, -2, -2]>;
+def XMM19:  X86Reg<"xmm19", 19>, DwarfRegNum<[70, -2, -2]>;
+def XMM20:  X86Reg<"xmm20", 20>, DwarfRegNum<[71, -2, -2]>;
+def XMM21:  X86Reg<"xmm21", 21>, DwarfRegNum<[72, -2, -2]>;
+def XMM22:  X86Reg<"xmm22", 22>, DwarfRegNum<[73, -2, -2]>;
+def XMM23:  X86Reg<"xmm23", 23>, DwarfRegNum<[74, -2, -2]>;
+def XMM24:  X86Reg<"xmm24", 24>, DwarfRegNum<[75, -2, -2]>;
+def XMM25:  X86Reg<"xmm25", 25>, DwarfRegNum<[76, -2, -2]>;
+def XMM26:  X86Reg<"xmm26", 26>, DwarfRegNum<[77, -2, -2]>;
+def XMM27:  X86Reg<"xmm27", 27>, DwarfRegNum<[78, -2, -2]>;
+def XMM28:  X86Reg<"xmm28", 28>, DwarfRegNum<[79, -2, -2]>;
+def XMM29:  X86Reg<"xmm29", 29>, DwarfRegNum<[80, -2, -2]>;
+def XMM30:  X86Reg<"xmm30", 30>, DwarfRegNum<[81, -2, -2]>;
+def XMM31:  X86Reg<"xmm31", 31>, DwarfRegNum<[82, -2, -2]>;
 
 } // CostPerUse
 
@@ -308,6 +308,9 @@ def BND1 : X86Reg<"bnd1",   1>;
 def BND2 : X86Reg<"bnd2",   2>;
 def BND3 : X86Reg<"bnd3",   3>;
 
+// CET registers - Shadow Stack Pointer
+def SSP : X86Reg<"ssp", 0>;
+
 //===----------------------------------------------------------------------===//
 // Register Class Definitions... now that we have all of the pieces, define the
 // top-level register classes.  The order specified in the register list is
@@ -345,6 +348,8 @@ def GR32 : RegisterClass<"X86", [i32], 32,
 // GR64 - 64-bit GPRs. This oddly includes RIP, which isn't accurate, since
 // RIP isn't really a register and it can't be used anywhere except in an
 // address, but it doesn't cause trouble.
+// FIXME: it *does* cause trouble - CheckBaseRegAndIndexReg() has extra
+// tests because of the inclusion of RIP in this register class.
 def GR64 : RegisterClass<"X86", [i64], 64,
                          (add RAX, RCX, RDX, RSI, RDI, R8, R9, R10, R11,
                               RBX, R14, R15, R12, R13, RBP, RSP, RIP)>;
@@ -355,7 +360,7 @@ def GR64 : RegisterClass<"X86", [i64], 64,
 def SEGMENT_REG : RegisterClass<"X86", [i16], 16, (add CS, DS, SS, ES, FS, GS)>;
 
 // Debug registers.
-def DEBUG_REG : RegisterClass<"X86", [i32], 32, (sequence "DR%u", 0, 7)>;
+def DEBUG_REG : RegisterClass<"X86", [i32], 32, (sequence "DR%u", 0, 15)>;
 
 // Control registers.
 def CONTROL_REG : RegisterClass<"X86", [i64], 64, (sequence "CR%u", 0, 15)>;
@@ -435,8 +440,9 @@ def LOW32_ADDR_ACCESS : RegisterClass<"X86", [i32], 32, (add GR32, RIP)>;
 def LOW32_ADDR_ACCESS_RBP : RegisterClass<"X86", [i32], 32,
                                           (add LOW32_ADDR_ACCESS, RBP)>;
 
-// A class to support the 'A' assembler constraint: EAX then EDX.
+// A class to support the 'A' assembler constraint: [ER]AX then [ER]DX.
 def GR32_AD : RegisterClass<"X86", [i32], 32, (add EAX, EDX)>;
+def GR64_AD : RegisterClass<"X86", [i64], 64, (add RAX, RDX)>;
 
 // Scalar SSE2 floating point registers.
 def FR32 : RegisterClass<"X86", [f32], 32, (sequence "XMM%u", 0, 15)>;
@@ -508,7 +514,7 @@ def VR256X : RegisterClass<"X86", [v8f32, v4f64, v32i8, v16i16, v8i32, v4i64],
                            256, (sequence "YMM%u", 0, 31)>;
 
 // Mask registers
-def VK1     : RegisterClass<"X86", [i1],    16,  (sequence "K%u", 0, 7)> {let Size = 16;}
+def VK1     : RegisterClass<"X86", [v1i1],  16,  (sequence "K%u", 0, 7)> {let Size = 16;}
 def VK2     : RegisterClass<"X86", [v2i1],  16,  (add VK1)> {let Size = 16;}
 def VK4     : RegisterClass<"X86", [v4i1],  16,  (add VK2)> {let Size = 16;}
 def VK8     : RegisterClass<"X86", [v8i1],  16,  (add VK4)> {let Size = 16;}
@@ -516,7 +522,7 @@ def VK16    : RegisterClass<"X86", [v16i1], 16, (add VK8)> {let Size = 16;}
 def VK32    : RegisterClass<"X86", [v32i1], 32, (add VK16)> {let Size = 32;}
 def VK64    : RegisterClass<"X86", [v64i1], 64, (add VK32)> {let Size = 64;}
 
-def VK1WM   : RegisterClass<"X86", [i1],    16,  (sub VK1, K0)> {let Size = 16;}
+def VK1WM   : RegisterClass<"X86", [v1i1],  16,  (sub VK1, K0)> {let Size = 16;}
 def VK2WM   : RegisterClass<"X86", [v2i1],  16,  (sub VK2, K0)> {let Size = 16;}
 def VK4WM   : RegisterClass<"X86", [v4i1],  16,  (sub VK4, K0)> {let Size = 16;}
 def VK8WM   : RegisterClass<"X86", [v8i1],  16,  (sub VK8, K0)> {let Size = 16;}

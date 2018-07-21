@@ -19,7 +19,7 @@ class COFFImportFile;
 class ObjectFile;
 }
 namespace codeview {
-class MemoryTypeTableBuilder;
+class MergingTypeTableBuilder;
 }
 
 class ScopedPrinter;
@@ -47,6 +47,7 @@ public:
   virtual void printVersionInfo() {}
   virtual void printGroupSections() {}
   virtual void printHashHistogram() {}
+  virtual void printNotes() {}
 
   // Only implemented for ARM ELF at this time.
   virtual void printAttributes() { }
@@ -63,9 +64,12 @@ public:
   virtual void printCOFFDirectives() { }
   virtual void printCOFFBaseReloc() { }
   virtual void printCOFFDebugDirectory() { }
+  virtual void printCOFFResources() {}
+  virtual void printCOFFLoadConfig() { }
   virtual void printCodeViewDebugInfo() { }
   virtual void
-  mergeCodeViewTypes(llvm::codeview::MemoryTypeTableBuilder &CVTypes) {}
+  mergeCodeViewTypes(llvm::codeview::MergingTypeTableBuilder &CVIDs,
+                     llvm::codeview::MergingTypeTableBuilder &CVTypes) {}
 
   // Only implemented for MachO.
   virtual void printMachODataInCode() { }
@@ -93,10 +97,15 @@ std::error_code createMachODumper(const object::ObjectFile *Obj,
                                   ScopedPrinter &Writer,
                                   std::unique_ptr<ObjDumper> &Result);
 
+std::error_code createWasmDumper(const object::ObjectFile *Obj,
+                                 ScopedPrinter &Writer,
+                                 std::unique_ptr<ObjDumper> &Result);
+
 void dumpCOFFImportFile(const object::COFFImportFile *File);
 
-void dumpCodeViewMergedTypes(ScopedPrinter &Writer,
-                             llvm::codeview::MemoryTypeTableBuilder &CVTypes);
+void dumpCodeViewMergedTypes(
+    ScopedPrinter &Writer, llvm::codeview::MergingTypeTableBuilder &IDTable,
+    llvm::codeview::MergingTypeTableBuilder &TypeTable);
 
 } // namespace llvm
 

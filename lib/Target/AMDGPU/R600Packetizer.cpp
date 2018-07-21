@@ -14,7 +14,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/Debug.h"
 #include "AMDGPU.h"
 #include "AMDGPUSubtarget.h"
 #include "R600InstrInfo.h"
@@ -24,6 +23,7 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -36,7 +36,7 @@ class R600Packetizer : public MachineFunctionPass {
 
 public:
   static char ID;
-  R600Packetizer(const TargetMachine &TM) : MachineFunctionPass(ID) {}
+  R600Packetizer() : MachineFunctionPass(ID) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -47,13 +47,10 @@ public:
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
-  const char *getPassName() const override {
-    return "R600 Packetizer";
-  }
+  StringRef getPassName() const override { return "R600 Packetizer"; }
 
   bool runOnMachineFunction(MachineFunction &Fn) override;
 };
-char R600Packetizer::ID = 0;
 
 class R600PacketizerList : public VLIWPacketizerList {
 private:
@@ -283,7 +280,7 @@ public:
       return false;
     }
 
-    // We cannot read LDS source registrs from the Trans slot.
+    // We cannot read LDS source registers from the Trans slot.
     if (isTransSlot && TII->readsLDSSrcReg(MI))
       return false;
 
@@ -406,6 +403,15 @@ bool R600Packetizer::runOnMachineFunction(MachineFunction &Fn) {
 
 } // end anonymous namespace
 
-llvm::FunctionPass *llvm::createR600Packetizer(TargetMachine &tm) {
-  return new R600Packetizer(tm);
+INITIALIZE_PASS_BEGIN(R600Packetizer, DEBUG_TYPE,
+                     "R600 Packetizer", false, false)
+INITIALIZE_PASS_END(R600Packetizer, DEBUG_TYPE,
+                    "R600 Packetizer", false, false)
+
+char R600Packetizer::ID = 0;
+
+char &llvm::R600PacketizerID = R600Packetizer::ID;
+
+llvm::FunctionPass *llvm::createR600Packetizer() {
+  return new R600Packetizer();
 }

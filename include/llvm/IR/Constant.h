@@ -15,11 +15,12 @@
 #define LLVM_IR_CONSTANT_H
 
 #include "llvm/IR/User.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/Casting.h"
 
 namespace llvm {
-  class APInt;
 
-  template<typename T> class SmallVectorImpl;
+class APInt;
 
 /// This is an important base class in LLVM. It provides the common facilities
 /// of all constant values in an LLVM program. A constant is a value that is
@@ -39,15 +40,14 @@ namespace llvm {
 /// don't have to worry about the lifetime of the objects.
 /// @brief LLVM Constant Representation
 class Constant : public User {
-  void operator=(const Constant &) = delete;
-  Constant(const Constant &) = delete;
-  void anchor() override;
-
 protected:
   Constant(Type *ty, ValueTy vty, Use *Ops, unsigned NumOps)
     : User(ty, vty, Ops, NumOps) {}
 
 public:
+  void operator=(const Constant &) = delete;
+  Constant(const Constant &) = delete;
+
   /// Return true if this is the value that would be returned by getNullValue.
   bool isNullValue() const;
 
@@ -116,9 +116,9 @@ public:
   void destroyConstant();
 
   //// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const Value *V) {
-    return V->getValueID() >= ConstantFirstVal &&
-           V->getValueID() <= ConstantLastVal;
+  static bool classof(const Value *V) {
+    static_assert(ConstantFirstVal == 0, "V->getValueID() >= ConstantFirstVal always succeeds");
+    return V->getValueID() <= ConstantLastVal;
   }
 
   /// This method is a special form of User::replaceUsesOfWith
@@ -150,15 +150,16 @@ public:
   /// hanging off of the globals.
   void removeDeadConstantUsers() const;
 
-  Constant *stripPointerCasts() {
+  const Constant *stripPointerCasts() const {
     return cast<Constant>(Value::stripPointerCasts());
   }
 
-  const Constant *stripPointerCasts() const {
-    return const_cast<Constant*>(this)->stripPointerCasts();
+  Constant *stripPointerCasts() {
+    return const_cast<Constant*>(
+                      static_cast<const Constant *>(this)->stripPointerCasts());
   }
 };
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_IR_CONSTANT_H

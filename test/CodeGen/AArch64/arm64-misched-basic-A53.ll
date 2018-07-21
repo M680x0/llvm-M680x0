@@ -1,6 +1,6 @@
 ; REQUIRES: asserts
-; RUN: llc < %s -mtriple=arm64-linux-gnu -mcpu=cortex-a53 -pre-RA-sched=source -enable-misched -verify-misched -debug-only=misched -o - 2>&1 > /dev/null | FileCheck %s
-; RUN: llc < %s -mtriple=arm64-linux-gnu -mcpu=cortex-a53 -pre-RA-sched=source -enable-misched -verify-misched -debug-only=misched -o - -misched-limit=2 2>&1 > /dev/null | FileCheck %s
+; RUN: llc < %s -mtriple=arm64-linux-gnu -mcpu=cortex-a53 -pre-RA-sched=source -enable-misched -verify-misched -debug-only=machine-scheduler -disable-machine-dce -o - 2>&1 > /dev/null | FileCheck %s
+; RUN: llc < %s -mtriple=arm64-linux-gnu -mcpu=cortex-a53 -pre-RA-sched=source -enable-misched -verify-misched -debug-only=machine-scheduler -disable-machine-dce -o - -misched-limit=2 2>&1 > /dev/null | FileCheck %s
 ;
 ; The Cortex-A53 machine model will cause the MADD instruction to be scheduled
 ; much higher than the ADD instructions in order to hide latency. When not
@@ -8,7 +8,7 @@
 ;
 ; CHECK: ********** MI Scheduling **********
 ; CHECK: main
-; CHECK: *** Final schedule for BB#2 ***
+; CHECK: *** Final schedule for %bb.2 ***
 ; CHECK: MADDWrrr
 ; CHECK: ADDWri
 ; CHECK: ********** INTERVALS **********
@@ -83,8 +83,8 @@ for.end:                                          ; preds = %for.cond
 ; after it, this test checks to make sure there are more than one.
 ;
 ; CHECK: ********** MI Scheduling **********
-; CHECK: neon4xfloat:BB#0
-; CHECK: *** Final schedule for BB#0 ***
+; CHECK: neon4xfloat:%bb.0
+; CHECK: *** Final schedule for %bb.0 ***
 ; CHECK: FDIVv4f32
 ; CHECK: FADDv4f32
 ; CHECK: FADDv4f32
@@ -130,7 +130,7 @@ declare { <16 x i8>, <16 x i8> } @llvm.aarch64.neon.ld2.v16i8.p0i8(i8*)
 ; are otherwise ready are jammed in the pending queue.
 ; CHECK: ********** MI Scheduling **********
 ; CHECK: testResourceConflict
-; CHECK: *** Final schedule for BB#0 ***
+; CHECK: *** Final schedule for %bb.0 ***
 ; CHECK: BRK
 ; CHECK: ********** INTERVALS **********
 define void @testResourceConflict(float* %ptr) {
@@ -178,26 +178,26 @@ declare void @llvm.trap()
 ; Resource contention on LDST.
 ; CHECK: ********** MI Scheduling **********
 ; CHECK: testLdStConflict
-; CHECK: *** Final schedule for BB#1 ***
+; CHECK: *** Final schedule for %bb.1 ***
 ; CHECK: LD4Fourv2d
 ; CHECK: STRQui
 ; CHECK: ********** INTERVALS **********
-define void @testLdStConflict() {
+define void @testLdStConflict(<2 x i64> %v) {
 entry:
   br label %loop
 
 loop:
   %0 = call { <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64> } @llvm.aarch64.neon.ld4.v2i64.p0i8(i8* null)
   %ptr = bitcast i8* undef to <2 x i64>*
-  store <2 x i64> zeroinitializer, <2 x i64>* %ptr, align 4
+  store <2 x i64> %v, <2 x i64>* %ptr, align 4
   %ptr1 = bitcast i8* undef to <2 x i64>*
-  store <2 x i64> zeroinitializer, <2 x i64>* %ptr1, align 4
+  store <2 x i64> %v, <2 x i64>* %ptr1, align 4
   %ptr2 = bitcast i8* undef to <2 x i64>*
-  store <2 x i64> zeroinitializer, <2 x i64>* %ptr2, align 4
+  store <2 x i64> %v, <2 x i64>* %ptr2, align 4
   %ptr3 = bitcast i8* undef to <2 x i64>*
-  store <2 x i64> zeroinitializer, <2 x i64>* %ptr3, align 4
+  store <2 x i64> %v, <2 x i64>* %ptr3, align 4
   %ptr4 = bitcast i8* undef to <2 x i64>*
-  store <2 x i64> zeroinitializer, <2 x i64>* %ptr4, align 4
+  store <2 x i64> %v, <2 x i64>* %ptr4, align 4
   br label %loop
 }
 

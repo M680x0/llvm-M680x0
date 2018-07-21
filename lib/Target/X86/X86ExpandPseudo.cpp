@@ -54,7 +54,7 @@ public:
         MachineFunctionProperties::Property::NoVRegs);
   }
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "X86 pseudo instruction expansion pass";
   }
 
@@ -77,9 +77,11 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   default:
     return false;
   case X86::TCRETURNdi:
+  case X86::TCRETURNdicc:
   case X86::TCRETURNri:
   case X86::TCRETURNmi:
   case X86::TCRETURNdi64:
+  case X86::TCRETURNdi64cc:
   case X86::TCRETURNri64:
   case X86::TCRETURNmi64: {
     bool isMem = Opcode == X86::TCRETURNmi || Opcode == X86::TCRETURNmi64;
@@ -94,8 +96,12 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     assert(MaxTCDelta <= 0 && "MaxTCDelta should never be positive");
 
     // Incoporate the retaddr area.
-    Offset = StackAdj-MaxTCDelta;
+    Offset = StackAdj - MaxTCDelta;
     assert(Offset >= 0 && "Offset should never be negative");
+
+    if (Opcode == X86::TCRETURNdicc || Opcode == X86::TCRETURNdi64cc) {
+      assert(Offset == 0 && "Conditional tail call cannot adjust the stack.");
+    }
 
     if (Offset) {
       // Check for possible merge with preceding ADD instruction.
@@ -105,26 +111,48 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
 
     // Jump to label or value in register.
     bool IsWin64 = STI->isTargetWin64();
-    if (Opcode == X86::TCRETURNdi || Opcode == X86::TCRETURNdi64) {
-      unsigned Op = (Opcode == X86::TCRETURNdi)
-                        ? X86::TAILJMPd
-                        : (IsWin64 ? X86::TAILJMPd64_REX : X86::TAILJMPd64);
+    if (Opcode == X86::TCRETURNdi || Opcode == X86::TCRETURNdicc ||
+        Opcode == X86::TCRETURNdi64 || Opcode == X86::TCRETURNdi64cc) {
+      unsigned Op;
+      switch (Opcode) {
+      case X86::TCRETURNdi:
+        Op = X86::TAILJMPd;
+        break;
+      case X86::TCRETURNdicc:
+        Op = X86::TAILJMPd_CC;
+        break;
+      case X86::TCRETURNdi64cc:
+        assert(!MBB.getParent()->hasWinCFI() &&
+               "Conditional tail calls confuse "
+               "the Win64 unwinder.");
+        Op = X86::TAILJMPd64_CC;
+        break;
+      default:
+        // Note: Win64 uses REX prefixes indirect jumps out of functions, but
+        // not direct ones.
+        Op = X86::TAILJMPd64;
+        break;
+      }
       MachineInstrBuilder MIB = BuildMI(MBB, MBBI, DL, TII->get(Op));
-      if (JumpTarget.isGlobal())
+      if (JumpTarget.isGlobal()) {
         MIB.addGlobalAddress(JumpTarget.getGlobal(), JumpTarget.getOffset(),
                              JumpTarget.getTargetFlags());
-      else {
+      } else {
         assert(JumpTarget.isSymbol());
         MIB.addExternalSymbol(JumpTarget.getSymbolName(),
                               JumpTarget.getTargetFlags());
       }
+      if (Op == X86::TAILJMPd_CC || Op == X86::TAILJMPd64_CC) {
+        MIB.addImm(MBBI->getOperand(2).getImm());
+      }
+
     } else if (Opcode == X86::TCRETURNmi || Opcode == X86::TCRETURNmi64) {
       unsigned Op = (Opcode == X86::TCRETURNmi)
                         ? X86::TAILJMPm
                         : (IsWin64 ? X86::TAILJMPm64_REX : X86::TAILJMPm64);
       MachineInstrBuilder MIB = BuildMI(MBB, MBBI, DL, TII->get(Op));
       for (unsigned i = 0; i != 5; ++i)
-        MIB.addOperand(MBBI->getOperand(i));
+        MIB.add(MBBI->getOperand(i));
     } else if (Opcode == X86::TCRETURNri64) {
       BuildMI(MBB, MBBI, DL,
               TII->get(IsWin64 ? X86::TAILJMPr64_REX : X86::TAILJMPr64))
@@ -187,14 +215,14 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       MIB = BuildMI(MBB, MBBI, DL, TII->get(X86::RETL));
     }
     for (unsigned I = 1, E = MBBI->getNumOperands(); I != E; ++I)
-      MIB.addOperand(MBBI->getOperand(I));
+      MIB.add(MBBI->getOperand(I));
     MBB.erase(MBBI);
     return true;
   }
   case X86::EH_RESTORE: {
     // Restore ESP and EBP, and optionally ESI if required.
     bool IsSEH = isAsynchronousEHPersonality(classifyEHPersonality(
-        MBB.getParent()->getFunction()->getPersonalityFn()));
+        MBB.getParent()->getFunction().getPersonalityFn()));
     X86FL->restoreWin32EHStackPointers(MBB, MBBI, DL, /*RestoreSP=*/IsSEH);
     MBBI->eraseFromParent();
     return true;

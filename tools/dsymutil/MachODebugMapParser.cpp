@@ -9,7 +9,6 @@
 
 #include "BinaryHolder.h"
 #include "DebugMap.h"
-#include "dsymutil.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/Object/MachO.h"
 #include "llvm/Support/Path.h"
@@ -65,9 +64,12 @@ private:
   std::unique_ptr<DebugMap> parseOneBinary(const MachOObjectFile &MainBinary,
                                            StringRef BinaryPath);
 
-  void switchToNewDebugMapObject(StringRef Filename, sys::TimeValue Timestamp);
+  void
+  switchToNewDebugMapObject(StringRef Filename,
+                            sys::TimePoint<std::chrono::seconds> Timestamp);
   void resetParserState();
   uint64_t getMainBinarySymbolAddress(StringRef Name);
+  std::vector<StringRef> getMainBinarySymbolNames(uint64_t Value);
   void loadMainBinarySymbols(const MachOObjectFile &MainBinary);
   void loadCurrentObjectFileSymbols(const object::MachOObjectFile &Obj);
   void handleStabSymbolTableEntry(uint32_t StringIndex, uint8_t Type,
@@ -110,8 +112,8 @@ void MachODebugMapParser::resetParserState() {
 /// Create a new DebugMapObject. This function resets the state of the
 /// parser that was referring to the last object file and sets
 /// everything up to add symbols to the new one.
-void MachODebugMapParser::switchToNewDebugMapObject(StringRef Filename,
-                                                    sys::TimeValue Timestamp) {
+void MachODebugMapParser::switchToNewDebugMapObject(
+    StringRef Filename, sys::TimePoint<std::chrono::seconds> Timestamp) {
   resetParserState();
 
   SmallString<80> Path(PathPrefix);
@@ -132,7 +134,8 @@ void MachODebugMapParser::switchToNewDebugMapObject(StringRef Filename,
                    Err.message() + "\n");
   }
 
-  CurrentDebugMapObject = &Result->addDebugMapObject(Path, Timestamp);
+  CurrentDebugMapObject =
+      &Result->addDebugMapObject(Path, Timestamp, MachO::N_OSO);
   loadCurrentObjectFileSymbols(*ErrOrAchObj);
 }
 
@@ -343,10 +346,14 @@ void MachODebugMapParser::handleStabSymbolTableEntry(uint32_t StringIndex,
   const char *Name = &MainBinaryStrings.data()[StringIndex];
 
   // An N_OSO entry represents the start of a new object file description.
-  if (Type == MachO::N_OSO) {
-    sys::TimeValue Timestamp;
-    Timestamp.fromEpochTime(Value);
-    return switchToNewDebugMapObject(Name, Timestamp);
+  if (Type == MachO::N_OSO)
+    return switchToNewDebugMapObject(Name, sys::toTimePoint(Value));
+
+  if (Type == MachO::N_AST) {
+    SmallString<80> Path(PathPrefix);
+    sys::path::append(Path, Name);
+    Result->addDebugMapObject(Path, sys::toTimePoint(Value), Type);
+    return;
   }
 
   // If the last N_OSO object file wasn't found,
@@ -383,9 +390,21 @@ void MachODebugMapParser::handleStabSymbolTableEntry(uint32_t StringIndex,
   }
 
   auto ObjectSymIt = CurrentObjectAddresses.find(Name);
+
+  // If the name of a (non-static) symbol is not in the current object, we
+  // check all its aliases from the main binary.
+  if (ObjectSymIt == CurrentObjectAddresses.end() && Type != MachO::N_STSYM) {
+    for (const auto &Alias : getMainBinarySymbolNames(Value)) {
+      ObjectSymIt = CurrentObjectAddresses.find(Alias);
+      if (ObjectSymIt != CurrentObjectAddresses.end())
+        break;
+    }
+  }
+
   if (ObjectSymIt == CurrentObjectAddresses.end())
     return Warning("could not find object file symbol for symbol " +
                    Twine(Name));
+
   if (!CurrentDebugMapObject->addSymbol(Name, ObjectSymIt->getValue(), Value,
                                         Size))
     return Warning(Twine("failed to insert symbol '") + Name +
@@ -430,6 +449,17 @@ uint64_t MachODebugMapParser::getMainBinarySymbolAddress(StringRef Name) {
   return Sym->second;
 }
 
+/// Get all symbol names in the main binary for the given value.
+std::vector<StringRef>
+MachODebugMapParser::getMainBinarySymbolNames(uint64_t Value) {
+  std::vector<StringRef> Names;
+  for (const auto &Entry : MainBinarySymbolAddresses) {
+    if (Entry.second == Value)
+      Names.push_back(Entry.first());
+  }
+  return Names;
+}
+
 /// Load the interesting main binary symbols' addresses into
 /// MainBinarySymbolAddresses.
 void MachODebugMapParser::loadMainBinarySymbols(
@@ -445,13 +475,15 @@ void MachODebugMapParser::loadMainBinarySymbols(
     }
     SymbolRef::Type Type = *TypeOrErr;
     // Skip undefined and STAB entries.
-    if ((Type & SymbolRef::ST_Debug) || (Type & SymbolRef::ST_Unknown))
+    if ((Type == SymbolRef::ST_Debug) || (Type == SymbolRef::ST_Unknown))
       continue;
     // The only symbols of interest are the global variables. These
     // are the only ones that need to be queried because the address
     // of common data won't be described in the debug map. All other
     // addresses should be fetched for the debug map.
-    if (!(Sym.getFlags() & SymbolRef::SF_Global))
+    uint8_t SymType =
+        MainBinary.getSymbolTableEntry(Sym.getRawDataRefImpl()).n_type;
+    if (!(SymType & (MachO::N_EXT | MachO::N_PEXT)))
       continue;
     Expected<section_iterator> SectionOrErr = Sym.getSection();
     if (!SectionOrErr) {

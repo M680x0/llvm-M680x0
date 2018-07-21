@@ -14,13 +14,18 @@
 #ifndef LLVM_ANALYSIS_MODULESUMMARYANALYSIS_H
 #define LLVM_ANALYSIS_MODULESUMMARYANALYSIS_H
 
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
+#include <functional>
 
 namespace llvm {
+
 class BlockFrequencyInfo;
+class Function;
+class Module;
+class ProfileSummaryInfo;
 
 /// Direct function to compute a \c ModuleSummaryIndex from a given module.
 ///
@@ -30,17 +35,18 @@ class BlockFrequencyInfo;
 /// that information.
 ModuleSummaryIndex buildModuleSummaryIndex(
     const Module &M,
-    std::function<BlockFrequencyInfo *(const Function &F)> GetBFICallback =
-        nullptr);
+    std::function<BlockFrequencyInfo *(const Function &F)> GetBFICallback,
+    ProfileSummaryInfo *PSI);
 
 /// Analysis pass to provide the ModuleSummaryIndex object.
 class ModuleSummaryIndexAnalysis
     : public AnalysisInfoMixin<ModuleSummaryIndexAnalysis> {
   friend AnalysisInfoMixin<ModuleSummaryIndexAnalysis>;
-  static char PassID;
+
+  static AnalysisKey Key;
 
 public:
-  typedef ModuleSummaryIndex Result;
+  using Result = ModuleSummaryIndex;
 
   Result run(Module &M, ModuleAnalysisManager &AM);
 };
@@ -70,10 +76,6 @@ public:
 //
 ModulePass *createModuleSummaryIndexWrapperPass();
 
-/// Returns true if \p M is eligible for ThinLTO promotion.
-///
-/// Currently we check if it has any any InlineASM that uses an internal symbol.
-bool moduleCanBeRenamedForThinLTO(const Module &M);
-}
+} // end namespace llvm
 
-#endif
+#endif // LLVM_ANALYSIS_MODULESUMMARYANALYSIS_H

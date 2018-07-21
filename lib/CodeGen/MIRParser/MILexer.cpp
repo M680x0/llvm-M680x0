@@ -1,4 +1,4 @@
-//===- MILexer.cpp - Machine instructions lexer implementation ----------===//
+//===- MILexer.cpp - Machine instructions lexer implementation ------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,27 +12,33 @@
 //===----------------------------------------------------------------------===//
 
 #include "MILexer.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/None.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include <algorithm>
+#include <cassert>
 #include <cctype>
+#include <string>
 
 using namespace llvm;
 
 namespace {
 
-typedef function_ref<void(StringRef::iterator Loc, const Twine &)>
-    ErrorCallbackType;
+using ErrorCallbackType =
+    function_ref<void(StringRef::iterator Loc, const Twine &)>;
 
 /// This class provides a way to iterate and get characters from the source
 /// string.
 class Cursor {
-  const char *Ptr;
-  const char *End;
+  const char *Ptr = nullptr;
+  const char *End = nullptr;
 
 public:
-  Cursor(NoneType) : Ptr(nullptr), End(nullptr) {}
+  Cursor(NoneType) {}
 
   explicit Cursor(StringRef Str) {
     Ptr = Str.data();
@@ -202,14 +208,24 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("internal", MIToken::kw_internal)
       .Case("early-clobber", MIToken::kw_early_clobber)
       .Case("debug-use", MIToken::kw_debug_use)
+      .Case("renamable", MIToken::kw_renamable)
       .Case("tied-def", MIToken::kw_tied_def)
       .Case("frame-setup", MIToken::kw_frame_setup)
       .Case("debug-location", MIToken::kw_debug_location)
       .Case("same_value", MIToken::kw_cfi_same_value)
       .Case("offset", MIToken::kw_cfi_offset)
+      .Case("rel_offset", MIToken::kw_cfi_rel_offset)
       .Case("def_cfa_register", MIToken::kw_cfi_def_cfa_register)
       .Case("def_cfa_offset", MIToken::kw_cfi_def_cfa_offset)
+      .Case("adjust_cfa_offset", MIToken::kw_cfi_adjust_cfa_offset)
+      .Case("escape", MIToken::kw_cfi_escape)
       .Case("def_cfa", MIToken::kw_cfi_def_cfa)
+      .Case("remember_state", MIToken::kw_cfi_remember_state)
+      .Case("restore", MIToken::kw_cfi_restore)
+      .Case("restore_state", MIToken::kw_cfi_restore_state)
+      .Case("undefined", MIToken::kw_cfi_undefined)
+      .Case("register", MIToken::kw_cfi_register)
+      .Case("window_save", MIToken::kw_cfi_window_save)
       .Case("blockaddress", MIToken::kw_blockaddress)
       .Case("intrinsic", MIToken::kw_intrinsic)
       .Case("target-index", MIToken::kw_target_index)
@@ -222,6 +238,7 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("target-flags", MIToken::kw_target_flags)
       .Case("volatile", MIToken::kw_volatile)
       .Case("non-temporal", MIToken::kw_non_temporal)
+      .Case("dereferenceable", MIToken::kw_dereferenceable)
       .Case("invariant", MIToken::kw_invariant)
       .Case("align", MIToken::kw_align)
       .Case("stack", MIToken::kw_stack)
@@ -269,6 +286,9 @@ static Cursor maybeLexMachineBasicBlock(Cursor C, MIToken &Token,
     C.advance();
   StringRef Number = NumberRange.upto(C);
   unsigned StringOffset = PrefixLength + Number.size(); // Drop '%bb.<id>'
+  // TODO: The format bb.<id>.<irname> is supported only when it's not a
+  // reference. Once we deprecate the format where the irname shows up, we
+  // should only lex forward if it is a reference.
   if (C.peek() == '.') {
     C.advance(); // Skip '.'
     ++StringOffset;
@@ -364,6 +384,14 @@ static Cursor maybeLexIRValue(Cursor C, MIToken &Token,
   return lexName(C, Token, MIToken::NamedIRValue, Rule.size(), ErrorCallback);
 }
 
+static Cursor maybeLexStringConstant(Cursor C, MIToken &Token,
+                                     ErrorCallbackType ErrorCallback) {
+  if (C.peek() != '"')
+    return None;
+  return lexName(C, Token, MIToken::StringConstant, /*PrefixLength=*/0,
+                 ErrorCallback);
+}
+
 static Cursor lexVirtualRegister(Cursor C, MIToken &Token) {
   auto Range = C;
   C.advance(); // Skip '%'
@@ -423,19 +451,6 @@ static bool isValidHexFloatingPointPrefix(char C) {
   return C == 'H' || C == 'K' || C == 'L' || C == 'M';
 }
 
-static Cursor maybeLexHexFloatingPointLiteral(Cursor C, MIToken &Token) {
-  if (C.peek() != '0' || C.peek(1) != 'x')
-    return None;
-  Cursor Range = C;
-  C.advance(2); // Skip '0x'
-  if (isValidHexFloatingPointPrefix(C.peek()))
-    C.advance();
-  while (isxdigit(C.peek()))
-    C.advance();
-  Token.reset(MIToken::FloatingPointLiteral, Range.upto(C));
-  return C;
-}
-
 static Cursor lexFloatingPointLiteral(Cursor Range, Cursor C, MIToken &Token) {
   C.advance();
   // Skip over [0-9]*([eE][-+]?[0-9]+)?
@@ -449,6 +464,28 @@ static Cursor lexFloatingPointLiteral(Cursor Range, Cursor C, MIToken &Token) {
       C.advance();
   }
   Token.reset(MIToken::FloatingPointLiteral, Range.upto(C));
+  return C;
+}
+
+static Cursor maybeLexHexadecimalLiteral(Cursor C, MIToken &Token) {
+  if (C.peek() != '0' || (C.peek(1) != 'x' && C.peek(1) != 'X'))
+    return None;
+  Cursor Range = C;
+  C.advance(2);
+  unsigned PrefLen = 2;
+  if (isValidHexFloatingPointPrefix(C.peek())) {
+    C.advance();
+    PrefLen++;
+  }
+  while (isxdigit(C.peek()))
+    C.advance();
+  StringRef StrVal = Range.upto(C);
+  if (StrVal.size() <= PrefLen)
+    return None;
+  if (PrefLen == 2)
+    Token.reset(MIToken::HexLiteral, Range.upto(C));
+  else // It must be 3, which means that there was a floating-point prefix.
+    Token.reset(MIToken::FloatingPointLiteral, Range.upto(C));
   return C;
 }
 
@@ -472,6 +509,7 @@ static MIToken::TokenKind getMetadataKeywordKind(StringRef Identifier) {
       .Case("!alias.scope", MIToken::md_alias_scope)
       .Case("!noalias", MIToken::md_noalias)
       .Case("!range", MIToken::md_range)
+      .Case("!DIExpression", MIToken::md_diexpr)
       .Default(MIToken::Error);
 }
 
@@ -608,7 +646,7 @@ StringRef llvm::lexMIToken(StringRef Source, MIToken &Token,
     return R.remaining();
   if (Cursor R = maybeLexExternalSymbol(C, Token, ErrorCallback))
     return R.remaining();
-  if (Cursor R = maybeLexHexFloatingPointLiteral(C, Token))
+  if (Cursor R = maybeLexHexadecimalLiteral(C, Token))
     return R.remaining();
   if (Cursor R = maybeLexNumericalLiteral(C, Token))
     return R.remaining();
@@ -619,6 +657,8 @@ StringRef llvm::lexMIToken(StringRef Source, MIToken &Token,
   if (Cursor R = maybeLexNewline(C, Token))
     return R.remaining();
   if (Cursor R = maybeLexEscapedIRValue(C, Token, ErrorCallback))
+    return R.remaining();
+  if (Cursor R = maybeLexStringConstant(C, Token, ErrorCallback))
     return R.remaining();
 
   Token.reset(MIToken::Error, C.remaining());

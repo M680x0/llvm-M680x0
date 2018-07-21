@@ -1,4 +1,4 @@
-//===-- llvm/CodeGen/DwarfFile.h - Dwarf Debug Framework -------*- C++ -*--===//
+//===- llvm/CodeGen/DwarfFile.h - Dwarf Debug Framework ---------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -10,30 +10,25 @@
 #ifndef LLVM_LIB_CODEGEN_ASMPRINTER_DWARFFILE_H
 #define LLVM_LIB_CODEGEN_ASMPRINTER_DWARFFILE_H
 
-#include "AddressPool.h"
 #include "DwarfStringPool.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/DIE.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/Support/Allocator.h"
 #include <memory>
-#include <vector>
+#include <utility>
 
 namespace llvm {
+
 class AsmPrinter;
 class DbgVariable;
 class DwarfCompileUnit;
 class DwarfUnit;
-class DIEAbbrev;
-class MCSymbol;
-class DIE;
 class LexicalScope;
-class StringRef;
-class DwarfDebug;
 class MCSection;
-class MDNode;
+
 class DwarfFile {
   // Target of Dwarf emission, used for sizing of abbreviations.
   AsmPrinter *Asm;
@@ -41,10 +36,7 @@ class DwarfFile {
   BumpPtrAllocator AbbrevAllocator;
 
   // Used to uniquely define abbreviations.
-  FoldingSet<DIEAbbrev> AbbreviationsSet;
-
-  // A list of all the unique abbreviations in use.
-  std::vector<DIEAbbrev *> Abbreviations;
+  DIEAbbrevSet Abbrevs;
 
   // A pointer to all units in the section.
   SmallVector<std::unique_ptr<DwarfCompileUnit>, 1> CUs;
@@ -56,6 +48,7 @@ class DwarfFile {
 
   // Collection of abstract subprogram DIEs.
   DenseMap<const MDNode *, DIE *> AbstractSPDies;
+  DenseMap<const MDNode *, std::unique_ptr<DbgVariable>> AbstractVariables;
 
   /// Maps MDNodes for type system with the corresponding DIEs. These DIEs can
   /// be shared across CUs, that is why we keep the map here instead
@@ -64,8 +57,6 @@ class DwarfFile {
 
 public:
   DwarfFile(AsmPrinter *AP, StringRef Pref, BumpPtrAllocator &DA);
-
-  ~DwarfFile();
 
   const SmallVectorImpl<std::unique_ptr<DwarfCompileUnit>> &getUnits() {
     return CUs;
@@ -80,12 +71,6 @@ public:
   /// \brief Compute the size and offset of all the DIEs in the given unit.
   /// \returns The size of the root DIE.
   unsigned computeSizeAndOffsetsForUnit(DwarfUnit *TheU);
-
-  /// Define a unique number for the abbreviation.
-  ///
-  /// Compute the abbreviation for \c Die, look up its unique number, and
-  /// return a reference to it in the uniquing table.
-  DIEAbbrev &assignAbbrevNumber(DIE &Die);
 
   /// \brief Add a unit to the list of CUs.
   void addUnit(std::unique_ptr<DwarfCompileUnit> U);
@@ -117,12 +102,19 @@ public:
     return AbstractSPDies;
   }
 
+  DenseMap<const MDNode *, std::unique_ptr<DbgVariable>> &getAbstractVariables() {
+    return AbstractVariables;
+  }
+
   void insertDIE(const MDNode *TypeMD, DIE *Die) {
     DITypeNodeToDieMap.insert(std::make_pair(TypeMD, Die));
   }
+
   DIE *getDIE(const MDNode *TypeMD) {
     return DITypeNodeToDieMap.lookup(TypeMD);
   }
 };
-}
-#endif
+
+} // end namespace llvm
+
+#endif // LLVM_LIB_CODEGEN_ASMPRINTER_DWARFFILE_H

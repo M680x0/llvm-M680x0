@@ -14,29 +14,30 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/Passes.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/StackProtector.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <tuple>
 
 using namespace llvm;
 
@@ -47,25 +48,36 @@ STATISTIC(NumBaseRegisters, "Number of virtual frame base registers allocated");
 STATISTIC(NumReplacements, "Number of frame indices references replaced");
 
 namespace {
+
   class FrameRef {
     MachineBasicBlock::iterator MI; // Instr referencing the frame
     int64_t LocalOffset;            // Local offset of the frame idx referenced
     int FrameIdx;                   // The frame index
+
+    // Order reference instruction appears in program. Used to ensure
+    // deterministic order when multiple instructions may reference the same
+    // location.
+    unsigned Order;
+
   public:
-    FrameRef(MachineBasicBlock::iterator I, int64_t Offset, int Idx) :
-      MI(I), LocalOffset(Offset), FrameIdx(Idx) {}
+    FrameRef(MachineInstr *I, int64_t Offset, int Idx, unsigned Ord) :
+      MI(I), LocalOffset(Offset), FrameIdx(Idx), Order(Ord) {}
+
     bool operator<(const FrameRef &RHS) const {
-      return LocalOffset < RHS.LocalOffset;
+      return std::tie(LocalOffset, FrameIdx, Order) <
+             std::tie(RHS.LocalOffset, RHS.FrameIdx, RHS.Order);
     }
+
     MachineBasicBlock::iterator getMachineInstr() const { return MI; }
     int64_t getLocalOffset() const { return LocalOffset; }
     int getFrameIndex() const { return FrameIdx; }
   };
 
   class LocalStackSlotPass: public MachineFunctionPass {
-    SmallVector<int64_t,16> LocalOffsets;
+    SmallVector<int64_t, 16> LocalOffsets;
+
     /// StackObjSet - A set of stack object indexes
-    typedef SmallSetVector<int, 8> StackObjSet;
+    using StackObjSet = SmallSetVector<int, 8>;
 
     void AdjustStackOffset(MachineFrameInfo &MFI, int FrameIdx, int64_t &Offset,
                            bool StackGrowsDown, unsigned &MaxAlign);
@@ -75,11 +87,14 @@ namespace {
                                int64_t &Offset, unsigned &MaxAlign);
     void calculateFrameObjectOffsets(MachineFunction &Fn);
     bool insertFrameReferenceRegisters(MachineFunction &Fn);
+
   public:
     static char ID; // Pass identification, replacement for typeid
-    explicit LocalStackSlotPass() : MachineFunctionPass(ID) { 
+
+    explicit LocalStackSlotPass() : MachineFunctionPass(ID) {
       initializeLocalStackSlotPassPass(*PassRegistry::getPassRegistry());
     }
+
     bool runOnMachineFunction(MachineFunction &MF) override;
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -87,19 +102,19 @@ namespace {
       AU.addRequired<StackProtector>();
       MachineFunctionPass::getAnalysisUsage(AU);
     }
-
-  private:
   };
+
 } // end anonymous namespace
 
 char LocalStackSlotPass::ID = 0;
+
 char &llvm::LocalStackSlotAllocationID = LocalStackSlotPass::ID;
-INITIALIZE_PASS_BEGIN(LocalStackSlotPass, "localstackalloc",
+
+INITIALIZE_PASS_BEGIN(LocalStackSlotPass, DEBUG_TYPE,
                       "Local Stack Slot Allocation", false, false)
 INITIALIZE_PASS_DEPENDENCY(StackProtector)
-INITIALIZE_PASS_END(LocalStackSlotPass, "localstackalloc",
+INITIALIZE_PASS_END(LocalStackSlotPass, DEBUG_TYPE,
                     "Local Stack Slot Allocation", false, false)
-
 
 bool LocalStackSlotPass::runOnMachineFunction(MachineFunction &MF) {
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -169,7 +184,6 @@ void LocalStackSlotPass::AssignProtectedObjSet(const StackObjSet &UnassignedObjs
                                            MachineFrameInfo &MFI,
                                            bool StackGrowsDown, int64_t &Offset,
                                            unsigned &MaxAlign) {
-
   for (StackObjSet::const_iterator I = UnassignedObjs.begin(),
         E = UnassignedObjs.end(); I != E; ++I) {
     int i = *I;
@@ -180,7 +194,6 @@ void LocalStackSlotPass::AssignProtectedObjSet(const StackObjSet &UnassignedObjs
 
 /// calculateFrameObjectOffsets - Calculate actual frame offsets for all of the
 /// abstract stack objects.
-///
 void LocalStackSlotPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
   // Loop over all of the stack objects, assigning sequential addresses...
   MachineFrameInfo &MFI = Fn.getFrameInfo();
@@ -285,6 +298,8 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
   // choose the first one).
   SmallVector<FrameRef, 64> FrameReferenceInsns;
 
+  unsigned Order = 0;
+
   for (MachineBasicBlock &BB : Fn) {
     for (MachineInstr &MI : BB) {
       // Debug value, stackmap and patchpoint instructions can't be out of
@@ -311,15 +326,16 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
           int64_t LocalOffset = LocalOffsets[Idx];
           if (!TRI->needsFrameBaseReg(&MI, LocalOffset))
             break;
-          FrameReferenceInsns.push_back(FrameRef(&MI, LocalOffset, Idx));
+          FrameReferenceInsns.push_back(FrameRef(&MI, LocalOffset, Idx, Order++));
           break;
         }
       }
     }
   }
 
-  // Sort the frame references by local offset
-  array_pod_sort(FrameReferenceInsns.begin(), FrameReferenceInsns.end());
+  // Sort the frame references by local offset.
+  // Use frame index as a tie-breaker in case MI's have the same offset.
+  std::sort(FrameReferenceInsns.begin(), FrameReferenceInsns.end());
 
   MachineBasicBlock *Entry = &Fn.front();
 
@@ -385,7 +401,7 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
         continue;
       }
 
-      const MachineFunction *MF = MI.getParent()->getParent();
+      const MachineFunction *MF = MI.getMF();
       const TargetRegisterClass *RC = TRI->getPointerRegClass(*MF);
       BaseReg = Fn.getRegInfo().createVirtualRegister(RC);
 

@@ -12,13 +12,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/ParallelCG.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/ThreadPool.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/SplitModule.h"
@@ -78,7 +78,7 @@ std::unique_ptr<Module> llvm::splitCodeGen(
           CodegenThreadPool.async(
               [TMFactory, FileType, ThreadOS](const SmallString<0> &BC) {
                 LLVMContext Ctx;
-                ErrorOr<std::unique_ptr<Module>> MOrErr = parseBitcodeFile(
+                Expected<std::unique_ptr<Module>> MOrErr = parseBitcodeFile(
                     MemoryBufferRef(StringRef(BC.data(), BC.size()),
                                     "<split-module>"),
                     Ctx);

@@ -2,8 +2,8 @@
 ; RUN: llc -mattr=+promote-alloca,-flat-for-global -verify-machineinstrs -mtriple=amdgcn--amdhsa -mcpu=kaveri < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-PROMOTE -check-prefix=HSA %s
 ; RUN: llc -mattr=-promote-alloca -verify-machineinstrs -march=amdgcn < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-ALLOCA %s
 ; RUN: llc -mattr=-promote-alloca,-flat-for-global -verify-machineinstrs -mtriple=amdgcn-amdhsa -mcpu=kaveri < %s | FileCheck  -check-prefix=GCN -check-prefix=GCN-ALLOCA -check-prefix=HSA %s
-; RUN: llc -mattr=+promote-alloca -verify-machineinstrs -march=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-PROMOTE %s
-; RUN: llc -mattr=-promote-alloca -verify-machineinstrs -march=amdgcn -mcpu=tonga < %s | FileCheck -check-prefix=GCN  -check-prefix=GCN-ALLOCA %s
+; RUN: llc -mattr=+promote-alloca -verify-machineinstrs -march=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-PROMOTE %s
+; RUN: llc -mattr=-promote-alloca -verify-machineinstrs -march=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN  -check-prefix=GCN-ALLOCA %s
 
 
 declare i32 @llvm.amdgcn.workitem.id.x() nounwind readnone
@@ -13,9 +13,9 @@ declare i32 @llvm.amdgcn.workitem.id.x() nounwind readnone
 
 ; GCN-LABEL: {{^}}work_item_info:
 ; GCN-NOT: v0
-; GCN: v_add_i32_e32 [[RESULT:v[0-9]+]], vcc, v0, v{{[0-9]+}}
+; GCN: v_add_{{[iu]}}32_e32 [[RESULT:v[0-9]+]], vcc, v0, v{{[0-9]+}}
 ; GCN: buffer_store_dword [[RESULT]]
-define void @work_item_info(i32 addrspace(1)* %out, i32 %in) {
+define amdgpu_kernel void @work_item_info(i32 addrspace(1)* %out, i32 %in) {
 entry:
   %0 = alloca [2 x i32]
   %1 = getelementptr [2 x i32], [2 x i32]* %0, i32 0, i32 0

@@ -32,7 +32,7 @@ class Triple;
 class StringRef;
 class raw_pwrite_stream;
 
-extern Target TheLanaiTarget;
+Target &getTheLanaiTarget();
 
 MCCodeEmitter *createLanaiMCCodeEmitter(const MCInstrInfo &MCII,
                                         const MCRegisterInfo &MRI,
@@ -42,8 +42,8 @@ MCAsmBackend *createLanaiAsmBackend(const Target &T, const MCRegisterInfo &MRI,
                                     const Triple &TheTriple, StringRef CPU,
                                     const MCTargetOptions &Options);
 
-MCObjectWriter *createLanaiELFObjectWriter(raw_pwrite_stream &OS,
-                                           uint8_t OSABI);
+std::unique_ptr<MCObjectWriter>
+createLanaiELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
 } // namespace llvm
 
 // Defines symbolic names for Lanai registers.  This defines a mapping from

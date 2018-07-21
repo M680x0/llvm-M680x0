@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "gtest/gtest.h"
 #include "llvm/ADT/FoldingSet.h"
+#include "gtest/gtest.h"
 #include <string>
 
 using namespace llvm;
@@ -33,6 +33,27 @@ TEST(FoldingSetTest, UnalignedStringTest) {
   b.AddString(str2.c_str() + 1);
 
   EXPECT_EQ(a.ComputeHash(), b.ComputeHash());
+}
+
+TEST(FoldingSetTest, LongLongComparison) {
+  struct LongLongContainer : FoldingSetNode {
+    unsigned long long A, B;
+    LongLongContainer(unsigned long long A, unsigned long long B)
+        : A(A), B(B) {}
+    void Profile(FoldingSetNodeID &ID) const {
+      ID.AddInteger(A);
+      ID.AddInteger(B);
+    }
+  };
+
+  LongLongContainer C1((1ULL << 32) + 1, 1ULL);
+  LongLongContainer C2(1ULL, (1ULL << 32) + 1);
+
+  FoldingSet<LongLongContainer> Set;
+
+  EXPECT_EQ(&C1, Set.GetOrInsertNode(&C1));
+  EXPECT_EQ(&C2, Set.GetOrInsertNode(&C2));
+  EXPECT_EQ(2U, Set.size());
 }
 
 struct TrivialPair : public FoldingSetNode {

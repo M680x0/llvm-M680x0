@@ -15,20 +15,24 @@
 #define LLVM_COV_SOURCECOVERAGEVIEW_H
 
 #include "CoverageViewOptions.h"
+#include "CoverageSummaryInfo.h"
 #include "llvm/ProfileData/Coverage/CoverageMapping.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <vector>
 
 namespace llvm {
 
+using namespace coverage;
+
+class CoverageFiltersMatchAll;
 class SourceCoverageView;
 
 /// \brief A view that represents a macro or include expansion.
 struct ExpansionView {
-  coverage::CounterMappingRegion Region;
+  CounterMappingRegion Region;
   std::unique_ptr<SourceCoverageView> View;
 
-  ExpansionView(const coverage::CounterMappingRegion &Region,
+  ExpansionView(const CounterMappingRegion &Region,
                 std::unique_ptr<SourceCoverageView> View)
       : Region(Region), View(std::move(View)) {}
   ExpansionView(ExpansionView &&RHS)
@@ -57,43 +61,10 @@ struct InstantiationView {
   InstantiationView(StringRef FunctionName, unsigned Line,
                     std::unique_ptr<SourceCoverageView> View)
       : FunctionName(FunctionName), Line(Line), View(std::move(View)) {}
-  InstantiationView(InstantiationView &&RHS)
-      : FunctionName(std::move(RHS.FunctionName)), Line(std::move(RHS.Line)),
-        View(std::move(RHS.View)) {}
-  InstantiationView &operator=(InstantiationView &&RHS) {
-    FunctionName = std::move(RHS.FunctionName);
-    Line = std::move(RHS.Line);
-    View = std::move(RHS.View);
-    return *this;
-  }
 
   friend bool operator<(const InstantiationView &LHS,
                         const InstantiationView &RHS) {
     return LHS.Line < RHS.Line;
-  }
-};
-
-/// \brief Coverage statistics for a single line.
-struct LineCoverageStats {
-  uint64_t ExecutionCount;
-  unsigned RegionCount;
-  bool Mapped;
-
-  LineCoverageStats() : ExecutionCount(0), RegionCount(0), Mapped(false) {}
-
-  bool isMapped() const { return Mapped; }
-
-  bool hasMultipleRegions() const { return RegionCount > 1; }
-
-  void addRegionStartCount(uint64_t Count) {
-    // The max of all region starts is the most interesting value.
-    addRegionCount(RegionCount ? std::max(ExecutionCount, Count) : Count);
-    ++RegionCount;
-  }
-
-  void addRegionCount(uint64_t Count) {
-    Mapped = true;
-    ExecutionCount = Count;
   }
 };
 
@@ -115,12 +86,12 @@ protected:
   /// false, skip the ToplevelDir component. If \p Relative is false, skip the
   /// OutputDir component.
   std::string getOutputPath(StringRef Path, StringRef Extension,
-                            bool InToplevel, bool Relative = true);
+                            bool InToplevel, bool Relative = true) const;
 
   /// \brief If directory output is enabled, create a file in that directory
   /// at the path given by getOutputPath(). Otherwise, return stdout.
   Expected<OwnedStream> createOutputStream(StringRef Path, StringRef Extension,
-                                           bool InToplevel);
+                                           bool InToplevel) const;
 
   /// \brief Return the sub-directory name for file coverage reports.
   static StringRef getCoverageDir() { return "coverage"; }
@@ -142,7 +113,9 @@ public:
   virtual void closeViewFile(OwnedStream OS) = 0;
 
   /// \brief Create an index which lists reports for the given source files.
-  virtual Error createIndexFile(ArrayRef<StringRef> SourceFiles) = 0;
+  virtual Error createIndexFile(ArrayRef<std::string> SourceFiles,
+                                const CoverageMapping &Coverage,
+                                const CoverageFiltersMatchAll &Filters) = 0;
 
   /// @}
 };
@@ -163,7 +136,7 @@ class SourceCoverageView {
   const CoverageViewOptions &Options;
 
   /// Complete coverage information about the source on display.
-  coverage::CoverageData CoverageInfo;
+  CoverageData CoverageInfo;
 
   /// A container for all expansions (e.g macros) in the source on display.
   std::vector<ExpansionView> ExpansionSubViews;
@@ -172,8 +145,8 @@ class SourceCoverageView {
   /// on display.
   std::vector<InstantiationView> InstantiationSubViews;
 
-  /// Specifies whether or not the view is a function view.
-  bool FunctionView;
+  /// Get the first uncovered line number for the source file.
+  unsigned getFirstUncoveredLineNo();
 
 protected:
   struct LineRef {
@@ -183,7 +156,7 @@ protected:
     LineRef(StringRef Line, int64_t LineNo) : Line(Line), LineNo(LineNo) {}
   };
 
-  using CoverageSegmentArray = ArrayRef<const coverage::CoverageSegment *>;
+  using CoverageSegmentArray = ArrayRef<const CoverageSegment *>;
 
   /// @name Rendering Interface
   /// @{
@@ -208,8 +181,7 @@ protected:
 
   /// \brief Render a source line with highlighting.
   virtual void renderLine(raw_ostream &OS, LineRef L,
-                          const coverage::CoverageSegment *WrappedSegment,
-                          CoverageSegmentArray Segments, unsigned ExpansionCol,
+                          const LineCoverageStats &LCS, unsigned ExpansionCol,
                           unsigned ViewDepth) = 0;
 
   /// \brief Render the line's execution count column.
@@ -221,15 +193,14 @@ protected:
 
   /// \brief Render all the region's execution counts on a line.
   virtual void renderRegionMarkers(raw_ostream &OS,
-                                   CoverageSegmentArray Segments,
+                                   const LineCoverageStats &Line,
                                    unsigned ViewDepth) = 0;
 
   /// \brief Render the site of an expansion.
-  virtual void
-  renderExpansionSite(raw_ostream &OS, LineRef L,
-                      const coverage::CoverageSegment *WrappedSegment,
-                      CoverageSegmentArray Segments, unsigned ExpansionCol,
-                      unsigned ViewDepth) = 0;
+  virtual void renderExpansionSite(raw_ostream &OS, LineRef L,
+                                   const LineCoverageStats &LCS,
+                                   unsigned ExpansionCol,
+                                   unsigned ViewDepth) = 0;
 
   /// \brief Render an expansion view and any nested views.
   virtual void renderExpansionView(raw_ostream &OS, ExpansionView &ESV,
@@ -239,12 +210,13 @@ protected:
   virtual void renderInstantiationView(raw_ostream &OS, InstantiationView &ISV,
                                        unsigned ViewDepth) = 0;
 
-  /// \brief Render the project title, the report title \p CellText and the
-  /// created time for the view.
-  virtual void renderCellInTitle(raw_ostream &OS, StringRef CellText) = 0;
+  /// \brief Render \p Title, a project title if one is available, and the
+  /// created time.
+  virtual void renderTitle(raw_ostream &OS, StringRef CellText) = 0;
 
-  /// \brief Render the table header for a given source file
-  virtual void renderTableHeader(raw_ostream &OS, unsigned IndentLevel = 0) = 0;
+  /// \brief Render the table header for a given source file.
+  virtual void renderTableHeader(raw_ostream &OS, unsigned FirstUncoveredLineNo,
+                                 unsigned IndentLevel) = 0;
 
   /// @}
 
@@ -253,33 +225,31 @@ protected:
   static std::string formatCount(uint64_t N);
 
   /// \brief Check if region marker output is expected for a line.
-  bool shouldRenderRegionMarkers(bool LineHasMultipleRegions) const;
+  bool shouldRenderRegionMarkers(const LineCoverageStats &LCS) const;
 
   /// \brief Check if there are any sub-views attached to this view.
   bool hasSubViews() const;
 
   SourceCoverageView(StringRef SourceName, const MemoryBuffer &File,
                      const CoverageViewOptions &Options,
-                     coverage::CoverageData &&CoverageInfo, bool FunctionView)
+                     CoverageData &&CoverageInfo)
       : SourceName(SourceName), File(File), Options(Options),
-        CoverageInfo(std::move(CoverageInfo)), FunctionView(FunctionView) {}
+        CoverageInfo(std::move(CoverageInfo)) {}
 
 public:
   static std::unique_ptr<SourceCoverageView>
   create(StringRef SourceName, const MemoryBuffer &File,
-         const CoverageViewOptions &Options,
-         coverage::CoverageData &&CoverageInfo, bool FucntionView = false);
+         const CoverageViewOptions &Options, CoverageData &&CoverageInfo);
 
   virtual ~SourceCoverageView() {}
 
-  StringRef getSourceName() const { return SourceName; }
-
-  bool isFunctionView() const { return FunctionView; }
+  /// \brief Return the source name formatted for the host OS.
+  std::string getSourceName() const;
 
   const CoverageViewOptions &getOptions() const { return Options; }
 
   /// \brief Add an expansion subview to this view.
-  void addExpansion(const coverage::CounterMappingRegion &Region,
+  void addExpansion(const CounterMappingRegion &Region,
                     std::unique_ptr<SourceCoverageView> View);
 
   /// \brief Add a function instantiation subview to this view.
@@ -289,7 +259,7 @@ public:
   /// \brief Print the code coverage information for a specific portion of a
   /// source file to the output stream.
   void print(raw_ostream &OS, bool WholeFile, bool ShowSourceName,
-             unsigned ViewDepth = 0);
+             bool ShowTitle, unsigned ViewDepth = 0);
 };
 
 } // namespace llvm

@@ -54,7 +54,8 @@ reviewer understand your code.
 To get a full diff, use one of the following commands (or just use Arcanist
 to upload your patch):
 
-* ``git diff -U999999 other-branch``
+* ``git show HEAD -U999999 > mypatch.patch``
+* ``git format-patch -U999999 @{u}``
 * ``svn diff --diff-cmd=diff -x -U999999``
 
 To upload a new patch:
@@ -128,8 +129,12 @@ Committing a change
 -------------------
 
 Once a patch has been reviewed and approved on Phabricator it can then be
-committed to trunk.  There are multiple workflows to achieve this. Whichever
-method you follow it is recommend that your commit message ends with the line:
+committed to trunk. If you do not have commit access, someone has to
+commit the change for you (with attribution). It is sufficient to add
+a comment to the approved review indicating you cannot commit the patch
+yourself. If you have commit access, there are multiple workflows to commit the
+change. Whichever method you follow it is recommended that your commit message
+ends with the line:
 
 ::
 

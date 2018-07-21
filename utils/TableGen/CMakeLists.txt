@@ -9,6 +9,7 @@ add_tablegen(llvm-tblgen LLVM
   CodeEmitterGen.cpp
   CodeBeadsGen.cpp
   CodeGenDAGPatterns.cpp
+  CodeGenHwModes.cpp
   CodeGenInstruction.cpp
   CodeGenMapTable.cpp
   CodeGenRegisters.cpp
@@ -23,16 +24,26 @@ add_tablegen(llvm-tblgen LLVM
   DisassemblerEmitter.cpp
   FastISelEmitter.cpp
   FixedLenDecoderEmitter.cpp
+  GlobalISelEmitter.cpp
+  InfoByHwMode.cpp
   InstrInfoEmitter.cpp
+  InstrDocsEmitter.cpp
   IntrinsicEmitter.cpp
   OptParserEmitter.cpp
   PseudoLoweringEmitter.cpp
+  RegisterBankEmitter.cpp
   RegisterInfoEmitter.cpp
+  SDNodeProperties.cpp
   SearchableTableEmitter.cpp
   SubtargetEmitter.cpp
+  SubtargetFeatureInfo.cpp
   TableGen.cpp
+  Types.cpp
   X86DisassemblerTables.cpp
+  X86EVEX2VEXTablesEmitter.cpp
+  X86FoldTablesEmitter.cpp
   X86ModRMFilters.cpp
   X86RecognizableInstr.cpp
   CTagsEmitter.cpp
   )
+set_target_properties(llvm-tblgen PROPERTIES FOLDER "Tablegenning")

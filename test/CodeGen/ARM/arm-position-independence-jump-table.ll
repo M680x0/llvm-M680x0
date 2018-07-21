@@ -8,9 +8,9 @@
 ; RUN: llc -relocation-model=ropi      -mtriple=thumbv7m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB2
 ; RUN: llc -relocation-model=ropi-rwpi -mtriple=thumbv7m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB2
 
-; RUN: llc -relocation-model=static    -mtriple=thumbv6m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB1 --check-prefix=THUMB1_ABS
-; RUN: llc -relocation-model=ropi      -mtriple=thumbv6m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB1 --check-prefix=THUMB1_PC
-; RUN: llc -relocation-model=ropi-rwpi -mtriple=thumbv6m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB1 --check-prefix=THUMB1_PC
+; RUN: llc -relocation-model=static    -mtriple=thumbv6m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB1
+; RUN: llc -relocation-model=ropi      -mtriple=thumbv6m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB1
+; RUN: llc -relocation-model=ropi-rwpi -mtriple=thumbv6m--none-eabi -disable-block-placement < %s | FileCheck %s --check-prefix=CHECK --check-prefix=THUMB1
 
 
 declare void @exit0()
@@ -47,11 +47,10 @@ lab4:
 
 ; CHECK-LABEL: jump_table:
 
-; ARM: lsl     r[[R_TAB_IDX:[0-9]+]], r{{[0-9]+}}, #2
 ; ARM: adr     r[[R_TAB_BASE:[0-9]+]], [[LJTI:\.LJTI[0-9]+_[0-9]+]]
-; ARM_ABS: ldr     pc, [r[[R_TAB_IDX]], r[[R_TAB_BASE]]]
-; ARM_PC:  ldr     r[[R_OFFSET:[0-9]+]], [r[[R_TAB_IDX]], r[[R_TAB_BASE]]]
-; ARM_PC:  add     pc, r[[R_OFFSET]], r[[R_TAB_BASE]]
+; ARM_ABS: ldr     pc, [r[[R_TAB_BASE]], r{{[0-9]+}}, lsl #2]
+; ARM_PC:  ldr     r[[R_OFFSET:[0-9]+]], [r[[R_TAB_BASE]], r{{[0-9]+}}, lsl #2]
+; ARM_PC:  add     pc, r[[R_TAB_BASE]], r[[R_OFFSET]]
 ; ARM: [[LJTI]]
 ; ARM_ABS: .long [[LBB1:\.LBB[0-9]+_[0-9]+]]
 ; ARM_ABS: .long [[LBB2:\.LBB[0-9]+_[0-9]+]]
@@ -85,30 +84,23 @@ lab4:
 ; THUMB2: [[LBB4]]
 ; THUMB2-NEXT: b exit4
 
-; THUMB1: lsls    r[[R_TAB_INDEX:[0-9]+]], r{{[0-9]+}}, #2 
-; THUMB1: adr     r[[R_TAB_BASE:[0-9]+]], [[LJTI:\.LJTI[0-9]+_[0-9]+]]
-; THUMB1: ldr     r[[R_BB_ADDR:[0-9]+]], [r[[R_TAB_INDEX]], r[[R_TAB_BASE]]]
-; THUMB1_PC: adds    r[[R_BB_ADDR]], r[[R_BB_ADDR]], r[[R_TAB_BASE]]
-; THUMB1: mov     pc, r[[R_BB_ADDR]]
-; THUMB1: [[LJTI]]
-; THUMB1_ABS: .long [[LBB1:\.LBB[0-9]+_[0-9]+]]+1
-; THUMB1_ABS: .long [[LBB2:\.LBB[0-9]+_[0-9]+]]+1
-; THUMB1_ABS: .long [[LBB3:\.LBB[0-9]+_[0-9]+]]+1
-; THUMB1_ABS: .long [[LBB4:\.LBB[0-9]+_[0-9]+]]+1
-; THUMB1_PC:  .long [[LBB1:\.LBB[0-9]+_[0-9]+]]-[[LJTI]]
-; THUMB1_PC:  .long [[LBB2:\.LBB[0-9]+_[0-9]+]]-[[LJTI]]
-; THUMB1_PC:  .long [[LBB3:\.LBB[0-9]+_[0-9]+]]-[[LJTI]]
-; THUMB1_PC:  .long [[LBB4:\.LBB[0-9]+_[0-9]+]]-[[LJTI]]
+; THUMB1: .p2align 2
+; THUMB1: add     r[[x:[0-9]+]], pc
+; THUMB1: ldrb    r[[x]], [r[[x]], #4]
+; THUMB1: lsls    r[[x]], r[[x]], #1
+; THUMB1: [[LCPI:\.LCPI[0-9]+_[0-9]+]]:
+; THUMB1: add     pc, r[[x]]
+; THUMB1: .p2align 2
+; THUMB1: .byte   ([[LBB1:\.LBB[0-9]+_[0-9]+]]-([[LCPI]]+4))/2
+; THUMB1: .byte   ([[LBB2:\.LBB[0-9]+_[0-9]+]]-([[LCPI]]+4))/2
+; THUMB1: .byte   ([[LBB3:\.LBB[0-9]+_[0-9]+]]-([[LCPI]]+4))/2
+; THUMB1: .byte   ([[LBB4:\.LBB[0-9]+_[0-9]+]]-([[LCPI]]+4))/2
 ; THUMB1: [[LBB1]]
 ; THUMB1-NEXT: bl exit1
-; THUMB1-NEXT: pop
 ; THUMB1: [[LBB2]]
 ; THUMB1-NEXT: bl exit2
-; THUMB1-NEXT: pop
 ; THUMB1: [[LBB3]]
 ; THUMB1-NEXT: bl exit3
-; THUMB1-NEXT: pop
 ; THUMB1: [[LBB4]]
 ; THUMB1-NEXT: bl exit4
-; THUMB1-NEXT: pop
 }

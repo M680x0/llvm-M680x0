@@ -6,12 +6,12 @@
 ; the loads to avoid unnecessary stalls. The generic machine model schedules 4
 ; loads consecutively for this case and will cause stalls.
 ;
-; RUN: llc < %s -mtriple=arm64-linux-gnu -mcpu=cortex-a57 -enable-misched -verify-misched -debug-only=misched -o - 2>&1 > /dev/null | FileCheck %s
+; RUN: llc < %s -mtriple=arm64-linux-gnu -mcpu=cortex-a57 -enable-misched -verify-misched -debug-only=machine-scheduler -o - 2>&1 > /dev/null | FileCheck %s
 ; CHECK: ********** MI Scheduling **********
-; CHECK: main:BB#2
+; CHECK: main:%bb.2
 ; CHECK: LDR
 ; CHECK: Latency : 4
-; CHECK: *** Final schedule for BB#2 ***
+; CHECK: *** Final schedule for %bb.2 ***
 ; CHECK: LDR
 ; CHECK: LDR
 ; CHECK-NOT: LDR

@@ -13,6 +13,24 @@
 
 include "Mips32r6InstrFormats.td"
 
+//===----------------------------------------------------------------------===//
+//
+// Mips profiles and nodes
+//
+//===----------------------------------------------------------------------===//
+
+def SDT_MipsFSelect : SDTypeProfile<1, 3, [SDTCisFP<1>,
+                                           SDTCisSameAs<0,2>,
+                                           SDTCisSameAs<2,3>]>;
+
+def MipsFSelect : SDNode<"MipsISD::FSELECT", SDT_MipsFSelect>;
+
+//===----------------------------------------------------------------------===//
+//
+// Mips Operands
+//
+//===----------------------------------------------------------------------===//
+
 // Notes about removals/changes from MIPS32r6:
 // Reencoded: jr -> jalr
 // Reencoded: jr.hb -> jalr.hb
@@ -97,6 +115,9 @@ class BC1EQZ_ENC : COP1_BCCZ_FM<OPCODE5_BC1EQZ>;
 class BC1NEZ_ENC : COP1_BCCZ_FM<OPCODE5_BC1NEZ>;
 class BC2EQZ_ENC : COP2_BCCZ_FM<OPCODE5_BC2EQZ>;
 class BC2NEZ_ENC : COP2_BCCZ_FM<OPCODE5_BC2NEZ>;
+
+class DVP_ENC : COP0_EVP_DVP_FM<0b1>;
+class EVP_ENC : COP0_EVP_DVP_FM<0b0>;
 
 class JIALC_ENC : JMP_IDX_COMPACT_FM<0b111110>;
 class JIC_ENC   : JMP_IDX_COMPACT_FM<0b110110>;
@@ -323,9 +344,9 @@ class AUIPC_DESC : ALUIPC_DESC_BASE<"auipc", GPR32Opnd, II_AUIPC>;
 class AUI_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
                     InstrItinClass itin = NoItinerary>
       : MipsR6Arch<instr_asm> {
-  dag OutOperandList = (outs GPROpnd:$rs);
-  dag InOperandList = (ins GPROpnd:$rt, simm16:$imm);
-  string AsmString = !strconcat(instr_asm, "\t$rs, $rt, $imm");
+  dag OutOperandList = (outs GPROpnd:$rt);
+  dag InOperandList = (ins GPROpnd:$rs, uimm16:$imm);
+  string AsmString = !strconcat(instr_asm, "\t$rt, $rs, $imm");
   list<dag> Pattern = [];
   InstrItinClass Itinerary = itin;
 }
@@ -506,6 +527,19 @@ class DIVMOD_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
   bit usesCustomInserter = 1;
 }
 
+class DVPEVP_DESC_BASE<string instr_asm, InstrItinClass Itin>
+    : MipsR6Arch<instr_asm> {
+  dag OutOperandList = (outs GPR32Opnd:$rt);
+  dag InOperandList = (ins);
+  string AsmString = !strconcat(instr_asm, "\t$rt");
+  list<dag> Pattern = [];
+  InstrItinClass Itinerary = Itin;
+  bit hasUnModeledSideEffects = 1;
+}
+
+class DVP_DESC : DVPEVP_DESC_BASE<"dvp", II_DVP>;
+class EVP_DESC : DVPEVP_DESC_BASE<"evp", II_EVP>;
+
 class DIV_DESC  : DIVMOD_DESC_BASE<"div", GPR32Opnd, II_DIV, sdiv>;
 class DIVU_DESC : DIVMOD_DESC_BASE<"divu", GPR32Opnd, II_DIVU, udiv>;
 class MOD_DESC  : DIVMOD_DESC_BASE<"mod", GPR32Opnd, II_MOD, srem>;
@@ -562,11 +596,20 @@ class COP1_SEL_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
   InstrItinClass Itinerary = itin;
 }
 
-class SEL_D_DESC : COP1_SEL_DESC_BASE<"sel.d", FGR64Opnd, II_SEL_D>,
-                   MipsR6Arch<"sel.d"> {
-  // We must insert a SUBREG_TO_REG around $fd_in
-  bit usesCustomInserter = 1;
+class COP1_SEL_D_DESC_BASE<string instr_asm, RegisterOperand FGROpnd,
+                           InstrItinClass itin> {
+  dag OutOperandList = (outs FGROpnd:$fd);
+  dag InOperandList = (ins FGROpnd:$fd_in, FGROpnd:$fs, FGROpnd:$ft);
+  string AsmString = !strconcat(instr_asm, "\t$fd, $fs, $ft");
+  list<dag> Pattern = [(set FGROpnd:$fd, (MipsFSelect FGROpnd:$fd_in,
+                                                      FGROpnd:$ft,
+                                                      FGROpnd:$fs))];
+  string Constraints = "$fd_in = $fd";
+  InstrItinClass Itinerary = itin;
 }
+
+class SEL_D_DESC : COP1_SEL_D_DESC_BASE<"sel.d", FGR64Opnd, II_SEL_D>,
+                   MipsR6Arch<"sel.d">;
 class SEL_S_DESC : COP1_SEL_DESC_BASE<"sel.s", FGR32Opnd, II_SEL_S>,
                    MipsR6Arch<"sel.s">;
 
@@ -779,9 +822,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def BC1NEZ : BC1NEZ_ENC, BC1NEZ_DESC, ISA_MIPS32R6, HARDFLOAT;
   def BC2EQZ : BC2EQZ_ENC, BC2EQZ_DESC, ISA_MIPS32R6;
   def BC2NEZ : BC2NEZ_ENC, BC2NEZ_DESC, ISA_MIPS32R6;
-}
-def BC : R6MMR6Rel, BC_ENC, BC_DESC, ISA_MIPS32R6;
-let AdditionalPredicates = [NotInMicroMips] in {
+  def BC : R6MMR6Rel, BC_ENC, BC_DESC, ISA_MIPS32R6;
   def BEQC : R6MMR6Rel, BEQC_ENC, BEQC_DESC, ISA_MIPS32R6;
   def BEQZALC : R6MMR6Rel, BEQZALC_ENC, BEQZALC_DESC, ISA_MIPS32R6;
   def BEQZC : R6MMR6Rel, BEQZC_ENC, BEQZC_DESC, ISA_MIPS32R6;
@@ -819,6 +860,10 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def DIV : R6MMR6Rel, DIV_ENC, DIV_DESC, ISA_MIPS32R6;
   def DIVU : R6MMR6Rel, DIVU_ENC, DIVU_DESC, ISA_MIPS32R6;
 }
+
+def DVP : R6MMR6Rel, DVP_ENC, DVP_DESC, ISA_MIPS32R6;
+def EVP : R6MMR6Rel, EVP_ENC, EVP_DESC, ISA_MIPS32R6;
+
 def JIALC : R6MMR6Rel, JIALC_ENC, JIALC_DESC, ISA_MIPS32R6;
 def JIC : R6MMR6Rel, JIC_ENC, JIC_DESC, ISA_MIPS32R6;
 def JR_HB_R6 : JR_HB_R6_ENC, JR_HB_R6_DESC, ISA_MIPS32R6;
@@ -831,8 +876,8 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def LWC2_R6 : LWC2_R6_ENC, LWC2_R6_DESC, ISA_MIPS32R6;
 }
 def LWPC : R6MMR6Rel, LWPC_ENC, LWPC_DESC, ISA_MIPS32R6;
-def LWUPC : LWUPC_ENC, LWUPC_DESC, ISA_MIPS32R6;
 let AdditionalPredicates = [NotInMicroMips] in {
+  def LWUPC : R6MMR6Rel, LWUPC_ENC, LWUPC_DESC, ISA_MIPS32R6;
   def MADDF_S : MADDF_S_ENC, MADDF_S_DESC, ISA_MIPS32R6, HARDFLOAT;
   def MADDF_D : MADDF_D_ENC, MADDF_D_DESC, ISA_MIPS32R6, HARDFLOAT;
   def MAXA_D : MAXA_D_ENC, MAXA_D_DESC, ISA_MIPS32R6, HARDFLOAT;
@@ -884,6 +929,9 @@ let AdditionalPredicates = [NotInMicroMips] in {
 //
 //===----------------------------------------------------------------------===//
 
+def : MipsInstAlias<"dvp", (DVP ZERO), 0>, ISA_MIPS32R6;
+def : MipsInstAlias<"evp", (EVP ZERO), 0>, ISA_MIPS32R6;
+
 let AdditionalPredicates = [NotInMicroMips] in {
 def : MipsInstAlias<"sdbbp", (SDBBP_R6 0)>, ISA_MIPS32R6;
 def : MipsInstAlias<"jr $rs", (JALR ZERO, GPR32Opnd:$rs), 1>, ISA_MIPS32R6, GPR_32;
@@ -894,6 +942,15 @@ def : MipsInstAlias<"jrc $rs", (JIC GPR32Opnd:$rs, 0), 1>, ISA_MIPS32R6, GPR_32;
 let AdditionalPredicates = [NotInMicroMips] in {
 def : MipsInstAlias<"jalrc $rs", (JIALC GPR32Opnd:$rs, 0), 1>, ISA_MIPS32R6, GPR_32;
 }
+
+def : MipsInstAlias<"div $rs, $rt", (DIV GPR32Opnd:$rs, GPR32Opnd:$rs,
+                                         GPR32Opnd:$rt)>, ISA_MIPS32R6;
+def : MipsInstAlias<"divu $rs, $rt", (DIVU GPR32Opnd:$rs, GPR32Opnd:$rs,
+                                           GPR32Opnd:$rt)>, ISA_MIPS32R6;
+
+def : MipsInstAlias<"lapc $rd, $imm",
+                    (ADDIUPC GPR32Opnd:$rd, simm19_lsl2:$imm)>, ISA_MIPS32R6;
+
 //===----------------------------------------------------------------------===//
 //
 // Patterns and Pseudo Instructions

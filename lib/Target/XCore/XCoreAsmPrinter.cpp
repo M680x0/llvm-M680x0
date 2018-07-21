@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "XCore.h"
 #include "InstPrinter/XCoreInstPrinter.h"
+#include "XCore.h"
 #include "XCoreInstrInfo.h"
 #include "XCoreMCInstLower.h"
 #include "XCoreSubtarget.h"
@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/TargetLoweringObjectFile.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfo.h"
@@ -41,7 +42,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
 #include <algorithm>
 #include <cctype>
 using namespace llvm;
@@ -58,9 +58,7 @@ namespace {
                              std::unique_ptr<MCStreamer> Streamer)
         : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {}
 
-    const char *getPassName() const override {
-      return "XCore Assembly Printer";
-    }
+    StringRef getPassName() const override { return "XCore Assembly Printer"; }
 
     void printInlineJT(const MachineInstr *MI, int opNum, raw_ostream &O,
                        const std::string &directive = ".jmptable");
@@ -115,8 +113,7 @@ void XCoreAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
     return;
 
   const DataLayout &DL = getDataLayout();
-  OutStreamer->SwitchSection(
-      getObjFileLowering().SectionForGlobal(GV, *Mang, TM));
+  OutStreamer->SwitchSection(getObjFileLowering().SectionForGlobal(GV, TM));
 
   MCSymbol *GVSym = getSymbol(GV);
   const Constant *C = GV->getInitializer();
@@ -156,8 +153,7 @@ void XCoreAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   unsigned Size = DL.getTypeAllocSize(C->getType());
   if (MAI->hasDotTypeDotSizeDirective()) {
     OutStreamer->EmitSymbolAttribute(GVSym, MCSA_ELF_TypeObject);
-    OutStreamer->emitELFSize(cast<MCSymbolELF>(GVSym),
-                             MCConstantExpr::create(Size, OutContext));
+    OutStreamer->emitELFSize(GVSym, MCConstantExpr::create(Size, OutContext));
   }
   OutStreamer->EmitLabel(GVSym);
 
@@ -172,7 +168,7 @@ void XCoreAsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
 }
 
 void XCoreAsmPrinter::EmitFunctionBodyStart() {
-  MCInstLowering.Initialize(Mang, &MF->getContext());
+  MCInstLowering.Initialize(&MF->getContext());
 }
 
 /// EmitFunctionBodyEnd - Targets can override this to emit stuff after
@@ -300,5 +296,5 @@ void XCoreAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 // Force static initialization.
 extern "C" void LLVMInitializeXCoreAsmPrinter() { 
-  RegisterAsmPrinter<XCoreAsmPrinter> X(TheXCoreTarget);
+  RegisterAsmPrinter<XCoreAsmPrinter> X(getTheXCoreTarget());
 }

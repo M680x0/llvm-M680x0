@@ -19,8 +19,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SIInstrInfo.h"
 #include "AMDGPUSubtarget.h"
+#include "SIInstrInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -38,7 +38,7 @@ public:
   static char ID;
 
   SIDebuggerInsertNops() : MachineFunctionPass(ID) { }
-  const char *getPassName() const override { return PASS_NAME; }
+  StringRef getPassName() const override { return PASS_NAME; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();

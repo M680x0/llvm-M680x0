@@ -17,8 +17,8 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -42,7 +42,7 @@ struct Filler : public MachineFunctionPass {
   static char ID;
   explicit Filler() : MachineFunctionPass(ID) {}
 
-  const char *getPassName() const override { return "Lanai Delay Slot Filler"; }
+  StringRef getPassName() const override { return "Lanai Delay Slot Filler"; }
 
   bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
 

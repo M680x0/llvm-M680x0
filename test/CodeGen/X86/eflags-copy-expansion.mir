@@ -25,7 +25,6 @@ liveins:
 body:             |
   bb.0.entry:
     liveins: %edi
-    successors: %bb.1.false
     NOOP implicit-def %al
 
     ; The bug was triggered only when LivePhysReg is used, which
@@ -49,7 +48,7 @@ body:             |
     ; Save AL.
     ; CHECK: PUSH32r killed %eax
 
-    ; Copy EDI into EFLAGS
+    ; Copy edi into EFLAGS
     ; CHECK-NEXT: %eax = MOV32rr %edi
     ; CHECK-NEXT: %al = ADD8ri %al, 127, implicit-def %eflags
     ; CHECK-NEXT: SAHF implicit-def %eflags, implicit %ah

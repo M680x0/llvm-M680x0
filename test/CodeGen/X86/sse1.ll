@@ -14,7 +14,7 @@
 ; rdar://8368414
 define <2 x float> @test4(<2 x float> %A, <2 x float> %B) nounwind {
 ; X32-LABEL: test4:
-; X32:       # BB#0: # %entry
+; X32:       # %bb.0: # %entry
 ; X32-NEXT:    movaps %xmm0, %xmm2
 ; X32-NEXT:    shufps {{.*#+}} xmm2 = xmm2[1,1,2,3]
 ; X32-NEXT:    addss %xmm1, %xmm0
@@ -24,7 +24,7 @@ define <2 x float> @test4(<2 x float> %A, <2 x float> %B) nounwind {
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: test4:
-; X64:       # BB#0: # %entry
+; X64:       # %bb.0: # %entry
 ; X64-NEXT:    movaps %xmm0, %xmm2
 ; X64-NEXT:    shufps {{.*#+}} xmm2 = xmm2[1,1,2,3]
 ; X64-NEXT:    addss %xmm1, %xmm0
@@ -52,77 +52,81 @@ entry:
 
 define <4 x float> @vselect(<4 x float>*%p, <4 x i32> %q) {
 ; X32-LABEL: vselect:
-; X32:       # BB#0: # %entry
+; X32:       # %bb.0: # %entry
 ; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
 ; X32-NEXT:    xorps %xmm0, %xmm0
 ; X32-NEXT:    je .LBB1_1
-; X32-NEXT:  # BB#2: # %entry
+; X32-NEXT:  # %bb.2: # %entry
 ; X32-NEXT:    xorps %xmm1, %xmm1
-; X32-NEXT:    jmp .LBB1_3
-; X32-NEXT:  .LBB1_1:
-; X32-NEXT:    movss {{.*#+}} xmm1 = mem[0],zero,zero,zero
-; X32-NEXT:  .LBB1_3: # %entry
 ; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
-; X32-NEXT:    je .LBB1_4
-; X32-NEXT:  # BB#5: # %entry
-; X32-NEXT:    xorps %xmm2, %xmm2
-; X32-NEXT:    jmp .LBB1_6
+; X32-NEXT:    jne .LBB1_5
 ; X32-NEXT:  .LBB1_4:
 ; X32-NEXT:    movss {{.*#+}} xmm2 = mem[0],zero,zero,zero
-; X32-NEXT:  .LBB1_6: # %entry
 ; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
-; X32-NEXT:    je .LBB1_7
-; X32-NEXT:  # BB#8: # %entry
-; X32-NEXT:    xorps %xmm3, %xmm3
-; X32-NEXT:    jmp .LBB1_9
+; X32-NEXT:    jne .LBB1_8
 ; X32-NEXT:  .LBB1_7:
 ; X32-NEXT:    movss {{.*#+}} xmm3 = mem[0],zero,zero,zero
-; X32-NEXT:  .LBB1_9: # %entry
+; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
+; X32-NEXT:    unpcklps {{.*#+}} xmm2 = xmm2[0],xmm3[0],xmm2[1],xmm3[1]
+; X32-NEXT:    je .LBB1_10
+; X32-NEXT:    jmp .LBB1_11
+; X32-NEXT:  .LBB1_1:
+; X32-NEXT:    movss {{.*#+}} xmm1 = mem[0],zero,zero,zero
+; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
+; X32-NEXT:    je .LBB1_4
+; X32-NEXT:  .LBB1_5: # %entry
+; X32-NEXT:    xorps %xmm2, %xmm2
+; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
+; X32-NEXT:    je .LBB1_7
+; X32-NEXT:  .LBB1_8: # %entry
+; X32-NEXT:    xorps %xmm3, %xmm3
 ; X32-NEXT:    cmpl $0, {{[0-9]+}}(%esp)
 ; X32-NEXT:    unpcklps {{.*#+}} xmm2 = xmm2[0],xmm3[0],xmm2[1],xmm3[1]
 ; X32-NEXT:    jne .LBB1_11
-; X32-NEXT:  # BB#10:
+; X32-NEXT:  .LBB1_10:
 ; X32-NEXT:    movss {{.*#+}} xmm0 = mem[0],zero,zero,zero
 ; X32-NEXT:  .LBB1_11: # %entry
 ; X32-NEXT:    unpcklps {{.*#+}} xmm0 = xmm0[0],xmm1[0],xmm0[1],xmm1[1]
-; X32-NEXT:    unpcklps {{.*#+}} xmm0 = xmm0[0],xmm2[0],xmm0[1],xmm2[1]
+; X32-NEXT:    movlhps {{.*#+}} xmm0 = xmm0[0],xmm2[0]
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: vselect:
-; X64:       # BB#0: # %entry
-; X64-NEXT:    testl %ecx, %ecx
+; X64:       # %bb.0: # %entry
+; X64-NEXT:    testl %edx, %edx
 ; X64-NEXT:    xorps %xmm0, %xmm0
 ; X64-NEXT:    je .LBB1_1
-; X64-NEXT:  # BB#2: # %entry
+; X64-NEXT:  # %bb.2: # %entry
 ; X64-NEXT:    xorps %xmm1, %xmm1
-; X64-NEXT:    jmp .LBB1_3
-; X64-NEXT:  .LBB1_1:
-; X64-NEXT:    movss {{.*#+}} xmm1 = mem[0],zero,zero,zero
-; X64-NEXT:  .LBB1_3: # %entry
-; X64-NEXT:    testl %edx, %edx
-; X64-NEXT:    je .LBB1_4
-; X64-NEXT:  # BB#5: # %entry
-; X64-NEXT:    xorps %xmm2, %xmm2
-; X64-NEXT:    jmp .LBB1_6
+; X64-NEXT:    testl %ecx, %ecx
+; X64-NEXT:    jne .LBB1_5
 ; X64-NEXT:  .LBB1_4:
 ; X64-NEXT:    movss {{.*#+}} xmm2 = mem[0],zero,zero,zero
-; X64-NEXT:  .LBB1_6: # %entry
 ; X64-NEXT:    testl %r8d, %r8d
-; X64-NEXT:    je .LBB1_7
-; X64-NEXT:  # BB#8: # %entry
-; X64-NEXT:    xorps %xmm3, %xmm3
-; X64-NEXT:    jmp .LBB1_9
+; X64-NEXT:    jne .LBB1_8
 ; X64-NEXT:  .LBB1_7:
 ; X64-NEXT:    movss {{.*#+}} xmm3 = mem[0],zero,zero,zero
-; X64-NEXT:  .LBB1_9: # %entry
+; X64-NEXT:    testl %esi, %esi
+; X64-NEXT:    unpcklps {{.*#+}} xmm2 = xmm2[0],xmm3[0],xmm2[1],xmm3[1]
+; X64-NEXT:    je .LBB1_10
+; X64-NEXT:    jmp .LBB1_11
+; X64-NEXT:  .LBB1_1:
+; X64-NEXT:    movss {{.*#+}} xmm1 = mem[0],zero,zero,zero
+; X64-NEXT:    testl %ecx, %ecx
+; X64-NEXT:    je .LBB1_4
+; X64-NEXT:  .LBB1_5: # %entry
+; X64-NEXT:    xorps %xmm2, %xmm2
+; X64-NEXT:    testl %r8d, %r8d
+; X64-NEXT:    je .LBB1_7
+; X64-NEXT:  .LBB1_8: # %entry
+; X64-NEXT:    xorps %xmm3, %xmm3
 ; X64-NEXT:    testl %esi, %esi
 ; X64-NEXT:    unpcklps {{.*#+}} xmm2 = xmm2[0],xmm3[0],xmm2[1],xmm3[1]
 ; X64-NEXT:    jne .LBB1_11
-; X64-NEXT:  # BB#10:
+; X64-NEXT:  .LBB1_10:
 ; X64-NEXT:    movss {{.*#+}} xmm0 = mem[0],zero,zero,zero
 ; X64-NEXT:  .LBB1_11: # %entry
 ; X64-NEXT:    unpcklps {{.*#+}} xmm0 = xmm0[0],xmm1[0],xmm0[1],xmm1[1]
-; X64-NEXT:    unpcklps {{.*#+}} xmm0 = xmm0[0],xmm2[0],xmm0[1],xmm2[1]
+; X64-NEXT:    movlhps {{.*#+}} xmm0 = xmm0[0],xmm2[0]
 ; X64-NEXT:    retq
 entry:
   %a1 = icmp eq <4 x i32> %q, zeroinitializer
@@ -134,12 +138,12 @@ entry:
 
 define <4 x float> @PR28044(<4 x float> %a0, <4 x float> %a1) nounwind {
 ; X32-LABEL: PR28044:
-; X32:       # BB#0:
+; X32:       # %bb.0:
 ; X32-NEXT:    cmpeqps %xmm1, %xmm0
 ; X32-NEXT:    retl
 ;
 ; X64-LABEL: PR28044:
-; X64:       # BB#0:
+; X64:       # %bb.0:
 ; X64-NEXT:    cmpeqps %xmm1, %xmm0
 ; X64-NEXT:    retq
   %cmp = fcmp oeq <4 x float> %a0, %a1
@@ -147,4 +151,119 @@ define <4 x float> @PR28044(<4 x float> %a0, <4 x float> %a1) nounwind {
   %res = bitcast <4 x i32> %sext to <4 x float>
   ret <4 x float> %res
 }
+
+; Don't crash trying to do the impossible: an integer vector comparison doesn't exist, so we must scalarize.
+; https://llvm.org/bugs/show_bug.cgi?id=30512
+
+define <4 x i32> @PR30512(<4 x i32> %x, <4 x i32> %y) nounwind {
+; X32-LABEL: PR30512:
+; X32:       # %bb.0:
+; X32-NEXT:    pushl %ebx
+; X32-NEXT:    pushl %edi
+; X32-NEXT:    pushl %esi
+; X32-NEXT:    subl $16, %esp
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    xorl %ebx, %ebx
+; X32-NEXT:    cmpl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    sete %bl
+; X32-NEXT:    negl %ebx
+; X32-NEXT:    movl %ebx, {{[0-9]+}}(%esp)
+; X32-NEXT:    xorl %ebx, %ebx
+; X32-NEXT:    cmpl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    sete %bl
+; X32-NEXT:    negl %ebx
+; X32-NEXT:    movl %ebx, {{[0-9]+}}(%esp)
+; X32-NEXT:    xorl %ebx, %ebx
+; X32-NEXT:    cmpl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    sete %bl
+; X32-NEXT:    negl %ebx
+; X32-NEXT:    movl %ebx, {{[0-9]+}}(%esp)
+; X32-NEXT:    xorl %edx, %edx
+; X32-NEXT:    cmpl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    sete %dl
+; X32-NEXT:    negl %edx
+; X32-NEXT:    movl %edx, (%esp)
+; X32-NEXT:    movss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; X32-NEXT:    movss {{.*#+}} xmm1 = mem[0],zero,zero,zero
+; X32-NEXT:    unpcklps {{.*#+}} xmm1 = xmm1[0],xmm0[0],xmm1[1],xmm0[1]
+; X32-NEXT:    movss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; X32-NEXT:    movss {{.*#+}} xmm2 = mem[0],zero,zero,zero
+; X32-NEXT:    unpcklps {{.*#+}} xmm2 = xmm2[0],xmm0[0],xmm2[1],xmm0[1]
+; X32-NEXT:    movlhps {{.*#+}} xmm2 = xmm2[0],xmm1[0]
+; X32-NEXT:    andps {{\.LCPI.*}}, %xmm2
+; X32-NEXT:    movaps %xmm2, (%eax)
+; X32-NEXT:    addl $16, %esp
+; X32-NEXT:    popl %esi
+; X32-NEXT:    popl %edi
+; X32-NEXT:    popl %ebx
+; X32-NEXT:    retl $4
+;
+; X64-LABEL: PR30512:
+; X64:       # %bb.0:
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    cmpl {{[0-9]+}}(%rsp), %r8d
+; X64-NEXT:    sete %al
+; X64-NEXT:    negl %eax
+; X64-NEXT:    movl %eax, -{{[0-9]+}}(%rsp)
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    cmpl {{[0-9]+}}(%rsp), %ecx
+; X64-NEXT:    sete %al
+; X64-NEXT:    negl %eax
+; X64-NEXT:    movl %eax, -{{[0-9]+}}(%rsp)
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    cmpl {{[0-9]+}}(%rsp), %edx
+; X64-NEXT:    sete %al
+; X64-NEXT:    negl %eax
+; X64-NEXT:    movl %eax, -{{[0-9]+}}(%rsp)
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    cmpl %r9d, %esi
+; X64-NEXT:    sete %al
+; X64-NEXT:    negl %eax
+; X64-NEXT:    movl %eax, -{{[0-9]+}}(%rsp)
+; X64-NEXT:    movss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; X64-NEXT:    movss {{.*#+}} xmm1 = mem[0],zero,zero,zero
+; X64-NEXT:    unpcklps {{.*#+}} xmm1 = xmm1[0],xmm0[0],xmm1[1],xmm0[1]
+; X64-NEXT:    movss {{.*#+}} xmm0 = mem[0],zero,zero,zero
+; X64-NEXT:    movss {{.*#+}} xmm2 = mem[0],zero,zero,zero
+; X64-NEXT:    unpcklps {{.*#+}} xmm2 = xmm2[0],xmm0[0],xmm2[1],xmm0[1]
+; X64-NEXT:    movlhps {{.*#+}} xmm2 = xmm2[0],xmm1[0]
+; X64-NEXT:    andps {{.*}}(%rip), %xmm2
+; X64-NEXT:    movaps %xmm2, (%rdi)
+; X64-NEXT:    movq %rdi, %rax
+; X64-NEXT:    retq
+  %cmp = icmp eq <4 x i32> %x, %y
+  %zext = zext <4 x i1> %cmp to <4 x i32>
+  ret <4 x i32> %zext
+}
+
+; Fragile test warning - we need to induce the generation of a vselect
+; post-legalization to cause the crash seen in:
+; https://llvm.org/bugs/show_bug.cgi?id=31672
+; Is there a way to do that without an unsafe/fast sqrt intrinsic call?
+;
+; We now no longer try to lower sqrt using rsqrt with SSE1 only as the
+; v4i32 vselect mentioned above should never have been created. We ended up
+; scalarizing it anyway.
+
+define <2 x float> @PR31672() #0 {
+; X32-LABEL: PR31672:
+; X32:       # %bb.0:
+; X32-NEXT:    sqrtps {{\.LCPI.*}}, %xmm0
+; X32-NEXT:    retl
+;
+; X64-LABEL: PR31672:
+; X64:       # %bb.0:
+; X64-NEXT:    sqrtps {{.*}}(%rip), %xmm0
+; X64-NEXT:    retq
+  %t0 = call fast <2 x float> @llvm.sqrt.v2f32(<2 x float> <float 42.0, float 3.0>)
+  ret <2 x float> %t0
+}
+
+declare <2 x float> @llvm.sqrt.v2f32(<2 x float>) #1
+
+attributes #0 = { nounwind "unsafe-fp-math"="true" }
 

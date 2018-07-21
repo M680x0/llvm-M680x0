@@ -24,7 +24,10 @@ subdirectories =
  llvm-ar
  llvm-as
  llvm-bcanalyzer
+ llvm-cat
+ llvm-cfi-verify
  llvm-cov
+ llvm-cvtres
  llvm-diff
  llvm-dis
  llvm-dwarfdump
@@ -35,10 +38,14 @@ subdirectories =
  llvm-lto
  llvm-mc
  llvm-mcmarkup
+ llvm-modextract
+ llvm-mt
  llvm-nm
+ llvm-objcopy
  llvm-objdump
- llvm-pdbdump
+ llvm-pdbutil
  llvm-profdata
+ llvm-rc
  llvm-rtdyld
  llvm-size
  llvm-split

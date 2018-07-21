@@ -1,4 +1,4 @@
-//===-- llvm/CodeGen/TailDuplicator.h ---------------------------*- C++ -*-===//
+//===- llvm/CodeGen/TailDuplicator.h ----------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -15,16 +15,23 @@
 #ifndef LLVM_CODEGEN_TAILDUPLICATOR_H
 #define LLVM_CODEGEN_TAILDUPLICATOR_H
 
-#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/MachineSSAUpdater.h"
-#include "llvm/CodeGen/RegisterScavenging.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include <utility>
+#include <vector>
 
 namespace llvm {
+
+class MachineBasicBlock;
+class MachineBranchProbabilityInfo;
+class MachineFunction;
+class MachineInstr;
+class MachineModuleInfo;
+class MachineRegisterInfo;
+class TargetRegisterInfo;
 
 /// Utility class to perform tail duplication.
 class TailDuplicator {
@@ -35,6 +42,7 @@ class TailDuplicator {
   MachineRegisterInfo *MRI;
   MachineFunction *MF;
   bool PreRegAlloc;
+  bool LayoutMode;
   unsigned TailDupSize;
 
   // A list of virtual registers for which to update SSA form.
@@ -42,31 +50,45 @@ class TailDuplicator {
 
   // For each virtual register in SSAUpdateVals keep a list of source virtual
   // registers.
-  typedef std::vector<std::pair<MachineBasicBlock *, unsigned>> AvailableValsTy;
+  using AvailableValsTy = std::vector<std::pair<MachineBasicBlock *, unsigned>>;
 
   DenseMap<unsigned, AvailableValsTy> SSAUpdateVals;
 
 public:
   /// Prepare to run on a specific machine function.
-  /// @param TailDupSize - Maxmimum size of blocks to tail-duplicate.
-  void initMF(MachineFunction &MF,
+  /// @param MF - Function that will be processed
+  /// @param PreRegAlloc - true if used before register allocation
+  /// @param MBPI - Branch Probability Info. Used to propagate correct
+  ///     probabilities when modifying the CFG.
+  /// @param LayoutMode - When true, don't use the existing layout to make
+  ///     decisions.
+  /// @param TailDupSize - Maxmimum size of blocks to tail-duplicate. Zero
+  ///     default implies using the command line value TailDupSize.
+  void initMF(MachineFunction &MF, bool PreRegAlloc,
               const MachineBranchProbabilityInfo *MBPI,
-              unsigned TailDupSize = 0);
+              bool LayoutMode, unsigned TailDupSize = 0);
+
   bool tailDuplicateBlocks();
   static bool isSimpleBB(MachineBasicBlock *TailBB);
   bool shouldTailDuplicate(bool IsSimple, MachineBasicBlock &TailBB);
+
   /// Returns true if TailBB can successfully be duplicated into PredBB
   bool canTailDuplicate(MachineBasicBlock *TailBB, MachineBasicBlock *PredBB);
+
   /// Tail duplicate a single basic block into its predecessors, and then clean
   /// up.
   /// If \p DuplicatePreds is not null, it will be updated to contain the list
   /// of predecessors that received a copy of \p MBB.
+  /// If \p RemovalCallback is non-null. It will be called before MBB is
+  /// deleted.
   bool tailDuplicateAndUpdate(
       bool IsSimple, MachineBasicBlock *MBB,
-      SmallVectorImpl<MachineBasicBlock*> *DuplicatedPreds = nullptr);
+      MachineBasicBlock *ForcedLayoutPred,
+      SmallVectorImpl<MachineBasicBlock*> *DuplicatedPreds = nullptr,
+      function_ref<void(MachineBasicBlock *)> *RemovalCallback = nullptr);
 
 private:
-  typedef TargetInstrInfo::RegSubRegPair RegSubRegPair;
+  using RegSubRegPair = TargetInstrInfo::RegSubRegPair;
 
   void addSSAUpdateEntry(unsigned OrigReg, unsigned NewReg,
                          MachineBasicBlock *BB);
@@ -87,16 +109,20 @@ private:
                          SmallVectorImpl<MachineBasicBlock *> &TDBBs,
                          const DenseSet<unsigned> &RegsUsedByPhi,
                          SmallVectorImpl<MachineInstr *> &Copies);
-  bool tailDuplicate(bool IsSimple, MachineBasicBlock *TailBB,
+  bool tailDuplicate(bool IsSimple,
+                     MachineBasicBlock *TailBB,
+                     MachineBasicBlock *ForcedLayoutPred,
                      SmallVectorImpl<MachineBasicBlock *> &TDBBs,
                      SmallVectorImpl<MachineInstr *> &Copies);
   void appendCopies(MachineBasicBlock *MBB,
                  SmallVectorImpl<std::pair<unsigned,RegSubRegPair>> &CopyInfos,
                  SmallVectorImpl<MachineInstr *> &Copies);
 
-  void removeDeadBlock(MachineBasicBlock *MBB);
+  void removeDeadBlock(
+      MachineBasicBlock *MBB,
+      function_ref<void(MachineBasicBlock *)> *RemovalCallback = nullptr);
 };
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_TAILDUPLICATOR_H

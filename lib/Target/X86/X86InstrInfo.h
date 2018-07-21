@@ -18,19 +18,19 @@
 #include "X86InstrFMA3Info.h"
 #include "X86RegisterInfo.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 
 #define GET_INSTRINFO_HEADER
 #include "X86GenInstrInfo.inc"
 
 namespace llvm {
-  class MachineInstrBuilder;
-  class X86RegisterInfo;
-  class X86Subtarget;
+class MachineInstrBuilder;
+class X86RegisterInfo;
+class X86Subtarget;
 
 namespace X86 {
-  // X86 specific condition code. These correspond to X86_*_COND in
-  // X86InstrInfo.td. They must be kept in synch.
+// X86 specific condition code. These correspond to X86_*_COND in
+// X86InstrInfo.td. They must be kept in synch.
 enum CondCode {
   COND_A = 0,
   COND_AE = 1,
@@ -64,6 +64,10 @@ enum CondCode {
 // Turn condition code into conditional branch opcode.
 unsigned GetCondBranchFromCond(CondCode CC);
 
+/// \brief Return a pair of condition code for the given predicate and whether
+/// the instruction operands should be swaped to match the condition code.
+std::pair<CondCode, bool> getX86ConditionCode(CmpInst::Predicate Predicate);
+
 /// \brief Return a set opcode for the given condition and whether it has
 /// a memory operand.
 unsigned getSETFromCond(CondCode CC, bool HasMemoryOperand = false);
@@ -79,18 +83,17 @@ CondCode getCondFromCMovOpc(unsigned Opc);
 /// GetOppositeBranchCondition - Return the inverse of the specified cond,
 /// e.g. turning COND_E to COND_NE.
 CondCode GetOppositeBranchCondition(CondCode CC);
-}  // end namespace X86;
-
+} // namespace X86
 
 /// isGlobalStubReference - Return true if the specified TargetFlag operand is
 /// a reference to a stub for a global, not the global itself.
 inline static bool isGlobalStubReference(unsigned char TargetFlag) {
   switch (TargetFlag) {
-  case X86II::MO_DLLIMPORT: // dllimport stub.
-  case X86II::MO_GOTPCREL:  // rip-relative GOT reference.
-  case X86II::MO_GOT:       // normal GOT reference.
-  case X86II::MO_DARWIN_NONLAZY_PIC_BASE:        // Normal $non_lazy_ptr ref.
-  case X86II::MO_DARWIN_NONLAZY:                 // Normal $non_lazy_ptr ref.
+  case X86II::MO_DLLIMPORT:               // dllimport stub.
+  case X86II::MO_GOTPCREL:                // rip-relative GOT reference.
+  case X86II::MO_GOT:                     // normal GOT reference.
+  case X86II::MO_DARWIN_NONLAZY_PIC_BASE: // Normal $non_lazy_ptr ref.
+  case X86II::MO_DARWIN_NONLAZY:          // Normal $non_lazy_ptr ref.
     return true;
   default:
     return false;
@@ -102,11 +105,11 @@ inline static bool isGlobalStubReference(unsigned char TargetFlag) {
 /// is true, the addressing mode has the PIC base register added in (e.g. EBX).
 inline static bool isGlobalRelativeToPICBase(unsigned char TargetFlag) {
   switch (TargetFlag) {
-  case X86II::MO_GOTOFF:                         // isPICStyleGOT: local global.
-  case X86II::MO_GOT:                            // isPICStyleGOT: other global.
-  case X86II::MO_PIC_BASE_OFFSET:                // Darwin local global.
-  case X86II::MO_DARWIN_NONLAZY_PIC_BASE:        // Darwin/32 external global.
-  case X86II::MO_TLVP:                           // ??? Pretty sure..
+  case X86II::MO_GOTOFF:                  // isPICStyleGOT: local global.
+  case X86II::MO_GOT:                     // isPICStyleGOT: other global.
+  case X86II::MO_PIC_BASE_OFFSET:         // Darwin local global.
+  case X86II::MO_DARWIN_NONLAZY_PIC_BASE: // Darwin/32 external global.
+  case X86II::MO_TLVP:                    // ??? Pretty sure..
     return true;
   default:
     return false;
@@ -114,9 +117,8 @@ inline static bool isGlobalRelativeToPICBase(unsigned char TargetFlag) {
 }
 
 inline static bool isScale(const MachineOperand &MO) {
-  return MO.isImm() &&
-    (MO.getImm() == 1 || MO.getImm() == 2 ||
-     MO.getImm() == 4 || MO.getImm() == 8);
+  return MO.isImm() && (MO.getImm() == 1 || MO.getImm() == 2 ||
+                        MO.getImm() == 4 || MO.getImm() == 8);
 }
 
 inline static bool isLeaMem(const MachineInstr &MI, unsigned Op) {
@@ -146,8 +148,8 @@ class X86InstrInfo final : public X86GenInstrInfo {
   /// RegOp2MemOpTable3Addr, RegOp2MemOpTable0, RegOp2MemOpTable1,
   /// RegOp2MemOpTable2, RegOp2MemOpTable3 - Load / store folding opcode maps.
   ///
-  typedef DenseMap<unsigned,
-                   std::pair<uint16_t, uint16_t> > RegOp2MemOpTableType;
+  typedef DenseMap<unsigned, std::pair<uint16_t, uint16_t>>
+      RegOp2MemOpTableType;
   RegOp2MemOpTableType RegOp2MemOpTable2Addr;
   RegOp2MemOpTableType RegOp2MemOpTable0;
   RegOp2MemOpTableType RegOp2MemOpTable1;
@@ -157,13 +159,13 @@ class X86InstrInfo final : public X86GenInstrInfo {
 
   /// MemOp2RegOpTable - Load / store unfolding opcode map.
   ///
-  typedef DenseMap<unsigned,
-                   std::pair<uint16_t, uint16_t> > MemOp2RegOpTableType;
+  typedef DenseMap<unsigned, std::pair<uint16_t, uint16_t>>
+      MemOp2RegOpTableType;
   MemOp2RegOpTableType MemOp2RegOpTable;
 
   static void AddTableEntry(RegOp2MemOpTableType &R2MTable,
-                            MemOp2RegOpTableType &M2RTable,
-                            uint16_t RegOp, uint16_t MemOp, uint16_t Flags);
+                            MemOp2RegOpTableType &M2RTable, uint16_t RegOp,
+                            uint16_t MemOp, uint16_t Flags);
 
   virtual void anchor();
 
@@ -182,6 +184,25 @@ public:
   ///
   const X86RegisterInfo &getRegisterInfo() const { return RI; }
 
+  /// Returns the stack pointer adjustment that happens inside the frame
+  /// setup..destroy sequence (e.g. by pushes, or inside the callee).
+  int64_t getFrameAdjustment(const MachineInstr &I) const {
+    assert(isFrameInstr(I));
+    if (isFrameSetup(I))
+      return I.getOperand(2).getImm();
+    return I.getOperand(1).getImm();
+  }
+
+  /// Sets the stack pointer adjustment made inside the frame made up by this
+  /// instruction.
+  void setFrameAdjustment(MachineInstr &I, int64_t V) const {
+    assert(isFrameInstr(I));
+    if (isFrameSetup(I))
+      I.getOperand(2).setImm(V);
+    else
+      I.getOperand(1).setImm(V);
+  }
+
   /// getSPAdjust - This returns the stack pointer adjustment made by
   /// this instruction. For x86, we need to handle more complex call
   /// sequences involving PUSHes.
@@ -193,9 +214,8 @@ public:
   /// true, then it's expected the pre-extension value is available as a subreg
   /// of the result register. This also returns the sub-register index in
   /// SubIdx.
-  bool isCoalescableExtInstr(const MachineInstr &MI,
-                             unsigned &SrcReg, unsigned &DstReg,
-                             unsigned &SubIdx) const override;
+  bool isCoalescableExtInstr(const MachineInstr &MI, unsigned &SrcReg,
+                             unsigned &DstReg, unsigned &SubIdx) const override;
 
   unsigned isLoadFromStackSlot(const MachineInstr &MI,
                                int &FrameIndex) const override;
@@ -230,8 +250,8 @@ public:
   /// operand to the LEA instruction.
   bool classifyLEAReg(MachineInstr &MI, const MachineOperand &Src,
                       unsigned LEAOpcode, bool AllowSP, unsigned &NewSrc,
-                      bool &isKill, bool &isUndef,
-                      MachineOperand &ImplicitOp, LiveVariables *LV) const;
+                      bool &isKill, bool &isUndef, MachineOperand &ImplicitOp,
+                      LiveVariables *LV) const;
 
   /// convertToThreeAddress - This method must be implemented by targets that
   /// set the M_CONVERTIBLE_TO_3_ADDR flag.  When this flag is set, the target
@@ -289,8 +309,7 @@ public:
   ///     FMA213 #1, #2, #3
   /// results into instruction with adjusted opcode:
   ///     FMA231 #3, #2, #1
-  bool findFMA3CommutedOpIndices(const MachineInstr &MI,
-                                 unsigned &SrcOpIdx1,
+  bool findFMA3CommutedOpIndices(const MachineInstr &MI, unsigned &SrcOpIdx1,
                                  unsigned &SrcOpIdx2,
                                  const X86InstrFMA3Group &FMA3Group) const;
 
@@ -309,13 +328,20 @@ public:
   ///     FMA213 #1, #2, #3
   /// results into instruction with adjusted opcode:
   ///     FMA231 #3, #2, #1
-  unsigned getFMA3OpcodeToCommuteOperands(const MachineInstr &MI,
-                                          unsigned SrcOpIdx1,
-                                          unsigned SrcOpIdx2,
-                                          const X86InstrFMA3Group &FMA3Group) const;
+  unsigned
+  getFMA3OpcodeToCommuteOperands(const MachineInstr &MI, unsigned SrcOpIdx1,
+                                 unsigned SrcOpIdx2,
+                                 const X86InstrFMA3Group &FMA3Group) const;
 
   // Branch analysis.
   bool isUnpredicatedTerminator(const MachineInstr &MI) const override;
+  bool isUnconditionalTailCall(const MachineInstr &MI) const override;
+  bool canMakeTailCallConditional(SmallVectorImpl<MachineOperand> &Cond,
+                                  const MachineInstr &TailCall) const override;
+  void replaceBranchWithTailCall(MachineBasicBlock &MBB,
+                                 SmallVectorImpl<MachineOperand> &Cond,
+                                 const MachineInstr &TailCall) const override;
+
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
@@ -328,12 +354,14 @@ public:
                               TargetInstrInfo::MachineBranchPredicate &MBP,
                               bool AllowModify = false) const override;
 
-  unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
-  unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+  unsigned removeBranch(MachineBasicBlock &MBB,
+                        int *BytesRemoved = nullptr) const override;
+  unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
                         MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
-                        const DebugLoc &DL) const override;
-  bool canInsertSelect(const MachineBasicBlock&, ArrayRef<MachineOperand> Cond,
-                       unsigned, unsigned, int&, int&, int&) const override;
+                        const DebugLoc &DL,
+                        int *BytesAdded = nullptr) const override;
+  bool canInsertSelect(const MachineBasicBlock &, ArrayRef<MachineOperand> Cond,
+                       unsigned, unsigned, int &, int &, int &) const override;
   void insertSelect(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                     const DebugLoc &DL, unsigned DstReg,
                     ArrayRef<MachineOperand> Cond, unsigned TrueReg,
@@ -342,8 +370,8 @@ public:
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
   void storeRegToStackSlot(MachineBasicBlock &MBB,
-                           MachineBasicBlock::iterator MI,
-                           unsigned SrcReg, bool isKill, int FrameIndex,
+                           MachineBasicBlock::iterator MI, unsigned SrcReg,
+                           bool isKill, int FrameIndex,
                            const TargetRegisterClass *RC,
                            const TargetRegisterInfo *TRI) const override;
 
@@ -352,12 +380,11 @@ public:
                       const TargetRegisterClass *RC,
                       MachineInstr::mmo_iterator MMOBegin,
                       MachineInstr::mmo_iterator MMOEnd,
-                      SmallVectorImpl<MachineInstr*> &NewMIs) const;
+                      SmallVectorImpl<MachineInstr *> &NewMIs) const;
 
   void loadRegFromStackSlot(MachineBasicBlock &MBB,
-                            MachineBasicBlock::iterator MI,
-                            unsigned DestReg, int FrameIndex,
-                            const TargetRegisterClass *RC,
+                            MachineBasicBlock::iterator MI, unsigned DestReg,
+                            int FrameIndex, const TargetRegisterClass *RC,
                             const TargetRegisterInfo *TRI) const override;
 
   void loadRegFromAddr(MachineFunction &MF, unsigned DestReg,
@@ -365,9 +392,13 @@ public:
                        const TargetRegisterClass *RC,
                        MachineInstr::mmo_iterator MMOBegin,
                        MachineInstr::mmo_iterator MMOEnd,
-                       SmallVectorImpl<MachineInstr*> &NewMIs) const;
+                       SmallVectorImpl<MachineInstr *> &NewMIs) const;
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;
+
+  /// Check whether the target can fold a load that feeds a subreg operand
+  /// (or a subreg operand that feeds a store).
+  bool isSubregFoldable() const override { return true; }
 
   /// foldMemoryOperand - If this target supports it, fold a load or store of
   /// the specified stack slot into the specified machine instruction for the
@@ -398,7 +429,7 @@ public:
                       SmallVectorImpl<MachineInstr *> &NewMIs) const override;
 
   bool unfoldMemoryOperand(SelectionDAG &DAG, SDNode *N,
-                           SmallVectorImpl<SDNode*> &NewNodes) const override;
+                           SmallVectorImpl<SDNode *> &NewNodes) const override;
 
   /// getOpcodeAfterMemoryUnfold - Returns the opcode of the would be new
   /// instruction after load / store are unfolded from an instruction of the
@@ -406,9 +437,9 @@ public:
   /// possible. If LoadRegIndex is non-null, it is filled in with the operand
   /// index of the operand which will hold the register holding the loaded
   /// value.
-  unsigned getOpcodeAfterMemoryUnfold(unsigned Opc,
-                              bool UnfoldLoad, bool UnfoldStore,
-                              unsigned *LoadRegIndex = nullptr) const override;
+  unsigned
+  getOpcodeAfterMemoryUnfold(unsigned Opc, bool UnfoldLoad, bool UnfoldStore,
+                             unsigned *LoadRegIndex = nullptr) const override;
 
   /// areLoadsFromSameBasePtr - This is used by the pre-regalloc scheduler
   /// to determine if two loads are loading from the same base address. It
@@ -419,24 +450,21 @@ public:
                                int64_t &Offset2) const override;
 
   /// shouldScheduleLoadsNear - This is a used by the pre-regalloc scheduler to
-  /// determine (in conjunction with areLoadsFromSameBasePtr) if two loads should
-  /// be scheduled togther. On some targets if two loads are loading from
+  /// determine (in conjunction with areLoadsFromSameBasePtr) if two loads
+  /// should be scheduled togther. On some targets if two loads are loading from
   /// addresses in the same cache line, it's better if they are scheduled
   /// together. This function takes two integers that represent the load offsets
   /// from the common base address. It returns true if it decides it's desirable
   /// to schedule the two loads together. "NumLoads" is the number of loads that
   /// have already been scheduled after Load1.
-  bool shouldScheduleLoadsNear(SDNode *Load1, SDNode *Load2,
-                               int64_t Offset1, int64_t Offset2,
+  bool shouldScheduleLoadsNear(SDNode *Load1, SDNode *Load2, int64_t Offset1,
+                               int64_t Offset2,
                                unsigned NumLoads) const override;
 
-  bool shouldScheduleAdjacent(MachineInstr &First,
-                              MachineInstr &Second) const override;
-
-  void getNoopForMachoTarget(MCInst &NopInst) const override;
+  void getNoop(MCInst &NopInst) const override;
 
   bool
-  ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
+  reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
 
   /// isSafeToMoveRegClassDefs - Return true if it's safe to move a machine
   /// instruction that defines the specified register class.
@@ -479,14 +507,6 @@ public:
                                       unsigned Size, unsigned Alignment,
                                       bool AllowCommute) const;
 
-  void
-  getUnconditionalBranch(MCInst &Branch,
-                         const MCSymbolRefExpr *BranchTarget) const override;
-
-  void getTrap(MCInst &MI) const override;
-
-  unsigned getJumpInstrTableEntryBound() const override;
-
   bool isHighLatencyDef(int opc) const override;
 
   bool hasHighOperandLatency(const TargetSchedModel &SchedModel,
@@ -495,9 +515,7 @@ public:
                              const MachineInstr &UseMI,
                              unsigned UseIdx) const override;
 
-  bool useMachineCombiner() const override {
-    return true;
-  }
+  bool useMachineCombiner() const override { return true; }
 
   bool isAssociativeAndCommutative(const MachineInstr &Inst) const override;
 
@@ -541,6 +559,28 @@ public:
   ArrayRef<std::pair<unsigned, const char *>>
   getSerializableDirectMachineOperandTargetFlags() const override;
 
+  virtual MachineOutlinerInfo getOutlininingCandidateInfo(
+      std::vector<
+          std::pair<MachineBasicBlock::iterator, MachineBasicBlock::iterator>>
+          &RepeatedSequenceLocs) const override;
+
+  bool isFunctionSafeToOutlineFrom(MachineFunction &MF,
+                                   bool OutlineFromLinkOnceODRs) const override;
+
+  llvm::X86GenInstrInfo::MachineOutlinerInstrType
+  getOutliningType(MachineInstr &MI) const override;
+
+  void insertOutlinerEpilogue(MachineBasicBlock &MBB, MachineFunction &MF,
+                              const MachineOutlinerInfo &MInfo) const override;
+
+  void insertOutlinerPrologue(MachineBasicBlock &MBB, MachineFunction &MF,
+                              const MachineOutlinerInfo &MInfo) const override;
+
+  MachineBasicBlock::iterator
+  insertOutlinedCall(Module &M, MachineBasicBlock &MBB,
+                     MachineBasicBlock::iterator &It, MachineFunction &MF,
+                     const MachineOutlinerInfo &MInfo) const override;
+
 protected:
   /// Commutes the operands in the given instruction by changing the operands
   /// order and/or changing the instruction's opcode and/or the immediate value
@@ -576,10 +616,26 @@ private:
   bool isFrameOperand(const MachineInstr &MI, unsigned int Op,
                       int &FrameIndex) const;
 
-  /// Expand the MOVImmSExti8 pseudo-instructions.
-  bool ExpandMOVImmSExti8(MachineInstrBuilder &MIB) const;
+  /// Returns true iff the routine could find two commutable operands in the
+  /// given machine instruction with 3 vector inputs.
+  /// The 'SrcOpIdx1' and 'SrcOpIdx2' are INPUT and OUTPUT arguments. Their
+  /// input values can be re-defined in this method only if the input values
+  /// are not pre-defined, which is designated by the special value
+  /// 'CommuteAnyOperandIndex' assigned to it.
+  /// If both of indices are pre-defined and refer to some operands, then the
+  /// method simply returns true if the corresponding operands are commutable
+  /// and returns false otherwise.
+  ///
+  /// For example, calling this method this way:
+  ///     unsigned Op1 = 1, Op2 = CommuteAnyOperandIndex;
+  ///     findThreeSrcCommutedOpIndices(MI, Op1, Op2);
+  /// can be interpreted as a query asking to find an operand that would be
+  /// commutable with the operand#1.
+  bool findThreeSrcCommutedOpIndices(const MachineInstr &MI,
+                                     unsigned &SrcOpIdx1,
+                                     unsigned &SrcOpIdx2) const;
 };
 
-} // End llvm namespace
+} // namespace llvm
 
 #endif

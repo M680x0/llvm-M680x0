@@ -1,6 +1,5 @@
 ; RUN: opt < %s -loop-vectorize -S 2>&1 | FileCheck %s
 target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-unknown-linux-gnu"
 
 ; This test makes sure we don't duplicate the loop vectorizer's metadata
 ; while marking them as already vectorized (by setting width = 1), even
@@ -27,4 +26,4 @@ for.end:                                          ; preds = %for.body
 !0 = !{!0, !1}
 !1 = !{!"llvm.loop.vectorize.width", i32 4}
 ; CHECK-NOT: !{metadata !"llvm.loop.vectorize.width", i32 4}
-; CHECK: !{!"llvm.loop.interleave.count", i32 1}
+; CHECK: !{!"llvm.loop.isvectorized", i32 1}

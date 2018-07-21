@@ -28,8 +28,8 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/Chrono.h"
 #include "llvm/Support/DataTypes.h"
-#include "llvm/Support/TimeValue.h"
 #include <system_error>
 
 namespace llvm {
@@ -55,13 +55,14 @@ public:
   /// This static function will set \p user_time to the amount of CPU time
   /// spent in user (non-kernel) mode and \p sys_time to the amount of CPU
   /// time spent in system (kernel) mode.  If the operating system does not
-  /// support collection of these metrics, a zero TimeValue will be for both
+  /// support collection of these metrics, a zero duration will be for both
   /// values.
-  /// \param elapsed Returns the TimeValue::now() giving current time
+  /// \param elapsed Returns the system_clock::now() giving current time
   /// \param user_time Returns the current amount of user time for the process
   /// \param sys_time Returns the current amount of system time for the process
-  static void GetTimeUsage(TimeValue &elapsed, TimeValue &user_time,
-                           TimeValue &sys_time);
+  static void GetTimeUsage(TimePoint<> &elapsed,
+                           std::chrono::nanoseconds &user_time,
+                           std::chrono::nanoseconds &sys_time);
 
   /// This function makes the necessary calls to the operating system to
   /// prevent core files or any other kind of large memory dumps that can
@@ -79,9 +80,15 @@ public:
   /// This function searches for an existing file in the list of directories
   /// in a PATH like environment variable, and returns the first file found,
   /// according to the order of the entries in the PATH like environment
-  /// variable.
-  static Optional<std::string> FindInEnvPath(const std::string& EnvName,
-                                             const std::string& FileName);
+  /// variable.  If an ignore list is specified, then any folder which is in
+  /// the PATH like environment variable but is also in IgnoreList is not
+  /// considered.
+  static Optional<std::string> FindInEnvPath(StringRef EnvName,
+                                             StringRef FileName,
+                                             ArrayRef<std::string> IgnoreList);
+
+  static Optional<std::string> FindInEnvPath(StringRef EnvName,
+                                             StringRef FileName);
 
   /// This function returns a SmallVector containing the arguments passed from
   /// the operating system to the program.  This function expects to be handed

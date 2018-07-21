@@ -206,7 +206,7 @@ template <typename T> class ArrayRef;
   class CodeGenInstruction {
   public:
     Record *TheDef;            // The actual record defining this instruction.
-    std::string Namespace;     // The namespace the instruction is in.
+    StringRef Namespace;       // The namespace the instruction is in.
 
     /// AsmString - The format string used to emit a .s file for the
     /// instruction.
@@ -230,6 +230,7 @@ template <typename T> class ArrayRef;
     bool isSelect : 1;
     bool isBarrier : 1;
     bool isCall : 1;
+    bool isAdd : 1;
     bool canFoldAsLoad : 1;
     bool mayLoad : 1;
     bool mayLoad_Unset : 1;
@@ -283,6 +284,12 @@ template <typename T> class ArrayRef;
     /// include text from the specified variant, returning the new string.
     static std::string FlattenAsmStringVariants(StringRef AsmString,
                                                 unsigned Variant);
+
+    // Is the specified operand in a generic instruction implicitly a pointer.
+    // This can be used on intructions that use typeN or ptypeN to identify
+    // operands that should be considered as pointers even though SelectionDAG
+    // didn't make a distinction between integer and pointers.
+    bool isOperandAPointer(unsigned i) const;
   };
 
 

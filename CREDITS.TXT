@@ -8,7 +8,6 @@ beautification by scripts.  The fields are: name (N), email (E), web-address
 (W), PGP key ID and fingerprint (P), description (D), snail-mail address
 (S), and (I) IRC handle.
 
-
 N: Vikram Adve
 E: vadve@cs.uiuc.edu
 W: http://www.cs.uiuc.edu/~vadve/
@@ -43,6 +42,10 @@ D: General bug fixing/fit & finish, mostly in Clang
 N: Neil Booth
 E: neil@daikokuya.co.uk
 D: APFloat implementation.
+
+N: Alex Bradbury
+E: asb@lowrisc.org
+D: RISC-V backend
 
 N: Misha Brukman
 E: brukman+llvm@uiuc.edu
@@ -221,7 +224,7 @@ W: http://randomhacks.net/
 D: llvm-config script
 
 N: Anton Korobeynikov
-E: asl@math.spbu.ru
+E: anton at korobeynikov dot info
 D: Mingw32 fixes, cross-compiling support, stdcall/fastcall calling conv.
 D: x86/linux PIC codegen, aliases, regparm/visibility attributes
 D: Switch lowering refactoring
@@ -266,7 +269,7 @@ D: Release manager (1.7+)
 N: Sylvestre Ledru
 E: sylvestre@debian.org
 W: http://sylvestre.ledru.info/
-W: http://llvm.org/apt/
+W: http://apt.llvm.org/
 D: Debian and Ubuntu packaging
 D: Continuous integration with jenkins
 
@@ -319,11 +322,12 @@ D: Support for implicit TLS model used with MS VC runtime
 D: Dumping of Win64 EH structures
 
 N: Takumi Nakamura
+I: chapuni
 E: geek4civic@gmail.com
 E: chapuni@hf.rim.or.jp
-D: Cygwin and MinGW support.
-D: Win32 tweaks.
-S: Yokohama, Japan
+D: Maintaining the Git monorepo
+W: https://github.com/llvm-project/
+S: Ebina, Japan
 
 N: Edward O'Callaghan
 E: eocallaghan@auroraux.org
@@ -401,7 +405,7 @@ D: Fixes and improvements to the AArch64 backend
 
 N: Nadav Rotem
 E: nadav.rotem@me.com
-D: X86 code generation improvements, Loop Vectorizer.
+D: X86 code generation improvements, Loop Vectorizer, SLP Vectorizer
 
 N: Roman Samoilov
 E: roman@codedgers.com
@@ -458,6 +462,10 @@ N: Adam Treat
 E: manyoso@yahoo.com
 D: C++ bugs filed, and C++ front-end bug fixes.
 
+N: Andrew Trick
+E: atrick@apple.com
+D: Instruction Scheduling, ...
+
 N: Lauro Ramos Venancio
 E: lauro.venancio@indt.org.br
 D: ARM backend improvements
@@ -472,4 +480,3 @@ D: Bunches of stuff
 N: Bob Wilson
 E: bob.wilson@acm.org
 D: Advanced SIMD (NEON) support in the ARM backend.
-

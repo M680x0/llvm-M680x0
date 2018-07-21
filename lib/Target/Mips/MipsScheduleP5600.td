@@ -18,8 +18,8 @@ def MipsP5600Model : SchedMachineModel {
   list<Predicate> UnsupportedFeatures = [HasMips32r6, HasMips64r6,
                                          HasMips64, HasMips64r2, HasCnMips,
                                          InMicroMips, InMips16Mode,
-                                         HasMicroMips32r6, HasMicroMips64r6,
-                                         HasDSP, HasDSPR2];
+                                         HasMicroMips32r6, HasDSP,
+                                         HasDSPR2, HasMT];
 
 }
 
@@ -447,6 +447,9 @@ def : ItinRW<[P5600WriteFPUSqrtD], [II_SQRT_D]>;
 // frcp.[wd], frsqrt.[wd]
 def : InstRW<[P5600WriteFPURsqrtD], (instregex "^FRCP_(W|D)$")>;
 def : InstRW<[P5600WriteFPURsqrtD], (instregex "^FRSQRT_(W|D)$")>;
+
+def : ItinRW<[P5600WriteFPURsqrtD], [II_RECIP_D, II_RSQRT_D]>;
+def : ItinRW<[P5600WriteFPURsqrtS], [II_RECIP_S, II_RSQRT_S]>;
 
 // fmadd.[wd], fmsubb.[wd], fdiv.[wd], fsqrt.[wd], fmul.[wd], fadd.[wd],
 // fsub.[wd]

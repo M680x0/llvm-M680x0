@@ -15,6 +15,7 @@
 #include "Disassembler.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -22,10 +23,9 @@
 #include "llvm/MC/MCParser/AsmLexer.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.h"
+#include "llvm/MC/MCTargetOptionsCommandFlags.def"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/FileUtilities.h"
@@ -56,18 +56,15 @@ static cl::opt<bool> RelaxELFRel(
     "relax-relocations", cl::init(true),
     cl::desc("Emit R_X86_64_GOTPCRELX instead of R_X86_64_GOTPCREL"));
 
-static cl::opt<DebugCompressionType>
-CompressDebugSections("compress-debug-sections", cl::ValueOptional,
-  cl::init(DebugCompressionType::DCT_None),
-  cl::desc("Choose DWARF debug sections compression:"),
-  cl::values(
-    clEnumValN(DebugCompressionType::DCT_None, "none",
-      "No compression"),
-    clEnumValN(DebugCompressionType::DCT_Zlib, "zlib",
-      "Use zlib compression"),
-    clEnumValN(DebugCompressionType::DCT_ZlibGnu, "zlib-gnu",
-      "Use zlib-gnu compression (depricated)"),
-    clEnumValEnd));
+static cl::opt<DebugCompressionType> CompressDebugSections(
+    "compress-debug-sections", cl::ValueOptional,
+    cl::init(DebugCompressionType::None),
+    cl::desc("Choose DWARF debug sections compression:"),
+    cl::values(clEnumValN(DebugCompressionType::None, "none", "No compression"),
+               clEnumValN(DebugCompressionType::Z, "zlib",
+                          "Use zlib compression"),
+               clEnumValN(DebugCompressionType::GNU, "zlib-gnu",
+                          "Use zlib-gnu compression (deprecated)")));
 
 static cl::opt<bool>
 ShowInst("show-inst", cl::desc("Show internal instruction representation"));
@@ -105,8 +102,7 @@ FileType("filetype", cl::init(OFT_AssemblyFile),
        clEnumValN(OFT_Null, "null",
                   "Don't emit anything (for timing purposes)"),
        clEnumValN(OFT_ObjectFile, "obj",
-                  "Emit a native object ('.o') file"),
-       clEnumValEnd));
+                  "Emit a native object ('.o') file")));
 
 static cl::list<std::string>
 IncludeDirs("I", cl::desc("Directory of include files"),
@@ -135,21 +131,10 @@ MAttrs("mattr",
 static cl::opt<bool> PIC("position-independent",
                          cl::desc("Position independent"), cl::init(false));
 
-static cl::opt<llvm::CodeModel::Model>
-CMModel("code-model",
-        cl::desc("Choose code model"),
-        cl::init(CodeModel::Default),
-        cl::values(clEnumValN(CodeModel::Default, "default",
-                              "Target default code model"),
-                   clEnumValN(CodeModel::Small, "small",
-                              "Small code model"),
-                   clEnumValN(CodeModel::Kernel, "kernel",
-                              "Kernel code model"),
-                   clEnumValN(CodeModel::Medium, "medium",
-                              "Medium code model"),
-                   clEnumValN(CodeModel::Large, "large",
-                              "Large code model"),
-                   clEnumValEnd));
+static cl::opt<bool>
+    LargeCodeModel("large-code-model",
+                   cl::desc("Create cfi directives that assume the code might "
+                            "be more than 2gb away"));
 
 static cl::opt<bool>
 NoInitialTextSection("n", cl::desc("Don't assume assembly file starts "
@@ -190,8 +175,7 @@ Action(cl::desc("Action to perform:"),
                   clEnumValN(AC_Disassemble, "disassemble",
                              "Disassemble strings of hex bytes"),
                   clEnumValN(AC_MDisassemble, "mdis",
-                             "Marked up disassembly of strings of hex bytes"),
-                  clEnumValEnd));
+                             "Marked up disassembly of strings of hex bytes")));
 
 static const Target *GetTarget(const char *ProgName) {
   // Figure out the target triple.
@@ -213,13 +197,13 @@ static const Target *GetTarget(const char *ProgName) {
   return TheTarget;
 }
 
-static std::unique_ptr<tool_output_file> GetOutputStream() {
+static std::unique_ptr<ToolOutputFile> GetOutputStream() {
   if (OutputFilename == "")
     OutputFilename = "-";
 
   std::error_code EC;
-  auto Out = llvm::make_unique<tool_output_file>(OutputFilename, EC,
-                                                 sys::fs::F_None);
+  auto Out =
+      llvm::make_unique<ToolOutputFile>(OutputFilename, EC, sys::fs::F_None);
   if (EC) {
     errs() << EC.message() << '\n';
     return nullptr;
@@ -397,22 +381,22 @@ static int AsLexInput(SourceMgr &SrcMgr, MCAsmInfo &MAI,
   return Error;
 }
 
-static int fillCommandLineSymbols(MCAsmParser &Parser){
-  for(auto &I: DefineSymbol){
+static int fillCommandLineSymbols(MCAsmParser &Parser) {
+  for (auto &I: DefineSymbol) {
     auto Pair = StringRef(I).split('=');
-    if(Pair.second.empty()){
-      errs() << "error: defsym must be of the form: sym=value: " << I;
+    auto Sym = Pair.first;
+    auto Val = Pair.second;
+
+    if (Sym.empty() || Val.empty()) {
+      errs() << "error: defsym must be of the form: sym=value: " << I << "\n";
       return 1;
     }
     int64_t Value;
-    if(Pair.second.getAsInteger(0, Value)){
-      errs() << "error: Value is not an integer: " << Pair.second;
+    if (Val.getAsInteger(0, Value)) {
+      errs() << "error: Value is not an integer: " << Val << "\n";
       return 1;
     }
-    auto &Context = Parser.getContext();
-    auto Symbol = Context.getOrCreateSymbol(Pair.first);
-    Parser.getStreamer().EmitAssignment(Symbol,
-                                        MCConstantExpr::create(Value, Context));
+    Parser.getContext().setSymbolValue(Parser.getStreamer(), Sym, Value);
   }
   return 0;
 }
@@ -498,7 +482,7 @@ int main(int argc, char **argv) {
 
   MAI->setRelaxELFRelocations(RelaxELFRel);
 
-  if (CompressDebugSections != DebugCompressionType::DCT_None) {
+  if (CompressDebugSections != DebugCompressionType::None) {
     if (!zlib::isAvailable()) {
       errs() << ProgName
              << ": build tools with zlib to enable -compress-debug-sections";
@@ -512,7 +496,7 @@ int main(int argc, char **argv) {
   // MCObjectFileInfo needs a MCContext reference in order to initialize itself.
   MCObjectFileInfo MOFI;
   MCContext Ctx(MAI.get(), MRI.get(), &MOFI, &SrcMgr);
-  MOFI.InitMCObjectFileInfo(TheTriple, PIC, CMModel, Ctx);
+  MOFI.InitMCObjectFileInfo(TheTriple, PIC, Ctx, LargeCodeModel);
 
   if (SaveTempLabels)
     Ctx.setAllowTemporaryLabels(false);
@@ -520,7 +504,7 @@ int main(int argc, char **argv) {
   Ctx.setGenDwarfForAssembly(GenDwarfForAssembly);
   // Default to 4 for dwarf version.
   unsigned DwarfVersion = MCOptions.DwarfVersion ? MCOptions.DwarfVersion : 4;
-  if (DwarfVersion < 2 || DwarfVersion > 4) {
+  if (DwarfVersion < 2 || DwarfVersion > 5) {
     errs() << ProgName << ": Dwarf version " << DwarfVersion
            << " is not supported." << '\n';
     return 1;
@@ -550,7 +534,7 @@ int main(int argc, char **argv) {
     FeaturesStr = Features.getString();
   }
 
-  std::unique_ptr<tool_output_file> Out = GetOutputStream();
+  std::unique_ptr<ToolOutputFile> Out = GetOutputStream();
   if (!Out)
     return 1;
 
@@ -566,6 +550,14 @@ int main(int argc, char **argv) {
   if (FileType == OFT_AssemblyFile) {
     IP = TheTarget->createMCInstPrinter(Triple(TripleName), OutputAsmVariant,
                                         *MAI, *MCII, *MRI);
+
+    if (!IP) {
+      errs()
+          << "error: unable to create instruction printer for target triple '"
+          << TheTriple.normalize() << "' with assembly variant "
+          << OutputAsmVariant << ".\n";
+      return 1;
+    }
 
     // Set the display preference for hex vs. decimal immediates.
     IP->setPrintImmHex(PrintImmHex);
@@ -599,7 +591,8 @@ int main(int argc, char **argv) {
     MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*MRI, TripleName, MCPU,
                                                       MCOptions);
     Str.reset(TheTarget->createMCObjectStreamer(
-        TheTriple, Ctx, *MAB, *OS, CE, *STI, MCOptions.MCRelaxAll,
+        TheTriple, Ctx, std::unique_ptr<MCAsmBackend>(MAB), *OS,
+        std::unique_ptr<MCCodeEmitter>(CE), *STI, MCOptions.MCRelaxAll,
         MCOptions.MCIncrementalLinkerCompatible,
         /*DWARFMustBeAtTheEnd*/ false));
     if (NoExecStack)

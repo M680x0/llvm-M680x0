@@ -1,21 +1,21 @@
 ========================
-LLVM 4.0.0 Release Notes
+LLVM 6.0.0 Release Notes
 ========================
 
 .. contents::
     :local:
 
 .. warning::
-   These are in-progress notes for the upcoming LLVM 4.0.0 release.  You may
-   prefer the `LLVM 3.8 Release Notes <http://llvm.org/releases/3.8.0/docs
-   /ReleaseNotes.html>`_.
+   These are in-progress notes for the upcoming LLVM 6 release.
+   Release notes for previous releases can be found on
+   `the Download Page <http://releases.llvm.org/download.html>`_.
 
 
 Introduction
 ============
 
 This document contains the release notes for the LLVM Compiler Infrastructure,
-release 4.0.0.  Here we describe the status of LLVM, including major improvements
+release 5.0.0.  Here we describe the status of LLVM, including major improvements
 from the previous release, improvements in various subprojects of LLVM, and
 some of the current users of the code.  All LLVM releases may be downloaded
 from the `LLVM releases web site <http://llvm.org/releases/>`_.
@@ -33,7 +33,6 @@ page <http://llvm.org/releases/>`_.
 
 Non-comprehensive list of changes in this release
 =================================================
-
 .. NOTE
    For small 1-3 sentence descriptions, just add an entry at the end of
    this list. If your description won't fit comfortably in one bullet
@@ -41,7 +40,21 @@ Non-comprehensive list of changes in this release
    functionality, or simply have a lot to talk about), see the `NOTE` below
    for adding a new subsection.
 
-* ... next change ...
+* The ``Redirects`` argument of ``llvm::sys::ExecuteAndWait`` and
+  ``llvm::sys::ExecuteNoWait`` was changed to an ``ArrayRef`` of optional
+  ``StringRef``'s to make it safer and more convenient to use.
+
+* The backend name was added to the Target Registry to allow run-time
+  information to be fed back into TableGen. Out-of-tree targets will need to add
+  the name used in the `def X : Target` definition to the call to
+  `RegisterTarget`.
+
+* The ``Debugify`` pass was added to ``opt`` to facilitate testing of debug
+  info preservation. This pass attaches synthetic ``DILocations`` and
+  ``DIVariables`` to the instructions in a ``Module``. The ``CheckDebugify``
+  pass determines how much of the metadata is lost.
+
+* Note..
 
 .. NOTE
    If you would like to document a larger change, then you can add a
@@ -83,14 +96,25 @@ Changes to the AMDGPU Target
 
  During this release ...
 
+Changes to the AVR Target
+-----------------------------
+
+ During this release ...
+
 Changes to the OCaml bindings
 -----------------------------
 
  During this release ...
 
 
-External Open Source Projects Using LLVM 4.0.0
-==============================================
+Changes to the C API
+--------------------
+
+ During this release ...
+
+
+External Open Source Projects Using LLVM 6
+==========================================
 
 * A project...
 

@@ -19,10 +19,10 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -125,7 +125,7 @@ bool StackMapLiveness::calculateLiveness(MachineFunction &MF) {
   // For all basic blocks in the function.
   for (auto &MBB : MF) {
     DEBUG(dbgs() << "****** BB " << MBB.getName() << " ******\n");
-    LiveRegs.init(TRI);
+    LiveRegs.init(*TRI);
     // FIXME: This should probably be addLiveOuts().
     LiveRegs.addLiveOutsNoPristines(MBB);
     bool HasStackMap = false;

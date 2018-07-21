@@ -58,8 +58,8 @@ entry:
 for.body:                                         ; preds = %for.body, %entry
   %iter.02 = phi i32 [ 0, %entry ], [ %inc, %for.body ]
   call void @llvm.lifetime.start(i64 4, i8* %0), !dbg !26
-  call void @llvm.dbg.value(metadata %struct.string* %str2.i, i64 0, metadata !16, metadata !DIExpression(DW_OP_deref)) #3, !dbg !26
-  call void @llvm.dbg.value(metadata %struct.string* %str2.i, i64 0, metadata !27, metadata !DIExpression(DW_OP_deref)) #3, !dbg !29
+  call void @llvm.dbg.value(metadata %struct.string* %str2.i, metadata !16, metadata !DIExpression(DW_OP_deref)) #3, !dbg !26
+  call void @llvm.dbg.value(metadata %struct.string* %str2.i, metadata !27, metadata !DIExpression(DW_OP_deref)) #3, !dbg !29
   call void @_Z4sinkPKv(i8* undef) #3, !dbg !29
   call void @_Z4sinkPKv(i8* %0) #3, !dbg !30
   call void @llvm.lifetime.end(i64 4, i8* %0), !dbg !31
@@ -80,7 +80,7 @@ for.end:                                          ; preds = %for.body
 declare void @_Z4sinkPKv(i8*) #1
 
 ; Function Attrs: nounwind readnone
-declare void @llvm.dbg.value(metadata, i64, metadata, metadata) #2
+declare void @llvm.dbg.value(metadata, metadata, metadata) #2
 
 ; Function Attrs: nounwind
 declare void @llvm.lifetime.start(i64, i8* nocapture) #3
@@ -129,7 +129,7 @@ attributes #3 = { nounwind }
 !30 = !DILocation(line: 17, scope: !11)
 !31 = !DILocation(line: 18, scope: !11)
 !32 = !{!33, !34, i64 0}
-!33 = !{!4, !34, i64 0}
+!33 = !{!"struct", !34, i64 0}
 !34 = !{!"any pointer", !35, i64 0}
 !35 = !{!"omnipotent char", !36, i64 0}
 !36 = !{!"Simple C/C++ TBAA"}

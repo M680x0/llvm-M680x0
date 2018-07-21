@@ -1,9 +1,12 @@
-; RUN: opt -gvn-hoist -S < %s | FileCheck %s
+; RUN: opt -gvn-hoist -newgvn -gvn-hoist -S < %s | FileCheck %s
 
-; Check that recursive GEPs are hoisted.
+; Check that recursive GEPs are hoisted. Since hoisting creates
+; fully redundant instructions, newgvn is run to remove them which then
+; creates more opportunites for hoisting.
+
 ; CHECK-LABEL: @fun
-; CHECK: fdiv
 ; CHECK: load
+; CHECK: fdiv
 ; CHECK: load
 ; CHECK: load
 ; CHECK: load

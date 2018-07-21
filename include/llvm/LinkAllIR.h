@@ -16,13 +16,12 @@
 #ifndef LLVM_LINKALLIR_H
 #define LLVM_LINKALLIR_H
 
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/Dwarf.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Memory.h"
@@ -31,7 +30,6 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Signals.h"
-#include "llvm/Support/TimeValue.h"
 #include <cstdlib>
 
 namespace {

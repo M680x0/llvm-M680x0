@@ -19,7 +19,6 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/DynamicLibrary.h"
@@ -28,8 +27,6 @@
 #include "llvm/Support/MutexGuard.h"
 
 using namespace llvm;
-
-void ObjectCache::anchor() {}
 
 namespace {
 
@@ -277,19 +274,20 @@ void MCJIT::finalizeModule(Module *M) {
 }
 
 JITSymbol MCJIT::findExistingSymbol(const std::string &Name) {
-  SmallString<128> FullName;
-  Mangler::getNameWithPrefix(FullName, Name, getDataLayout());
-
-  if (void *Addr = getPointerToGlobalIfAvailable(FullName))
+  if (void *Addr = getPointerToGlobalIfAvailable(Name))
     return JITSymbol(static_cast<uint64_t>(
                          reinterpret_cast<uintptr_t>(Addr)),
                      JITSymbolFlags::Exported);
 
-  return Dyld.getSymbol(FullName);
+  return Dyld.getSymbol(Name);
 }
 
 Module *MCJIT::findModuleForSymbol(const std::string &Name,
                                    bool CheckFunctionsOnly) {
+  StringRef DemangledName = Name;
+  if (DemangledName[0] == getDataLayout().getGlobalPrefix())
+    DemangledName = DemangledName.substr(1);
+
   MutexGuard locked(lock);
 
   // If it hasn't already been generated, see if it's in one of our modules.
@@ -297,11 +295,11 @@ Module *MCJIT::findModuleForSymbol(const std::string &Name,
                               E = OwnedModules.end_added();
        I != E; ++I) {
     Module *M = *I;
-    Function *F = M->getFunction(Name);
+    Function *F = M->getFunction(DemangledName);
     if (F && !F->isDeclaration())
       return M;
     if (!CheckFunctionsOnly) {
-      GlobalVariable *G = M->getGlobalVariable(Name);
+      GlobalVariable *G = M->getGlobalVariable(DemangledName);
       if (G && !G->isDeclaration())
         return M;
       // FIXME: Do we need to worry about global aliases?
@@ -313,7 +311,18 @@ Module *MCJIT::findModuleForSymbol(const std::string &Name,
 
 uint64_t MCJIT::getSymbolAddress(const std::string &Name,
                                  bool CheckFunctionsOnly) {
-  return findSymbol(Name, CheckFunctionsOnly).getAddress();
+  std::string MangledName;
+  {
+    raw_string_ostream MangledNameStream(MangledName);
+    Mangler::getNameWithPrefix(MangledNameStream, Name, getDataLayout());
+  }
+  if (auto Sym = findSymbol(MangledName, CheckFunctionsOnly)) {
+    if (auto AddrOrErr = Sym.getAddress())
+      return *AddrOrErr;
+    else
+      report_fatal_error(AddrOrErr.takeError());
+  } else
+    report_fatal_error(Sym.takeError());
 }
 
 JITSymbol MCJIT::findSymbol(const std::string &Name,
@@ -442,7 +451,7 @@ void MCJIT::runStaticConstructorsDestructors(bool isDtors) {
       isDtors, OwnedModules.begin_finalized(), OwnedModules.end_finalized());
 }
 
-Function *MCJIT::FindFunctionNamedInModulePtrSet(const char *FnName,
+Function *MCJIT::FindFunctionNamedInModulePtrSet(StringRef FnName,
                                                  ModulePtrSet::iterator I,
                                                  ModulePtrSet::iterator E) {
   for (; I != E; ++I) {
@@ -453,7 +462,7 @@ Function *MCJIT::FindFunctionNamedInModulePtrSet(const char *FnName,
   return nullptr;
 }
 
-GlobalVariable *MCJIT::FindGlobalVariableNamedInModulePtrSet(const char *Name,
+GlobalVariable *MCJIT::FindGlobalVariableNamedInModulePtrSet(StringRef Name,
                                                              bool AllowInternal,
                                                              ModulePtrSet::iterator I,
                                                              ModulePtrSet::iterator E) {
@@ -466,7 +475,7 @@ GlobalVariable *MCJIT::FindGlobalVariableNamedInModulePtrSet(const char *Name,
 }
 
 
-Function *MCJIT::FindFunctionNamed(const char *FnName) {
+Function *MCJIT::FindFunctionNamed(StringRef FnName) {
   Function *F = FindFunctionNamedInModulePtrSet(
       FnName, OwnedModules.begin_added(), OwnedModules.end_added());
   if (!F)
@@ -478,7 +487,7 @@ Function *MCJIT::FindFunctionNamed(const char *FnName) {
   return F;
 }
 
-GlobalVariable *MCJIT::FindGlobalVariableNamed(const char *Name, bool AllowInternal) {
+GlobalVariable *MCJIT::FindGlobalVariableNamed(StringRef Name, bool AllowInternal) {
   GlobalVariable *GV = FindGlobalVariableNamedInModulePtrSet(
       Name, AllowInternal, OwnedModules.begin_added(), OwnedModules.end_added());
   if (!GV)
@@ -595,11 +604,12 @@ GenericValue MCJIT::runFunction(Function *F, ArrayRef<GenericValue> ArgValues) {
 
 void *MCJIT::getPointerToNamedFunction(StringRef Name, bool AbortOnFailure) {
   if (!isSymbolSearchingDisabled()) {
-    void *ptr =
-      reinterpret_cast<void*>(
-        static_cast<uintptr_t>(Resolver.findSymbol(Name).getAddress()));
-    if (ptr)
-      return ptr;
+    if (auto Sym = Resolver.findSymbol(Name)) {
+      if (auto AddrOrErr = Sym.getAddress())
+        return reinterpret_cast<void*>(
+                 static_cast<uintptr_t>(*AddrOrErr));
+    } else if (auto Err = Sym.takeError())
+      report_fatal_error(std::move(Err));
   }
 
   /// If a LazyFunctionCreator is installed, use it to get/create the function.
@@ -650,10 +660,6 @@ void MCJIT::NotifyFreeingObject(const object::ObjectFile& Obj) {
 JITSymbol
 LinkingSymbolResolver::findSymbol(const std::string &Name) {
   auto Result = ParentEngine.findSymbol(Name, false);
-  // If the symbols wasn't found and it begins with an underscore, try again
-  // without the underscore.
-  if (!Result && Name[0] == '_')
-    Result = ParentEngine.findSymbol(Name.substr(1), false);
   if (Result)
     return Result;
   if (ParentEngine.isSymbolSearchingDisabled())

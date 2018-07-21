@@ -101,6 +101,16 @@ public:
     return init();
   }
 
+  void updateMax(unsigned V) {
+    unsigned PrevMax = Value.load(std::memory_order_relaxed);
+    // Keep trying to update max until we succeed or another thread produces
+    // a bigger max than us.
+    while (V > PrevMax && !Value.compare_exchange_weak(
+                              PrevMax, V, std::memory_order_relaxed)) {
+    }
+    init();
+  }
+
 #else  // Statistics are disabled in release builds.
 
   const Statistic &operator=(unsigned Val) {
@@ -131,6 +141,8 @@ public:
     return *this;
   }
 
+  void updateMax(unsigned V) {}
+
 #endif  // !defined(NDEBUG) || defined(LLVM_ENABLE_STATS)
 
 protected:
@@ -151,7 +163,7 @@ protected:
   static llvm::Statistic VARNAME = {DEBUG_TYPE, #VARNAME, DESC, {0}, false}
 
 /// \brief Enable the collection and printing of statistics.
-void EnableStatistics();
+void EnableStatistics(bool PrintOnExit = true);
 
 /// \brief Check if statistics are enabled.
 bool AreStatisticsEnabled();
@@ -165,7 +177,10 @@ void PrintStatistics();
 /// \brief Print statistics to the given output stream.
 void PrintStatistics(raw_ostream &OS);
 
-/// Print statistics in JSON format.
+/// Print statistics in JSON format. This does include all global timers (\see
+/// Timer, TimerGroup). Note that the timers are cleared after printing and will
+/// not be printed in human readable form or in a second call of
+/// PrintStatisticsJSON().
 void PrintStatisticsJSON(raw_ostream &OS);
 
 } // end namespace llvm

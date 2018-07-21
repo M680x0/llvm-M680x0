@@ -17,6 +17,13 @@
 
 #include "AMDGPUIntrinsicInfo.h"
 #include "AMDGPUSubtarget.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Support/CodeGen.h"
+#include "llvm/Target/TargetMachine.h"
+#include <memory>
 
 namespace llvm {
 
@@ -28,16 +35,19 @@ class AMDGPUTargetMachine : public LLVMTargetMachine {
 protected:
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   AMDGPUIntrinsicInfo IntrinsicInfo;
+  AMDGPUAS AS;
 
   StringRef getGPUName(const Function &F) const;
   StringRef getFeatureString(const Function &F) const;
 
 public:
+  static bool EnableLateStructurizeCFG;
+
   AMDGPUTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                       StringRef FS, TargetOptions Options,
-                      Optional<Reloc::Model> RM, CodeModel::Model CM,
+                      Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
                       CodeGenOpt::Level OL);
-  ~AMDGPUTargetMachine();
+  ~AMDGPUTargetMachine() override;
 
   const AMDGPUSubtarget *getSubtargetImpl() const;
   const AMDGPUSubtarget *getSubtargetImpl(const Function &) const override = 0;
@@ -45,10 +55,21 @@ public:
   const AMDGPUIntrinsicInfo *getIntrinsicInfo() const override {
     return &IntrinsicInfo;
   }
-  TargetIRAnalysis getTargetIRAnalysis() override;
+  TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
+  }
+  AMDGPUAS getAMDGPUAS() const {
+    return AS;
+  }
+
+  void adjustPassManager(PassManagerBuilder &) override;
+  /// Get the integer value of a null pointer in the given address space.
+  uint64_t getNullPointerValue(unsigned AddrSpace) const {
+    if (AddrSpace == AS.LOCAL_ADDRESS || AddrSpace == AS.REGION_ADDRESS)
+      return -1;
+    return 0;
   }
 };
 
@@ -63,12 +84,16 @@ private:
 public:
   R600TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                     StringRef FS, TargetOptions Options,
-                    Optional<Reloc::Model> RM, CodeModel::Model CM,
-                    CodeGenOpt::Level OL);
+                    Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
+                    CodeGenOpt::Level OL, bool JIT);
 
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
   const R600Subtarget *getSubtargetImpl(const Function &) const override;
+
+  bool isMachineVerifierClean() const override {
+    return false;
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -82,14 +107,18 @@ private:
 public:
   GCNTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                    StringRef FS, TargetOptions Options,
-                   Optional<Reloc::Model> RM, CodeModel::Model CM,
-                   CodeGenOpt::Level OL);
+                   Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
+                   CodeGenOpt::Level OL, bool JIT);
 
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
   const SISubtarget *getSubtargetImpl(const Function &) const override;
+
+  bool useIPRA() const override {
+    return true;
+  }
 };
 
-} // End namespace llvm
+} // end namespace llvm
 
-#endif
+#endif // LLVM_LIB_TARGET_AMDGPU_AMDGPUTARGETMACHINE_H

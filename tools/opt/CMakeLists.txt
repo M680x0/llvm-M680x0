@@ -25,19 +25,18 @@ set(LLVM_NO_DEAD_STRIP 1)
 add_llvm_tool(opt
   AnalysisWrappers.cpp
   BreakpointPrinter.cpp
+  Debugify.cpp
   GraphPrinters.cpp
   NewPMDriver.cpp
   PassPrinters.cpp
   PrintSCC.cpp
   opt.cpp
+
+  DEPENDS
+  intrinsics_gen
   )
 export_executable_symbols(opt)
 
 if(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)
-  target_link_libraries(opt Polly)
-  if(POLLY_LINK_LIBS)
-    foreach(lib ${POLLY_LINK_LIBS})
-      target_link_libraries(opt ${lib})
-    endforeach(lib)
-  endif(POLLY_LINK_LIBS)
+  target_link_libraries(opt PRIVATE Polly)
 endif(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)

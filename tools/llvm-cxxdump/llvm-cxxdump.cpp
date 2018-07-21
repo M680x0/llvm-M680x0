@@ -490,7 +490,7 @@ static void dumpCXXData(const ObjectFile *Obj) {
 }
 
 static void dumpArchive(const Archive *Arc) {
-  Error Err;
+  Error Err = Error::success();
   for (auto &ArcC : Arc->children(Err)) {
     Expected<std::unique_ptr<Binary>> ChildOrErr = ArcC.getAsBinary();
     if (!ChildOrErr) {
@@ -502,7 +502,7 @@ static void dumpArchive(const Archive *Arc) {
         OS.flush();
         reportError(Arc->getFileName(), Buf);
       }
-      ChildOrErr.takeError();
+      consumeError(ChildOrErr.takeError());
       continue;
     }
 
@@ -549,8 +549,7 @@ int main(int argc, const char *argv[]) {
   if (opts::InputFilenames.size() == 0)
     opts::InputFilenames.push_back("-");
 
-  std::for_each(opts::InputFilenames.begin(), opts::InputFilenames.end(),
-                dumpInput);
+  llvm::for_each(opts::InputFilenames, dumpInput);
 
   return EXIT_SUCCESS;
 }

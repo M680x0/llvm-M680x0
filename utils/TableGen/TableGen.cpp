@@ -16,7 +16,6 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
-#include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Main.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/SetTheory.h"
@@ -29,6 +28,7 @@ enum ActionType {
   GenCodeBeads,
   GenRegisterInfo,
   GenInstrInfo,
+  GenInstrDocs,
   GenAsmWriter,
   GenAsmMatcher,
   GenDisassembler,
@@ -46,6 +46,10 @@ enum ActionType {
   GenCTags,
   GenAttributes,
   GenSearchableTables,
+  GenGlobalISel,
+  GenX86EVEX2VEXTables,
+  GenX86FoldTables,
+  GenRegisterBank,
 };
 
 namespace {
@@ -61,6 +65,8 @@ namespace {
                                "Generate registers and register classes info"),
                     clEnumValN(GenInstrInfo, "gen-instr-info",
                                "Generate instruction descriptions"),
+                    clEnumValN(GenInstrDocs, "gen-instr-docs",
+                               "Generate instruction documentation"),
                     clEnumValN(GenCallingConv, "gen-callingconv",
                                "Generate calling convention descriptions"),
                     clEnumValN(GenAsmWriter, "gen-asm-writer",
@@ -95,11 +101,19 @@ namespace {
                                "Generate attributes"),
                     clEnumValN(GenSearchableTables, "gen-searchable-tables",
                                "Generate generic binary-searchable table"),
-                    clEnumValEnd));
+                    clEnumValN(GenGlobalISel, "gen-global-isel",
+                               "Generate GlobalISel selector"),
+                    clEnumValN(GenX86EVEX2VEXTables, "gen-x86-EVEX2VEX-tables",
+                               "Generate X86 EVEX to VEX compress tables"),
+                    clEnumValN(GenX86FoldTables, "gen-x86-fold-tables",
+                               "Generate X86 fold tables"),
+                    clEnumValN(GenRegisterBank, "gen-register-bank",
+                               "Generate registers bank descriptions")));
 
+  cl::OptionCategory PrintEnumsCat("Options for -print-enums");
   cl::opt<std::string>
   Class("class", cl::desc("Print Enum list for this class"),
-          cl::value_desc("class name"));
+        cl::value_desc("class name"), cl::cat(PrintEnumsCat));
 
 bool LLVMTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
   switch (Action) {
@@ -117,6 +131,9 @@ bool LLVMTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
     break;
   case GenInstrInfo:
     EmitInstrInfo(Records, OS);
+    break;
+  case GenInstrDocs:
+    EmitInstrDocs(Records, OS);
     break;
   case GenCallingConv:
     EmitCallingConv(Records, OS);
@@ -184,6 +201,18 @@ bool LLVMTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
   case GenSearchableTables:
     EmitSearchableTables(Records, OS);
     break;
+  case GenGlobalISel:
+    EmitGlobalISel(Records, OS);
+    break;
+  case GenRegisterBank:
+    EmitRegisterBank(Records, OS);
+    break;
+  case GenX86EVEX2VEXTables:
+    EmitX86EVEX2VEXTables(Records, OS);
+    break;
+  case GenX86FoldTables:
+    EmitX86FoldTables(Records, OS);
+    break;
   }
 
   return false;
@@ -205,6 +234,6 @@ int main(int argc, char **argv) {
 #include <sanitizer/lsan_interface.h>
 // Disable LeakSanitizer for this binary as it has too many leaks that are not
 // very interesting to fix. See compiler-rt/include/sanitizer/lsan_interface.h .
-int __lsan_is_turned_off() { return 1; }
+LLVM_ATTRIBUTE_USED int __lsan_is_turned_off() { return 1; }
 #endif  // __has_feature(address_sanitizer)
 #endif  // defined(__has_feature)

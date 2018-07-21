@@ -15,6 +15,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
@@ -32,7 +33,9 @@ void SmallPtrSetImplBase::shrink_and_clear() {
 
   // Install the new array.  Clear all the buckets to empty.
   CurArray = (const void**)malloc(sizeof(void*) * CurArraySize);
-  assert(CurArray && "Failed to allocate memory?");
+  if (CurArray == nullptr)
+    report_bad_alloc_error("Allocation of SmallPtrSet bucket array failed.");
+
   memset(CurArray, -1, CurArraySize*sizeof(void*));
 }
 
@@ -58,32 +61,8 @@ SmallPtrSetImplBase::insert_imp_big(const void *Ptr) {
   else
     ++NumNonEmpty; // Track density.
   *Bucket = Ptr;
+  incrementEpoch();
   return std::make_pair(Bucket, true);
-}
-
-bool SmallPtrSetImplBase::erase_imp(const void * Ptr) {
-  if (isSmall()) {
-    // Check to see if it is in the set.
-    for (const void **APtr = CurArray, **E = CurArray + NumNonEmpty; APtr != E;
-         ++APtr)
-      if (*APtr == Ptr) {
-        // If it is in the set, replace this element.
-        *APtr = getTombstoneMarker();
-        ++NumTombstones;
-        return true;
-      }
-
-    return false;
-  }
-
-  // Okay, we know we have space.  Find a hash bucket.
-  void **Bucket = const_cast<void**>(FindBucketFor(Ptr));
-  if (*Bucket != Ptr) return false;  // Not in the set?
-
-  // Set this as a tombstone.
-  *Bucket = getTombstoneMarker();
-  ++NumTombstones;
-  return true;
 }
 
 const void * const *SmallPtrSetImplBase::FindBucketFor(const void *Ptr) const {
@@ -121,8 +100,12 @@ void SmallPtrSetImplBase::Grow(unsigned NewSize) {
   bool WasSmall = isSmall();
 
   // Install the new array.  Clear all the buckets to empty.
-  CurArray = (const void**)malloc(sizeof(void*) * NewSize);
-  assert(CurArray && "Failed to allocate memory?");
+  const void **NewBuckets = (const void**) malloc(sizeof(void*) * NewSize);
+  if (NewBuckets == nullptr)
+    report_bad_alloc_error("Allocation of SmallPtrSet bucket array failed.");
+
+  // Reset member only if memory was allocated successfully
+  CurArray = NewBuckets;
   CurArraySize = NewSize;
   memset(CurArray, -1, NewSize*sizeof(void*));
 
@@ -150,7 +133,8 @@ SmallPtrSetImplBase::SmallPtrSetImplBase(const void **SmallStorage,
   // Otherwise, allocate new heap space (unless we were the same size)
   } else {
     CurArray = (const void**)malloc(sizeof(void*) * that.CurArraySize);
-    assert(CurArray && "Failed to allocate memory?");
+    if (CurArray == nullptr)
+      report_bad_alloc_error("Allocation of SmallPtrSet bucket array failed.");
   }
 
   // Copy over the that array.
@@ -187,7 +171,8 @@ void SmallPtrSetImplBase::CopyFrom(const SmallPtrSetImplBase &RHS) {
         free(CurArray);
       CurArray = T;
     }
-    assert(CurArray && "Failed to allocate memory?");
+    if (CurArray == nullptr)
+      report_bad_alloc_error("Allocation of SmallPtrSet bucket array failed.");
   }
 
   CopyHelper(RHS);

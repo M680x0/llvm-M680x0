@@ -20,8 +20,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/ObjCARCInstKind.h"
-#include "llvm/Analysis/ObjCARCAnalysisUtils.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Analysis/ObjCARCAnalysisUtils.h"
 #include "llvm/IR/Intrinsics.h"
 
 using namespace llvm;
@@ -184,6 +184,7 @@ static bool isInertIntrinsic(unsigned ID) {
   // TODO: Make this into a covered switch.
   switch (ID) {
   case Intrinsic::returnaddress:
+  case Intrinsic::addressofreturnaddress:
   case Intrinsic::frameaddress:
   case Intrinsic::stacksave:
   case Intrinsic::stackrestore:

@@ -29,6 +29,8 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Mutex.h"
+#include "llvm/Support/Timer.h"
+#include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cstring>
@@ -37,14 +39,17 @@ using namespace llvm;
 /// -stats - Command line option to cause transformations to emit stats about
 /// what they did.
 ///
-static cl::opt<bool>
-Enabled(
+static cl::opt<bool> Stats(
     "stats",
-    cl::desc("Enable statistics output from program (available with Asserts)"));
-
+    cl::desc("Enable statistics output from program (available with Asserts)"),
+    cl::Hidden);
 
 static cl::opt<bool> StatsAsJSON("stats-json",
-                                 cl::desc("Display statistics as json data"));
+                                 cl::desc("Display statistics as json data"),
+                                 cl::Hidden);
+
+static bool Enabled;
+static bool PrintOnExit;
 
 namespace {
 /// StatisticInfo - This class is used in a ManagedStatic so that it is created
@@ -59,6 +64,7 @@ class StatisticInfo {
   /// Sort statistics by debugtype,name,description.
   void sort();
 public:
+  StatisticInfo();
   ~StatisticInfo();
 
   void addStatistic(const Statistic *S) {
@@ -77,7 +83,7 @@ void Statistic::RegisterStatistic() {
   // printed.
   sys::SmartScopedLock<true> Writer(*StatLock);
   if (!Initialized) {
-    if (Enabled)
+    if (Stats || Enabled)
       StatInfo->addStatistic(this);
 
     TsanHappensBefore(this);
@@ -89,17 +95,24 @@ void Statistic::RegisterStatistic() {
   }
 }
 
-// Print information when destroyed, iff command line option is specified.
-StatisticInfo::~StatisticInfo() {
-  llvm::PrintStatistics();
+StatisticInfo::StatisticInfo() {
+  // Ensure timergroup lists are created first so they are destructed after us.
+  TimerGroup::ConstructTimerLists();
 }
 
-void llvm::EnableStatistics() {
-  Enabled.setValue(true);
+// Print information when destroyed, iff command line option is specified.
+StatisticInfo::~StatisticInfo() {
+  if (::Stats || PrintOnExit)
+    llvm::PrintStatistics();
+}
+
+void llvm::EnableStatistics(bool PrintOnExit) {
+  Enabled = true;
+  ::PrintOnExit = PrintOnExit;
 }
 
 bool llvm::AreStatisticsEnabled() {
-  return Enabled;
+  return Enabled || Stats;
 }
 
 void StatisticInfo::sort() {
@@ -145,17 +158,6 @@ void llvm::PrintStatistics(raw_ostream &OS) {
   OS.flush();
 }
 
-static void write_json_string_escaped(raw_ostream &OS, const char *string) {
-  // Out current usage should not need any escaping. Keep it simple and just
-  // check that the input is pure ASCII without special characers.
-#ifndef NDEBUG
-  for (const unsigned char *c = (const unsigned char*)string; *c != '\0'; ++c) {
-    assert(*c != '\\' && *c != '\"' && *c >= 0x20 && *c < 0x80);
-  }
-#endif
-  OS << string;
-}
-
 void llvm::PrintStatisticsJSON(raw_ostream &OS) {
   StatisticInfo &Stats = *StatInfo;
 
@@ -166,13 +168,17 @@ void llvm::PrintStatisticsJSON(raw_ostream &OS) {
   const char *delim = "";
   for (const Statistic *Stat : Stats.Stats) {
     OS << delim;
-    OS << "\t\"";
-    write_json_string_escaped(OS, Stat->getDebugType());
-    OS << '.';
-    write_json_string_escaped(OS, Stat->getName());
-    OS << "\": " << Stat->getValue();
+    assert(yaml::needsQuotes(Stat->getDebugType()) == yaml::QuotingType::None &&
+           "Statistic group/type name is simple.");
+    assert(yaml::needsQuotes(Stat->getName()) == yaml::QuotingType::None &&
+           "Statistic name is simple");
+    OS << "\t\"" << Stat->getDebugType() << '.' << Stat->getName() << "\": "
+       << Stat->getValue();
     delim = ",\n";
   }
+  // Print timers.
+  TimerGroup::printAllJSONValues(OS, delim);
+
   OS << "\n}\n";
   OS.flush();
 }
@@ -195,7 +201,7 @@ void llvm::PrintStatistics() {
   // Check if the -stats option is set instead of checking
   // !Stats.Stats.empty().  In release builds, Statistics operators
   // do nothing, so stats are never Registered.
-  if (Enabled) {
+  if (Stats) {
     // Get the stream to write to.
     std::unique_ptr<raw_ostream> OutStream = CreateInfoOutputFile();
     (*OutStream) << "Statistics are disabled.  "

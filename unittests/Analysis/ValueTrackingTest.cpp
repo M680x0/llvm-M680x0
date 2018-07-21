@@ -15,6 +15,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/KnownBits.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
@@ -187,4 +188,128 @@ TEST_F(MatchSelectPatternTest, DoubleCastBad) {
       "}\n");
   // The cast types here aren't the same, so we cannot match an UMIN.
   expectPattern({SPF_UNKNOWN, SPNB_NA, false});
+}
+
+TEST(ValueTracking, GuaranteedToTransferExecutionToSuccessor) {
+  StringRef Assembly =
+      "declare void @nounwind_readonly(i32*) nounwind readonly "
+      "declare void @nounwind_argmemonly(i32*) nounwind argmemonly "
+      "declare void @throws_but_readonly(i32*) readonly "
+      "declare void @throws_but_argmemonly(i32*) argmemonly "
+      " "
+      "declare void @unknown(i32*) "
+      " "
+      "define void @f(i32* %p) { "
+      "  call void @nounwind_readonly(i32* %p) "
+      "  call void @nounwind_argmemonly(i32* %p) "
+      "  call void @throws_but_readonly(i32* %p) "
+      "  call void @throws_but_argmemonly(i32* %p) "
+      "  call void @unknown(i32* %p) nounwind readonly "
+      "  call void @unknown(i32* %p) nounwind argmemonly "
+      "  call void @unknown(i32* %p) readonly "
+      "  call void @unknown(i32* %p) argmemonly "
+      "  ret void "
+      "} ";
+
+  LLVMContext Context;
+  SMDiagnostic Error;
+  auto M = parseAssemblyString(Assembly, Error, Context);
+  assert(M && "Bad assembly?");
+
+  auto *F = M->getFunction("f");
+  assert(F && "Bad assembly?");
+
+  auto &BB = F->getEntryBlock();
+  bool ExpectedAnswers[] = {
+      true,  // call void @nounwind_readonly(i32* %p)
+      true,  // call void @nounwind_argmemonly(i32* %p)
+      false, // call void @throws_but_readonly(i32* %p)
+      false, // call void @throws_but_argmemonly(i32* %p)
+      true,  // call void @unknown(i32* %p) nounwind readonly
+      true,  // call void @unknown(i32* %p) nounwind argmemonly
+      false, // call void @unknown(i32* %p) readonly
+      false, // call void @unknown(i32* %p) argmemonly
+      false, // ret void
+  };
+
+  int Index = 0;
+  for (auto &I : BB) {
+    EXPECT_EQ(isGuaranteedToTransferExecutionToSuccessor(&I),
+              ExpectedAnswers[Index])
+        << "Incorrect answer at instruction " << Index << " = " << I;
+    Index++;
+  }
+}
+
+TEST(ValueTracking, ComputeNumSignBits_PR32045) {
+  StringRef Assembly = "define i32 @f(i32 %a) { "
+                       "  %val = ashr i32 %a, -1 "
+                       "  ret i32 %val "
+                       "} ";
+
+  LLVMContext Context;
+  SMDiagnostic Error;
+  auto M = parseAssemblyString(Assembly, Error, Context);
+  assert(M && "Bad assembly?");
+
+  auto *F = M->getFunction("f");
+  assert(F && "Bad assembly?");
+
+  auto *RVal =
+      cast<ReturnInst>(F->getEntryBlock().getTerminator())->getOperand(0);
+  EXPECT_EQ(ComputeNumSignBits(RVal, M->getDataLayout()), 1u);
+}
+
+TEST(ValueTracking, ComputeKnownBits) {
+  StringRef Assembly = "define i32 @f(i32 %a, i32 %b) { "
+                       "  %ash = mul i32 %a, 8 "
+                       "  %aad = add i32 %ash, 7 "
+                       "  %aan = and i32 %aad, 4095 "
+                       "  %bsh = shl i32 %b, 4 "
+                       "  %bad = or i32 %bsh, 6 "
+                       "  %ban = and i32 %bad, 4095 "
+                       "  %mul = mul i32 %aan, %ban "
+                       "  ret i32 %mul "
+                       "} ";
+
+  LLVMContext Context;
+  SMDiagnostic Error;
+  auto M = parseAssemblyString(Assembly, Error, Context);
+  assert(M && "Bad assembly?");
+
+  auto *F = M->getFunction("f");
+  assert(F && "Bad assembly?");
+
+  auto *RVal =
+      cast<ReturnInst>(F->getEntryBlock().getTerminator())->getOperand(0);
+  auto Known = computeKnownBits(RVal, M->getDataLayout());
+  ASSERT_FALSE(Known.hasConflict());
+  EXPECT_EQ(Known.One.getZExtValue(), 10u);
+  EXPECT_EQ(Known.Zero.getZExtValue(), 4278190085u);
+}
+
+TEST(ValueTracking, ComputeKnownMulBits) {
+  StringRef Assembly = "define i32 @f(i32 %a, i32 %b) { "
+                       "  %aa = shl i32 %a, 5 "
+                       "  %bb = shl i32 %b, 5 "
+                       "  %aaa = or i32 %aa, 24 "
+                       "  %bbb = or i32 %bb, 28 "
+                       "  %mul = mul i32 %aaa, %bbb "
+                       "  ret i32 %mul "
+                       "} ";
+
+  LLVMContext Context;
+  SMDiagnostic Error;
+  auto M = parseAssemblyString(Assembly, Error, Context);
+  assert(M && "Bad assembly?");
+
+  auto *F = M->getFunction("f");
+  assert(F && "Bad assembly?");
+
+  auto *RVal =
+      cast<ReturnInst>(F->getEntryBlock().getTerminator())->getOperand(0);
+  auto Known = computeKnownBits(RVal, M->getDataLayout());
+  ASSERT_FALSE(Known.hasConflict());
+  EXPECT_EQ(Known.One.getZExtValue(), 32u);
+  EXPECT_EQ(Known.Zero.getZExtValue(), 95u);
 }

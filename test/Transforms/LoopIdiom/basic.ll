@@ -97,8 +97,7 @@ for.end:                                          ; preds = %entry
 ; CHECK: ret void
 }
 
-
-;; TODO: We should be able to promote this memset.  Not yet though.
+; Make sure the first store in the loop is turned into a memset.
 define void @test4(i8* %Base) nounwind ssp {
 bb.nph:                                           ; preds = %entry
   %Base100 = getelementptr i8, i8* %Base, i64 1000
@@ -118,9 +117,8 @@ for.body:                                         ; preds = %bb.nph, %for.body
 
 for.end:                                          ; preds = %for.body, %entry
   ret void
-; CHECK-TODO-LABEL: @test4(
-; CHECK-TODO: call void @llvm.memset.p0i8.i64(i8* %Base, i8 0, i64 100, i32 1, i1 false)
-; CHECK-TODO-NOT: store
+; CHECK-LABEL: @test4(
+; CHECK: call void @llvm.memset.p0i8.i64(i8* %Base, i8 0, i64 100, i32 1, i1 false)
 }
 
 ; This can't be promoted: the memset is a store of a loop variant value.
@@ -563,6 +561,75 @@ for.end6:                                         ; preds = %for.inc4
 ; CHECK: entry:
 ; CHECK-NEXT: call void @llvm.memset.p0i8.i64(i8* %X, i8 0, i64 10000, i32 1, i1 false)
 ; CHECK: ret void
+}
+
+; Handle loops where the trip count is a narrow integer that needs to be
+; extended.
+define void @form_memset_narrow_size(i64* %ptr, i32 %size) {
+; CHECK-LABEL: @form_memset_narrow_size(
+entry:
+  %cmp1 = icmp sgt i32 %size, 0
+  br i1 %cmp1, label %loop.ph, label %exit
+; CHECK:       entry:
+; CHECK:         %[[C1:.*]] = icmp sgt i32 %size, 0
+; CHECK-NEXT:    br i1 %[[C1]], label %loop.ph, label %exit
+
+loop.ph:
+  br label %loop.body
+; CHECK:       loop.ph:
+; CHECK-NEXT:    %[[ZEXT_SIZE:.*]] = zext i32 %size to i64
+; CHECK-NEXT:    %[[SCALED_SIZE:.*]] = shl i64 %[[ZEXT_SIZE]], 3
+; CHECK-NEXT:    call void @llvm.memset.p0i8.i64(i8* %{{.*}}, i8 0, i64 %[[SCALED_SIZE]], i32 8, i1 false)
+
+loop.body:
+  %storemerge4 = phi i32 [ 0, %loop.ph ], [ %inc, %loop.body ]
+  %idxprom = sext i32 %storemerge4 to i64
+  %arrayidx = getelementptr inbounds i64, i64* %ptr, i64 %idxprom
+  store i64 0, i64* %arrayidx, align 8
+  %inc = add nsw i32 %storemerge4, 1
+  %cmp2 = icmp slt i32 %inc, %size
+  br i1 %cmp2, label %loop.body, label %loop.exit
+
+loop.exit:
+  br label %exit
+
+exit:
+  ret void
+}
+
+define void @form_memcpy_narrow_size(i64* noalias %dst, i64* noalias %src, i32 %size) {
+; CHECK-LABEL: @form_memcpy_narrow_size(
+entry:
+  %cmp1 = icmp sgt i32 %size, 0
+  br i1 %cmp1, label %loop.ph, label %exit
+; CHECK:       entry:
+; CHECK:         %[[C1:.*]] = icmp sgt i32 %size, 0
+; CHECK-NEXT:    br i1 %[[C1]], label %loop.ph, label %exit
+
+loop.ph:
+  br label %loop.body
+; CHECK:       loop.ph:
+; CHECK-NEXT:    %[[ZEXT_SIZE:.*]] = zext i32 %size to i64
+; CHECK-NEXT:    %[[SCALED_SIZE:.*]] = shl i64 %[[ZEXT_SIZE]], 3
+; CHECK-NEXT:    call void @llvm.memcpy.p0i8.p0i8.i64(i8* %{{.*}}, i8* %{{.*}}, i64 %[[SCALED_SIZE]], i32 8, i1 false)
+
+loop.body:
+  %storemerge4 = phi i32 [ 0, %loop.ph ], [ %inc, %loop.body ]
+  %idxprom1 = sext i32 %storemerge4 to i64
+  %arrayidx1 = getelementptr inbounds i64, i64* %src, i64 %idxprom1
+  %v = load i64, i64* %arrayidx1, align 8
+  %idxprom2 = sext i32 %storemerge4 to i64
+  %arrayidx2 = getelementptr inbounds i64, i64* %dst, i64 %idxprom2
+  store i64 %v, i64* %arrayidx2, align 8
+  %inc = add nsw i32 %storemerge4, 1
+  %cmp2 = icmp slt i32 %inc, %size
+  br i1 %cmp2, label %loop.body, label %loop.exit
+
+loop.exit:
+  br label %exit
+
+exit:
+  ret void
 }
 
 ; Validate that "memset_pattern" has the proper attributes.
