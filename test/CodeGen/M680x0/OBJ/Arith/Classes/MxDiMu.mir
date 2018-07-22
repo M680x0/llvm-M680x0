@@ -11,7 +11,7 @@
 #                  ---------------------------------------------------------------
 #                   F   E   D   C | B   A   9 | 8   7   6 | 5   4   3 | 2   1   0
 #                  ---------------------------------------------------------------
-#                   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG  
+#                   x   x   x   x |    REG    |   OPMODE  |    MODE   |    REG
 #                  ---------------------------------------------------------------
 # SDIVd32d16:       1   0   0   0   0   0   0   1 . 1   1   0   0   0   0   0   1
 #                  ---------------------------------------------------------------
@@ -36,11 +36,11 @@
 name: MxDiMu
 body: |
   bb.0:
-    %d0 = SDIVd32d16 %d0, %wd1, implicit-def %ccr
-    %d0 = UDIVd32d16 %d0, %wd1, implicit-def %ccr
-    %d0 = SDIVd32i16 %d0,    0, implicit-def %ccr
-    %d0 = UDIVd32i16 %d0,   -1, implicit-def %ccr
-    %d0 = SMULd32d16 %d0, %wd1, implicit-def %ccr
-    %d0 = UMULd32d16 %d0, %wd1, implicit-def %ccr
-    %d0 = SMULd32i16 %d0,    0, implicit-def %ccr
-    %d0 = UMULd32i16 %d0,   -1, implicit-def %ccr
+    $d0 = SDIVd32d16 $d0, $wd1, implicit-def $ccr
+    $d0 = UDIVd32d16 $d0, $wd1, implicit-def $ccr
+    $d0 = SDIVd32i16 $d0,    0, implicit-def $ccr
+    $d0 = UDIVd32i16 $d0,   -1, implicit-def $ccr
+    $d0 = SMULd32d16 $d0, $wd1, implicit-def $ccr
+    $d0 = UMULd32d16 $d0, $wd1, implicit-def $ccr
+    $d0 = SMULd32i16 $d0,    0, implicit-def $ccr
+    $d0 = UMULd32i16 $d0,   -1, implicit-def $ccr

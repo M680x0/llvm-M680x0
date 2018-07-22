@@ -18,5 +18,5 @@
 name: MxBTST_RR
 body: |
   bb.0:
-    BTST32dd %d0, %d1, implicit-def %ccr
-    BTST32dd %d3, %d0, implicit-def %ccr
+    BTST32dd $d0, $d1, implicit-def $ccr
+    BTST32dd $d3, $d0, implicit-def $ccr

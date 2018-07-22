@@ -54,7 +54,7 @@ createM680x0MCInstrInfo() {
 static MCRegisterInfo *
 createM680x0MCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  InitM680x0MCRegisterInfo(X, M680x0::A0, 0, 0, M680x0::PC);
+  InitM680x0MCRegisterInfo(X, llvm::M680x0::A0, 0, 0, llvm::M680x0::PC);
   return X;
 }
 
@@ -80,7 +80,7 @@ createM680x0MCAsmInfo(const MCRegisterInfo &MRI, const Triple &TT) {
 
   // Initial state of the frame pointer is SP+stackGrowth.
   MCCFIInstruction Inst = MCCFIInstruction::createDefCfa(
-    nullptr, MRI.getDwarfRegNum(M680x0::SP, true), -stackGrowth);
+    nullptr, MRI.getDwarfRegNum(llvm::M680x0::SP, true), -stackGrowth);
   MAI->addInitialFrameState(Inst);
 
   //??? Do i need this?

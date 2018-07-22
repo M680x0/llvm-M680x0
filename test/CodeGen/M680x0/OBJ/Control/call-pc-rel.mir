@@ -44,8 +44,8 @@ body: |
 name: PCI
 body: |
   bb.0:
-    CALLk @BACKWARD, %d0
-    CALLk @FORWARD, %d0
+    CALLk @BACKWARD, $d0
+    CALLk @FORWARD, $d0
 
 ...
 --- # PCD

@@ -116,8 +116,7 @@ unsigned M680x0ELFObjectWriter::getRelocType(MCContext &Ctx,
   }
 }
 
-std::unique_ptr<MCObjectWriter>
-llvm::createM680x0ELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI) {
-  return createELFObjectWriter(make_unique<M680x0ELFObjectWriter>(OSABI),
-                               OS, /*IsLittleEndian=*/false);
+std::unique_ptr<MCObjectTargetWriter>
+llvm::createM680x0ELFObjectWriter(uint8_t OSABI) {
+  return llvm::make_unique<M680x0ELFObjectWriter>(OSABI);
 }

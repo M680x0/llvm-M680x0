@@ -32,10 +32,10 @@
 name: MxBiArOp_RFRM_PCI
 body: |
   bb.0:
-    %bd0 = ADD8dk %bd0, 0,  %d1, implicit-def %ccr
-    %bd0 = ADD8dk %bd0, -1, %d1, implicit-def %ccr
-    %d0  = ADD32rk %d0, 0,  %d1, implicit-def %ccr
-    %a1  = ADD32rk %a1, 0,  %a2, implicit-def %ccr
+    $bd0 = ADD8dk $bd0, 0,  $d1, implicit-def $ccr
+    $bd0 = ADD8dk $bd0, -1, $d1, implicit-def $ccr
+    $d0  = ADD32rk $d0, 0,  $d1, implicit-def $ccr
+    $a1  = ADD32rk $a1, 0,  $a2, implicit-def $ccr
 
 ...
 --- # PCD
@@ -52,8 +52,8 @@ body: |
 name: MxBiArOp_RFRM_PCD
 body: |
   bb.0:
-    %bd0 = ADD8dq %bd0, 0,  implicit-def %ccr
-    %d0  = ADD32rq %d0, -1, implicit-def %ccr
+    $bd0 = ADD8dq $bd0, 0,  implicit-def $ccr
+    $d0  = ADD32rq $d0, -1, implicit-def $ccr
 
 ...
 --- # ARII
@@ -79,10 +79,10 @@ body: |
 name: MxBiArOp_RFRM_ARII
 body: |
   bb.0:
-    %bd0 = ADD8df %bd0, 0,  %a0, %d1, implicit-def %ccr
-    %bd0 = ADD8df %bd0, -1, %a0, %d1, implicit-def %ccr
-    %d0  = ADD32rf %d0, 0,  %a1, %d1, implicit-def %ccr
-    %a1  = ADD32rf %a1, 0,  %a2, %a2, implicit-def %ccr
+    $bd0 = ADD8df $bd0, 0,  $a0, $d1, implicit-def $ccr
+    $bd0 = ADD8df $bd0, -1, $a0, $d1, implicit-def $ccr
+    $d0  = ADD32rf $d0, 0,  $a1, $d1, implicit-def $ccr
+    $a1  = ADD32rf $a1, 0,  $a2, $a2, implicit-def $ccr
 
 ...
 --- # ARID
@@ -99,8 +99,8 @@ body: |
 name: MxBiArOp_RFRM_ARID
 body: |
   bb.0:
-    %bd0 = ADD8dp %bd0, 0,  %a0, implicit-def %ccr
-    %d0  = ADD32rp %d0, -1, %a1, implicit-def %ccr
+    $bd0 = ADD8dp $bd0, 0,  $a0, implicit-def $ccr
+    $d0  = ADD32rp $d0, -1, $a1, implicit-def $ccr
 
 ...
 --- # ARI
@@ -115,7 +115,7 @@ body: |
 name: MxBiArOp_RFRM_ARI
 body: |
   bb.0:
-    %bd0 = ADD8dj %bd0, %a0, implicit-def %ccr
-    %a3  = ADD32rj %a3, %a1, implicit-def %ccr
+    $bd0 = ADD8dj $bd0, $a0, implicit-def $ccr
+    $a3  = ADD32rj $a3, $a1, implicit-def $ccr
 
 ...

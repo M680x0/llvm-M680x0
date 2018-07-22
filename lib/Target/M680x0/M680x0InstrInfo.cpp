@@ -203,10 +203,10 @@ bool M680x0InstrInfo::ExpandMOVX_RR(MachineInstrBuilder &MIB, MVT MVTDst,
   // If it happens to that super source register is the destination register
   // we do nothing
   if (Dst == SSrc) {
-    DEBUG(dbgs() << "Remove " << *MIB.getInstr() << '\n');
+    LLVM_DEBUG(dbgs() << "Remove " << *MIB.getInstr() << '\n');
     MIB->eraseFromParent();
   } else { // otherwise we need to MOV
-    DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV\n");
+    LLVM_DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to MOV\n");
     MIB->setDesc(get(Move));
     MIB->getOperand(1).setReg(SSrc);
   }
@@ -218,7 +218,7 @@ bool M680x0InstrInfo::ExpandMOVX_RR(MachineInstrBuilder &MIB, MVT MVTDst,
 /// different registers or just EXT if it is the same register
 bool M680x0InstrInfo::ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
                                       MVT MVTDst, MVT MVTSrc) const {
-  DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to ");
+  LLVM_DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to ");
 
   unsigned Move;
 
@@ -249,15 +249,15 @@ bool M680x0InstrInfo::ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
   DebugLoc DL = MIB->getDebugLoc();
 
   if (Dst != SSrc) {
-    DEBUG(dbgs() << "Move and " << '\n');
+    LLVM_DEBUG(dbgs() << "Move and " << '\n');
     BuildMI(MBB, MIB.getInstr(), DL, get(Move), Dst).addReg(SSrc);
   }
 
   if (isSigned) {
-    DEBUG(dbgs() << "Sign Extend" << '\n');
+    LLVM_DEBUG(dbgs() << "Sign Extend" << '\n');
     AddSExt(MBB, MIB.getInstr(), DL, Dst, MVTSrc, MVTDst);
   } else {
-    DEBUG(dbgs() << "Zero Extend" << '\n');
+    LLVM_DEBUG(dbgs() << "Zero Extend" << '\n');
     AddZExt(MBB, MIB.getInstr(), DL, Dst, MVTSrc, MVTDst);
   }
 
@@ -269,7 +269,7 @@ bool M680x0InstrInfo::ExpandMOVSZX_RR(MachineInstrBuilder &MIB, bool isSigned,
 bool M680x0InstrInfo::ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
                                       const MCInstrDesc &Desc, MVT MVTDst,
                                       MVT MVTSrc) const {
-  DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to LOAD and ");
+  LLVM_DEBUG(dbgs() << "Expand " << *MIB.getInstr() << " to LOAD and ");
 
   unsigned Dst = MIB->getOperand(0).getReg();
 
@@ -293,10 +293,10 @@ bool M680x0InstrInfo::ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool isSigned,
   DebugLoc DL = MIB->getDebugLoc();
 
   if (isSigned) {
-    DEBUG(dbgs() << "Sign Extend" << '\n');
+    LLVM_DEBUG(dbgs() << "Sign Extend" << '\n');
     AddSExt(MBB, I, DL, Dst, MVTSrc, MVTDst);
   } else {
-    DEBUG(dbgs() << "Zero Extend" << '\n');
+    LLVM_DEBUG(dbgs() << "Zero Extend" << '\n');
     AddZExt(MBB, I, DL, Dst, MVTSrc, MVTDst);
   }
 
@@ -321,12 +321,20 @@ bool M680x0InstrInfo::ExpandPUSH_POP(MachineInstrBuilder &MIB,
 }
 
 bool M680x0InstrInfo::ExpandCCR(MachineInstrBuilder &MIB, bool isToCCR) const {
+
+  // Replace the pseudo instruction with the real one
   if (isToCCR) {
     MIB->setDesc(get(M680x0::MOV16cd));
   } else {
     // FIXME M68010 or better is required
     MIB->setDesc(get(M680x0::MOV16dc));
   }
+
+  // Promote used register to the next class
+  auto &Opd = MIB->getOperand(1);
+  Opd.setReg(getRegisterInfo().getMatchingSuperReg(
+      Opd.getReg(), M680x0::MxSubRegIndex8Lo, &M680x0::DR16RegClass));
+
   return true;
 }
 
@@ -495,8 +503,8 @@ void M680x0InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     return;
   }
 
-  DEBUG(dbgs() << "Cannot copy " << RI.getName(SrcReg) << " to "
-               << RI.getName(DstReg) << '\n');
+  LLVM_DEBUG(dbgs() << "Cannot copy " << RI.getName(SrcReg) << " to "
+                    << RI.getName(DstReg) << '\n');
   llvm_unreachable("Cannot emit physreg copy instruction");
 }
 

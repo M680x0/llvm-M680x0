@@ -23,8 +23,8 @@
 name: DATA
 body: |
   bb.0:
-    %a0 = MOV32rk @dst, %a0, implicit-def %ccr
-    %a0 = MOV32rq @dst,      implicit-def %ccr
-    %a0 = MOV32rq 0,         implicit-def %ccr
+    $a0 = MOV32rk @dst, $a0, implicit-def $ccr
+    $a0 = MOV32rq @dst,      implicit-def $ccr
+    $a0 = MOV32rq 0,         implicit-def $ccr
 
 ...

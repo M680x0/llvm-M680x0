@@ -129,7 +129,7 @@ M680x0TargetLowering::M680x0TargetLowering(const M680x0TargetMachine &TM,
     setOperationAction(ISD::SELECT, VT, Custom);
     setOperationAction(ISD::SELECT_CC, VT, Expand);
     setOperationAction(ISD::SETCC, VT, Custom);
-    setOperationAction(ISD::SETCCE, VT, Custom);
+    setOperationAction(ISD::SETCCCARRY, VT, Custom);
   }
 
   for (auto VT : {MVT::i8, MVT::i16, MVT::i32}) {
@@ -1430,8 +1430,8 @@ SDValue M680x0TargetLowering::LowerOperation(SDValue Op,
     return LowerXALUO(Op, DAG);
   case ISD::SETCC:
     return LowerSETCC(Op, DAG);
-  case ISD::SETCCE:
-    return LowerSETCCE(Op, DAG);
+  case ISD::SETCCCARRY:
+    return LowerSETCCCARRY(Op, DAG);
   case ISD::SELECT:
     return LowerSELECT(Op, DAG);
   case ISD::BRCOND:
@@ -2143,14 +2143,14 @@ SDValue M680x0TargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
                      DAG.getConstant(M680x0CC, DL, MVT::i8), CCR);
 }
 
-SDValue M680x0TargetLowering::LowerSETCCE(SDValue Op, SelectionDAG &DAG) const {
+SDValue M680x0TargetLowering::LowerSETCCCARRY(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op.getOperand(0);
   SDValue RHS = Op.getOperand(1);
   SDValue Carry = Op.getOperand(2);
   SDValue Cond = Op.getOperand(3);
   SDLoc DL(Op);
 
-  assert(LHS.getSimpleValueType().isInteger() && "SETCCE is integer only.");
+  assert(LHS.getSimpleValueType().isInteger() && "SETCCCARRY is integer only.");
   M680x0::CondCode CC =
       TranslateIntegerM680x0CC(cast<CondCodeSDNode>(Cond)->get());
 

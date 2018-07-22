@@ -22,9 +22,9 @@
 name: MxMove_RR
 body: |
   bb.0:
-    %bd1 = MOV8dd  %bd0, implicit-def %ccr
-    %wd3 = MOV16ra %wa2, implicit-def %ccr
-    %wa6 = MOV16ra %wa2, implicit-def %ccr
-    %wd1 = MOV16ra %wa2, implicit-def %ccr
-    %d1  = MOV32rr %d2,  implicit-def %ccr
-    %a1  = MOV32rr %a2,  implicit-def %ccr
+    $bd1 = MOV8dd  $bd0, implicit-def $ccr
+    $wd3 = MOV16ra $wa2, implicit-def $ccr
+    $wa6 = MOV16ra $wa2, implicit-def $ccr
+    $wd1 = MOV16ra $wa2, implicit-def $ccr
+    $d1  = MOV32rr $d2,  implicit-def $ccr
+    $a1  = MOV32rr $a2,  implicit-def $ccr

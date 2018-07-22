@@ -18,8 +18,8 @@
 name: MxNEG
 body: |
   bb.0:
-    %bd0 = NEG8d  %bd0, implicit-def %ccr
-    %d0  = NEG32d  %d0, implicit-def %ccr
+    $bd0 = NEG8d  $bd0, implicit-def $ccr
+    $d0  = NEG32d  $d0, implicit-def $ccr
 
 ...
 --- # NEGX
@@ -33,7 +33,7 @@ body: |
 name: MxNEGX
 body: |
   bb.0:
-    %bd0 = NEGX8d  %bd0, implicit %ccr, implicit-def %ccr
-    %d0  = NEGX32d  %d0, implicit %ccr, implicit-def %ccr
+    $bd0 = NEGX8d  $bd0, implicit $ccr, implicit-def $ccr
+    $d0  = NEGX32d  $d0, implicit $ccr, implicit-def $ccr
 
 ...

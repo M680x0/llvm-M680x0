@@ -35,20 +35,20 @@
 name: MxBcc8
 body: |
   bb.0:
-      Bhi8  1, implicit %ccr
-      Bls8 42, implicit %ccr
-      Bcc8  1, implicit %ccr
-      Bcs8  1, implicit %ccr
-      Bne8  1, implicit %ccr
-      Beq8  1, implicit %ccr
-      Bvc8  1, implicit %ccr
-      Bvs8  1, implicit %ccr
-      Bpl8  1, implicit %ccr
-      Bmi8  1, implicit %ccr
-      Bge8  1, implicit %ccr
-      Blt8  1, implicit %ccr
-      Bgt8  1, implicit %ccr
-      Ble8  1, implicit %ccr
+      Bhi8  1, implicit $ccr
+      Bls8 42, implicit $ccr
+      Bcc8  1, implicit $ccr
+      Bcs8  1, implicit $ccr
+      Bne8  1, implicit $ccr
+      Beq8  1, implicit $ccr
+      Bvc8  1, implicit $ccr
+      Bvs8  1, implicit $ccr
+      Bpl8  1, implicit $ccr
+      Bmi8  1, implicit $ccr
+      Bge8  1, implicit $ccr
+      Blt8  1, implicit $ccr
+      Bgt8  1, implicit $ccr
+      Ble8  1, implicit $ccr
 
 ...
 --- # MxBcc16
@@ -101,19 +101,19 @@ body: |
 name: MxBcc16
 body: |
   bb.0:
-      Bhi16 -1, implicit %ccr
-      Bls16 42, implicit %ccr
-      Bcc16  0, implicit %ccr
-      Bcs16  0, implicit %ccr
-      Bne16  0, implicit %ccr
-      Beq16  0, implicit %ccr
-      Bvc16  0, implicit %ccr
-      Bvs16  0, implicit %ccr
-      Bpl16  0, implicit %ccr
-      Bmi16  0, implicit %ccr
-      Bge16  0, implicit %ccr
-      Blt16  0, implicit %ccr
-      Bgt16  0, implicit %ccr
-      Ble16  0, implicit %ccr
+      Bhi16 -1, implicit $ccr
+      Bls16 42, implicit $ccr
+      Bcc16  0, implicit $ccr
+      Bcs16  0, implicit $ccr
+      Bne16  0, implicit $ccr
+      Beq16  0, implicit $ccr
+      Bvc16  0, implicit $ccr
+      Bvs16  0, implicit $ccr
+      Bpl16  0, implicit $ccr
+      Bmi16  0, implicit $ccr
+      Bge16  0, implicit $ccr
+      Blt16  0, implicit $ccr
+      Bgt16  0, implicit $ccr
+      Ble16  0, implicit $ccr
 
 ...

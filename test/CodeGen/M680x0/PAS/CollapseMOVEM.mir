@@ -13,14 +13,14 @@
 name: CollapseMOVEM_RM
 body: |
   bb.0:
-    MOVM32mp 1,     0, %sp
-    MOVM32mp 2,     4, %sp
-    MOVM32mp 4,     8, %sp
-    MOVM32mp 128,  12, %sp
-    MOVM32mp 512,  16, %sp
-    MOVM32mp 1024, 20, %sp
-    MOVM32mp 2048, 24, %sp
-    MOVM32mp 8192, 28, %sp
+    MOVM32mp 1,     0, $sp
+    MOVM32mp 2,     4, $sp
+    MOVM32mp 4,     8, $sp
+    MOVM32mp 128,  12, $sp
+    MOVM32mp 512,  16, $sp
+    MOVM32mp 1024, 20, $sp
+    MOVM32mp 2048, 24, $sp
+    MOVM32mp 8192, 28, $sp
 
 ...
 #
@@ -29,14 +29,14 @@ body: |
 name: CollapseMOVEM_RM_Reversed
 body: |
   bb.0:
-    MOVM32mp 8192, 28, %sp
-    MOVM32mp 2048, 24, %sp
-    MOVM32mp 1024, 20, %sp
-    MOVM32mp 512,  16, %sp
-    MOVM32mp 128,  12, %sp
-    MOVM32mp 4,     8, %sp
-    MOVM32mp 2,     4, %sp
-    MOVM32mp 1,     0, %sp
+    MOVM32mp 8192, 28, $sp
+    MOVM32mp 2048, 24, $sp
+    MOVM32mp 1024, 20, $sp
+    MOVM32mp 512,  16, $sp
+    MOVM32mp 128,  12, $sp
+    MOVM32mp 4,     8, $sp
+    MOVM32mp 2,     4, $sp
+    MOVM32mp 1,     0, $sp
 
 ...
 # This async reg/mem order is impossible to store with MOVEM
@@ -52,14 +52,14 @@ body: |
 name: CollapseMOVEM_RM_ReversedStoreOrder
 body: |
   bb.0:
-    MOVM32mp 8192,  0, %sp
-    MOVM32mp 2048,  4, %sp
-    MOVM32mp 1024,  8, %sp
-    MOVM32mp 512,  12, %sp
-    MOVM32mp 128,  16, %sp
-    MOVM32mp 4,    20, %sp
-    MOVM32mp 2,    24, %sp
-    MOVM32mp 1,    28, %sp
+    MOVM32mp 8192,  0, $sp
+    MOVM32mp 2048,  4, $sp
+    MOVM32mp 1024,  8, $sp
+    MOVM32mp 512,  12, $sp
+    MOVM32mp 128,  16, $sp
+    MOVM32mp 4,    20, $sp
+    MOVM32mp 2,    24, $sp
+    MOVM32mp 1,    28, $sp
 
 ...
 --- # CollapseMOVEM_MR
@@ -69,14 +69,14 @@ body: |
 name: CollapseMOVEM_MR
 body: |
   bb.0:
-    MOVM32pm   0, %sp, 1
-    MOVM32pm   4, %sp, 2
-    MOVM32pm   8, %sp, 4
-    MOVM32pm  12, %sp, 128
-    MOVM32pm  16, %sp, 512
-    MOVM32pm  20, %sp, 1024
-    MOVM32pm  24, %sp, 2048
-    MOVM32pm  28, %sp, 8192
+    MOVM32pm   0, $sp, 1
+    MOVM32pm   4, $sp, 2
+    MOVM32pm   8, $sp, 4
+    MOVM32pm  12, $sp, 128
+    MOVM32pm  16, $sp, 512
+    MOVM32pm  20, $sp, 1024
+    MOVM32pm  24, $sp, 2048
+    MOVM32pm  28, $sp, 8192
 
 ...
 --- # CollapseMOVEM_Mixed
@@ -90,14 +90,14 @@ body: |
 name: CollapseMOVEM_Mixed
 body: |
   bb.0:
-    MOVM32pm  0, %sp, 1
-    MOVM32pm  4, %sp, 2
-    MOVM32mp  4, 8, %sp
-    MOVM32mp  128, 12, %sp
-    MOVM32pm  16, %sp, 512
-    MOVM32pm  20, %sp, 1024
-    MOVM32mp  2048, 24, %sp
-    MOVM32pm  28, %sp, 8192
+    MOVM32pm  0, $sp, 1
+    MOVM32pm  4, $sp, 2
+    MOVM32mp  4, 8, $sp
+    MOVM32mp  128, 12, $sp
+    MOVM32pm  16, $sp, 512
+    MOVM32pm  20, $sp, 1024
+    MOVM32mp  2048, 24, $sp
+    MOVM32pm  28, $sp, 8192
 
 ...
 --- # CollapseMOVEM_Zero
@@ -107,11 +107,11 @@ body: |
 name: CollapseMOVEM_Zero
 body: |
   bb.0:
-    MOVM32pm -8, %sp,  1
-    MOVM32pm -4, %sp,  2
-    MOVM32pm  0, %sp,  4
-    MOVM32pm  4, %sp,  8
-    MOVM32pm  8, %sp, 16
+    MOVM32pm -8, $sp,  1
+    MOVM32pm -4, $sp,  2
+    MOVM32pm  0, $sp,  4
+    MOVM32pm  4, $sp,  8
+    MOVM32pm  8, $sp, 16
 
 ...
 #
@@ -122,11 +122,11 @@ body: |
 name: CollapseMOVEM_Zero_Mixed
 body: |
   bb.0:
-    MOVM32pm  4, %sp,  8
-    MOVM32pm -4, %sp,  2
-    MOVM32pm -8, %sp,  1
-    MOVM32pm  0, %sp,  4
-    MOVM32pm  8, %sp, 16
+    MOVM32pm  4, $sp,  8
+    MOVM32pm -4, $sp,  2
+    MOVM32pm -8, $sp,  1
+    MOVM32pm  0, $sp,  4
+    MOVM32pm  8, $sp, 16
 
 ...
 --- # CollapseMOVEM_Zero_Reversed
@@ -136,11 +136,11 @@ body: |
 name: CollapseMOVEM_Zero_Reversed
 body: |
   bb.0:
-    MOVM32pm  8, %sp, 16
-    MOVM32pm  4, %sp,  8
-    MOVM32pm  0, %sp,  4
-    MOVM32pm -4, %sp,  2
-    MOVM32pm -8, %sp,  1
+    MOVM32pm  8, $sp, 16
+    MOVM32pm  4, $sp,  8
+    MOVM32pm  0, $sp,  4
+    MOVM32pm -4, $sp,  2
+    MOVM32pm -8, $sp,  1
 
 ...
 #
@@ -153,10 +153,10 @@ body: |
 name: CollapseMOVEM_Zero_ReversedStoreOrder
 body: |
   bb.0:
-    MOVM32pm  8, %sp,  1
-    MOVM32pm  4, %sp,  2
-    MOVM32pm  0, %sp,  4
-    MOVM32pm -4, %sp,  8
-    MOVM32pm -8, %sp, 16
+    MOVM32pm  8, $sp,  1
+    MOVM32pm  4, $sp,  2
+    MOVM32pm  0, $sp,  4
+    MOVM32pm -4, $sp,  8
+    MOVM32pm -8, $sp, 16
 
 ...

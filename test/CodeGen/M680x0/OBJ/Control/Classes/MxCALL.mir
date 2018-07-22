@@ -26,9 +26,9 @@
 name: MxCALL_PCI
 body: |
   bb.0:
-      CALLk  0, %a0
-      CALLk -1, %a0
-      CALLk 42, %a0
+      CALLk  0, $a0
+      CALLk -1, $a0
+      CALLk 42, $a0
 
 ...
 --- # MxCALL_PCD
@@ -81,8 +81,8 @@ body: |
 name: MxCALL_ARI
 body: |
   bb.0:
-      CALLj %a0
-      CALLj %a1
-      CALLj %a2
+      CALLj $a0
+      CALLj $a1
+      CALLj $a2
 
 ...

@@ -33,18 +33,18 @@ using namespace llvm;
 namespace {
 
 class M680x0AsmBackend : public MCAsmBackend {
-  const StringRef CPU;
 
 public:
-  M680x0AsmBackend(const Target &T, StringRef CPU) : MCAsmBackend(), CPU(CPU) {}
+  M680x0AsmBackend(const Target &T) : MCAsmBackend(support::big) {}
 
   unsigned getNumFixupKinds() const override {
-    return M680x0::NumTargetFixupKinds;
+    return llvm::M680x0::NumTargetFixupKinds;
   }
 
   void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                   const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsResolved) const override {
+                  uint64_t Value, bool IsResolved,
+                  const MCSubtargetInfo *STI) const override {
     unsigned Size = 1 << getFixupKindLog2Size(Fixup.getKind());
 
     assert(Fixup.getOffset() + Size <= Data.size() && "Invalid fixup offset!");
@@ -61,7 +61,8 @@ public:
       Data[Fixup.getOffset() + i] = uint8_t(Value >> ((Size - i - 1) * 8));
   }
 
-  bool mayNeedRelaxation(const MCInst &Inst) const override;
+  bool mayNeedRelaxation(const MCInst &Inst,
+                         const MCSubtargetInfo &STI) const override;
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
@@ -70,10 +71,16 @@ public:
   void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
                         MCInst &Res) const override;
 
+  /// Returns the minimum size of a nop in bytes on this target. The assembler
+  /// will use this to emit excess padding in situations where the padding
+  /// required for simple alignment would be less than the minimum nop size.
+  ///
+  unsigned getMinimumNopSize() const override { return 2; }
+
   /// \brief Write a sequence of optimal nops to the output, covering \p Count
   /// bytes.
   /// \return - true on success, false on failure
-  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
+  bool writeNopData(raw_ostream &OS, uint64_t Count) const override;
 };
 } // end anonymous namespace
 
@@ -139,7 +146,8 @@ static unsigned getRelaxedOpcode(const MCInst &Inst) {
   return getRelaxedOpcodeBranch(Inst);
 }
 
-bool M680x0AsmBackend::mayNeedRelaxation(const MCInst &Inst) const {
+bool M680x0AsmBackend::mayNeedRelaxation(const MCInst &Inst,
+                                         const MCSubtargetInfo &STI) const {
   // Branches can always be relaxed in either mode.
   if (getRelaxedOpcodeBranch(Inst) != Inst.getOpcode())
     return true;
@@ -196,14 +204,15 @@ void M680x0AsmBackend::relaxInstruction(const MCInst &Inst,
   Res.setOpcode(RelaxedOp);
 }
 
-bool M680x0AsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
-  // Cannot emit NOP with size not multiple of 16 bits.
+bool M680x0AsmBackend::writeNopData(raw_ostream &OS, uint64_t Count) const {
+  // Cannot emit NOP with size being not multiple of 16 bits.
   if (Count % 2 != 0)
     return false;
 
   uint64_t NumNops = Count / 2;
-  for (uint64_t i = 0; i != NumNops; ++i)
-    OW->write16(0x4E71);
+  for (uint64_t i = 0; i != NumNops; ++i) {
+    OS << "\x4E\x71";
+  }
 
   return true;
 }
@@ -213,23 +222,23 @@ namespace {
 class M680x0ELFAsmBackend : public M680x0AsmBackend {
 public:
   uint8_t OSABI;
-  M680x0ELFAsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
-      : M680x0AsmBackend(T, CPU), OSABI(OSABI) {}
+  M680x0ELFAsmBackend(const Target &T, uint8_t OSABI)
+      : M680x0AsmBackend(T), OSABI(OSABI) {}
 
-  std::unique_ptr<MCObjectWriter>
-  createObjectWriter(raw_pwrite_stream &OS) const override {
-    return createM680x0ELFObjectWriter(OS, OSABI);
+  std::unique_ptr<MCObjectTargetWriter>
+  createObjectTargetWriter() const override {
+    return createM680x0ELFObjectWriter(OSABI);
   }
 };
 
 } // end anonymous namespace
 
 MCAsmBackend *llvm::createM680x0AsmBackend(const Target &T,
+                                           const MCSubtargetInfo &STI,
                                            const MCRegisterInfo &MRI,
-                                           const Triple &TheTriple,
-                                           StringRef CPU,
                                            const MCTargetOptions &Options) {
   // assert (TheTriple.getEnvironment() == Triple::GNU);
+  const Triple &TheTriple = STI.getTargetTriple();
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
-  return new M680x0ELFAsmBackend(T, OSABI, CPU);
+  return new M680x0ELFAsmBackend(T, OSABI);
 }

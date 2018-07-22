@@ -33,6 +33,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "m680x0-isel"
@@ -657,10 +658,10 @@ void M680x0DAGToDAGISel::Select(SDNode *Node) {
   unsigned Opcode = Node->getOpcode();
   SDLoc DL(Node);
 
-  DEBUG(dbgs() << "Selecting: "; Node->dump(CurDAG); dbgs() << '\n');
+  LLVM_DEBUG(dbgs() << "Selecting: "; Node->dump(CurDAG); dbgs() << '\n');
 
   if (Node->isMachineOpcode()) {
-    DEBUG(dbgs() << "== "; Node->dump(CurDAG); dbgs() << '\n');
+    LLVM_DEBUG(dbgs() << "== "; Node->dump(CurDAG); dbgs() << '\n');
     Node->setNodeId(-1);
     return; // Already selected.
   }
@@ -678,62 +679,62 @@ void M680x0DAGToDAGISel::Select(SDNode *Node) {
 }
 
 bool M680x0DAGToDAGISel::SelectARIPI(SDNode *Parent, SDValue N, SDValue &Base) {
-  DEBUG(dbgs() << "Selecting ARIPI: ");
-  DEBUG(dbgs() << "NOT IMPLEMENTED\n");
+  LLVM_DEBUG(dbgs() << "Selecting ARIPI: ");
+  LLVM_DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
 bool M680x0DAGToDAGISel::SelectARIPD(SDNode *Parent, SDValue N, SDValue &Base) {
-  DEBUG(dbgs() << "Selecting ARIPD: ");
-  DEBUG(dbgs() << "NOT IMPLEMENTED\n");
+  LLVM_DEBUG(dbgs() << "Selecting ARIPD: ");
+  LLVM_DEBUG(dbgs() << "NOT IMPLEMENTED\n");
   return false;
 }
 
 bool M680x0DAGToDAGISel::SelectARID(SDNode *Parent, SDValue N, SDValue &Disp,
                                     SDValue &Base) {
-  DEBUG(dbgs() << "Selecting ARID: ");
+  LLVM_DEBUG(dbgs() << "Selecting ARID: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARID);
 
   if (!matchAddress(N, AM))
     return false;
 
   if (AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
     return false;
   }
 
   // If this is a frame index, grab it
   if (getFrameIndexAddress(AM, SDLoc(N), Disp, Base)) {
-    DEBUG(dbgs() << "SUCCESS matched FI\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS matched FI\n");
     return true;
   }
 
   if (AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match Index\n");
     return false;
   }
 
   if (!AM.hasBaseReg()) {
-    DEBUG(dbgs() << "REJECT: No Base reg\n");
+    LLVM_DEBUG(dbgs() << "REJECT: No Base reg\n");
     return false;
   }
 
   if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
     assert(!AM.Disp && "Should not be any displacement");
-    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
 
   // Give a chance to ARI
   if (AM.Disp == 0) {
-    DEBUG(dbgs() << "REJECT: No displacement\n");
+    LLVM_DEBUG(dbgs() << "REJECT: No displacement\n");
     return false;
   }
 
   Base = AM.BaseReg;
   Disp = getI16Imm(AM.Disp, SDLoc(N));
 
-  DEBUG(dbgs() << "SUCCESS\n");
+  LLVM_DEBUG(dbgs() << "SUCCESS\n");
   return true;
 }
 
@@ -758,23 +759,23 @@ static bool isAddressBase(const SDValue &N) {
 bool M680x0DAGToDAGISel::SelectARII(SDNode *Parent, SDValue N, SDValue &Disp,
                                     SDValue &Base, SDValue &Index) {
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARII);
-  DEBUG(dbgs() << "Selecting ARII: ");
+  LLVM_DEBUG(dbgs() << "Selecting ARII: ");
 
   if (!matchAddress(N, AM))
     return false;
 
   if (AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: PC relative\n");
+    LLVM_DEBUG(dbgs() << "REJECT: PC relative\n");
     return false;
   }
 
   if (!AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: No Index\n");
+    LLVM_DEBUG(dbgs() << "REJECT: No Index\n");
     return false;
   }
 
   if (!AM.hasBaseReg()) {
-    DEBUG(dbgs() << "REJECT: No Base\n");
+    LLVM_DEBUG(dbgs() << "REJECT: No Base\n");
     return false;
   }
 
@@ -787,7 +788,7 @@ bool M680x0DAGToDAGISel::SelectARII(SDNode *Parent, SDValue N, SDValue &Disp,
   }
 
   if (AM.hasSymbolicDisplacement()) {
-    DEBUG(dbgs() << "REJECT, Cannot match symbolic displacement\n");
+    LLVM_DEBUG(dbgs() << "REJECT, Cannot match symbolic displacement\n");
     return false;
   }
 
@@ -796,99 +797,99 @@ bool M680x0DAGToDAGISel::SelectARII(SDNode *Parent, SDValue N, SDValue &Disp,
   // addition
   if (AM.Disp == 0 && (!Parent || (Parent->getOpcode() != ISD::LOAD &&
                                    Parent->getOpcode() != ISD::STORE))) {
-    DEBUG(dbgs() << "REJECT: Displacement is Zero\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Displacement is Zero\n");
     return false;
   }
 
   Disp = getI8Imm(AM.Disp, SDLoc(N));
 
-  DEBUG(dbgs() << "SUCCESS\n");
+  LLVM_DEBUG(dbgs() << "SUCCESS\n");
   return true;
 }
 
 bool M680x0DAGToDAGISel::SelectAL(SDNode *Parent, SDValue N, SDValue &Sym) {
-  DEBUG(dbgs() << "Selecting AL: ");
+  LLVM_DEBUG(dbgs() << "Selecting AL: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::AL);
 
   if (!matchAddress(N, AM)) {
-    DEBUG(dbgs() << "REJECT: Match failed\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Match failed\n");
     return false;
   }
 
   if (AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
     return false;
   }
 
   if (AM.hasBase()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Base\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match Base\n");
     return false;
   }
 
   if (AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match Index\n");
     return false;
   }
 
   if (getSymbolicDisplacement(AM, SDLoc(N), Sym)) {
-    DEBUG(dbgs() << "SUCCESS: Matched symbol\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS: Matched symbol\n");
     return true;
   }
 
   if (AM.Disp) {
     Sym = getI32Imm(AM.Disp, SDLoc(N));
-    DEBUG(dbgs() << "SUCCESS\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS\n");
     return true;
   }
 
-  DEBUG(dbgs() << "REJECT: Not Symbol or Disp\n");
+  LLVM_DEBUG(dbgs() << "REJECT: Not Symbol or Disp\n");
   return false;
   ;
 }
 
 bool M680x0DAGToDAGISel::SelectPCD(SDNode *Parent, SDValue N, SDValue &Disp) {
-  DEBUG(dbgs() << "Selecting PCD: ");
+  LLVM_DEBUG(dbgs() << "Selecting PCD: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::PCD);
 
   if (!matchAddress(N, AM))
     return false;
 
   if (!AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: Not PC relative\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Not PC relative\n");
     return false;
   }
 
   if (AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Index\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match Index\n");
     return false;
   }
 
   if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
-    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
 
   Disp = getI16Imm(AM.Disp, SDLoc(N));
 
-  DEBUG(dbgs() << "SUCCESS\n");
+  LLVM_DEBUG(dbgs() << "SUCCESS\n");
   return true;
 }
 
 bool M680x0DAGToDAGISel::SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp,
                                    SDValue &Index) {
-  DEBUG(dbgs() << "Selecting PCI: ");
+  LLVM_DEBUG(dbgs() << "Selecting PCI: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::PCI);
 
   if (!matchAddress(N, AM))
     return false;
 
   if (!AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: Not PC relative\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Not PC relative\n");
     return false;
   }
 
   if (!AM.hasIndexReg()) {
-    DEBUG(dbgs() << "REJECT: No Index\n");
+    LLVM_DEBUG(dbgs() << "REJECT: No Index\n");
     return false;
   }
 
@@ -896,45 +897,45 @@ bool M680x0DAGToDAGISel::SelectPCI(SDNode *Parent, SDValue N, SDValue &Disp,
 
   if (getSymbolicDisplacement(AM, SDLoc(N), Disp)) {
     assert(!AM.Disp && "Should not be any displacement");
-    DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS, matched Symbol\n");
     return true;
   }
 
   Disp = getI8Imm(AM.Disp, SDLoc(N));
 
-  DEBUG(dbgs() << "SUCCESS\n");
+  LLVM_DEBUG(dbgs() << "SUCCESS\n");
   return true;
 }
 
 bool M680x0DAGToDAGISel::SelectARI(SDNode *Parent, SDValue N, SDValue &Base) {
-  DEBUG(dbgs() << "Selecting ARI: ");
+  LLVM_DEBUG(dbgs() << "Selecting ARI: ");
   M680x0ISelAddressMode AM(M680x0ISelAddressMode::ARI);
 
   if (!matchAddress(N, AM)) {
-    DEBUG(dbgs() << "REJECT: Match failed\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Match failed\n");
     return false;
   }
 
   if (AM.isPCRelative()) {
-    DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match PC relative address\n");
     return false;
   }
 
   // ARI does not use these
   if (AM.hasIndexReg() || AM.Disp != 0) {
-    DEBUG(dbgs() << "REJECT: Cannot match Index or Disp\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match Index or Disp\n");
     return false;
   }
 
   // Must be matched by AL
   if (AM.hasSymbolicDisplacement()) {
-    DEBUG(dbgs() << "REJECT: Cannot match Symbolic Disp\n");
+    LLVM_DEBUG(dbgs() << "REJECT: Cannot match Symbolic Disp\n");
     return false;
   }
 
   if (AM.hasBaseReg()) {
     Base = AM.BaseReg;
-    DEBUG(dbgs() << "SUCCESS\n");
+    LLVM_DEBUG(dbgs() << "SUCCESS\n");
     return true;
   }
 

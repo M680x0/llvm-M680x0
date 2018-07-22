@@ -38,7 +38,7 @@
 name: MxCMP_BI
 body: |
   bb.0:
-    CMP8bi   0, -1, implicit-def %ccr
-    CMP8bi  -1,  0, implicit-def %ccr
-    CMP32bi -1,  0, implicit-def %ccr
-    CMP32bi 42, -1, implicit-def %ccr
+    CMP8bi   0, -1, implicit-def $ccr
+    CMP8bi  -1,  0, implicit-def $ccr
+    CMP32bi -1,  0, implicit-def $ccr
+    CMP32bi 42, -1, implicit-def $ccr

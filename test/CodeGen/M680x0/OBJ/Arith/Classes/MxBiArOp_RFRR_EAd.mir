@@ -20,7 +20,7 @@
 name: MxBiArOp_RFRR_EAd
 body: |
   bb.0:
-    %wd0 = XOR16dd %wd0, %wd1, implicit-def %ccr
-    %wd3 = XOR16dd %wd3, %wd2, implicit-def %ccr
-    %d0  = XOR32dd  %d0,  %d1, implicit-def %ccr
-    %d7  = XOR32dd  %d7,  %d1, implicit-def %ccr
+    $wd0 = XOR16dd $wd0, $wd1, implicit-def $ccr
+    $wd3 = XOR16dd $wd3, $wd2, implicit-def $ccr
+    $d0  = XOR32dd  $d0,  $d1, implicit-def $ccr
+    $d7  = XOR32dd  $d7,  $d1, implicit-def $ccr

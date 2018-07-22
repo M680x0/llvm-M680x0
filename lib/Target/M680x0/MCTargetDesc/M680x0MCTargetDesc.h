@@ -35,8 +35,9 @@ class raw_pwrite_stream;
 
 extern Target TheM680x0Target;
 
-MCAsmBackend *createM680x0AsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                                     const Triple &TT, StringRef CPU,
+MCAsmBackend *createM680x0AsmBackend(const Target &T,
+                                     const MCSubtargetInfo &STI,
+                                     const MCRegisterInfo &MRI,
                                      const MCTargetOptions &Options);
 
 MCCodeEmitter *createM680x0MCCodeEmitter(const MCInstrInfo &MCII,
@@ -44,8 +45,8 @@ MCCodeEmitter *createM680x0MCCodeEmitter(const MCInstrInfo &MCII,
                                          MCContext &Ctx);
 
 /// Construct an M680x0 ELF object writer.
-std::unique_ptr<MCObjectWriter>
-createM680x0ELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
+std::unique_ptr<MCObjectTargetWriter>
+createM680x0ELFObjectWriter(uint8_t OSABI);
 
 } // namespace llvm
 

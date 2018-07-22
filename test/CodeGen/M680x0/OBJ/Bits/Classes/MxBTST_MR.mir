@@ -25,8 +25,8 @@
 name: MxBTST_MR_PCI
 body: |
   bb.0:
-    BTST8kd -1, %d1, %bd0, implicit-def %ccr
-    BTST8kd  0, %d0, %bd1, implicit-def %ccr
+    BTST8kd -1, $d1, $bd0, implicit-def $ccr
+    BTST8kd  0, $d0, $bd1, implicit-def $ccr
 
 ...
 --- # PCD
@@ -44,8 +44,8 @@ body: |
 name: MxBTST_MR_PCD
 body: |
   bb.0:
-    BTST8qd  0, %bd0, implicit-def %ccr
-    BTST8qd -1, %bd1, implicit-def %ccr
+    BTST8qd  0, $bd0, implicit-def $ccr
+    BTST8qd -1, $bd1, implicit-def $ccr
 
 ...
 --- # ARII
@@ -65,8 +65,8 @@ body: |
 name: MxBTST_MR_ARII
 body: |
   bb.0:
-    BTST8fd -1, %a1, %a0, %bd0, implicit-def %ccr
-    BTST8fd  0, %a0, %a0, %bd1, implicit-def %ccr
+    BTST8fd -1, $a1, $a0, $bd0, implicit-def $ccr
+    BTST8fd  0, $a0, $a0, $bd1, implicit-def $ccr
 
 ...
 --- # ARID
@@ -83,8 +83,8 @@ body: |
 name: MxBTST_MR_ARID
 body: |
   bb.0:
-    BTST8pd -1, %a1, %bd0, implicit-def %ccr
-    BTST8pd  0, %a0, %bd1, implicit-def %ccr
+    BTST8pd -1, $a1, $bd0, implicit-def $ccr
+    BTST8pd  0, $a0, $bd1, implicit-def $ccr
 
 ...
 --- # ARI
@@ -98,7 +98,7 @@ body: |
 name: MxBTST_MR_ARI
 body: |
   bb.0:
-    BTST8jd  %a1, %bd0, implicit-def %ccr
-    BTST8jd  %a0, %bd1, implicit-def %ccr
+    BTST8jd  $a1, $bd0, implicit-def $ccr
+    BTST8jd  $a0, $bd1, implicit-def $ccr
 
 ...

@@ -87,9 +87,9 @@ unsigned M680x0MCCodeEmitter::EncodeBits(unsigned ThisByte, uint8_t Bead,
   }
   unsigned char Val = (Bead & 0xF0) >> 4;
 
-  DEBUG(dbgs() << "\tEncodeBits"
+  LLVM_DEBUG(dbgs() << "\tEncodeBits"
                << " Num: " << Num << " Val: 0x");
-  DEBUG(dbgs().write_hex(Val) << "\n");
+  LLVM_DEBUG(dbgs().write_hex(Val) << "\n");
 
   Buffer |= (Val << Offset);
 
@@ -120,7 +120,7 @@ unsigned M680x0MCCodeEmitter::EncodeReg(unsigned ThisByte, uint8_t Bead,
 
   unsigned Op = (Bead & 0x70) >> 4;
   bool Alt = (Bead & 0x80);
-  DEBUG(dbgs() << "\tEncodeReg"
+  LLVM_DEBUG(dbgs() << "\tEncodeReg"
                << " Op: " << Op << ", DA: " << DA << ", Reg: " << Reg
                << ", Alt: " << Alt << "\n");
 
@@ -247,7 +247,7 @@ unsigned M680x0MCCodeEmitter::EncodeImm(unsigned ThisByte, uint8_t Bead,
     break;
   }
 
-  DEBUG(dbgs() << "\tEncodeImm"
+  LLVM_DEBUG(dbgs() << "\tEncodeImm"
                << " Op: " << Op << ", Size: " << Size << ", Alt: " << Alt
                << "\n");
 
@@ -334,7 +334,7 @@ void M680x0MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   const MCInstrDesc &Desc = MCII.get(Opcode);
   // uint64_t TSFlags = Desc.TSFlags;
 
-  DEBUG(dbgs() << "EncodeInstruction: " << MCII.getName(Opcode) << "(" << Opcode
+  LLVM_DEBUG(dbgs() << "EncodeInstruction: " << MCII.getName(Opcode) << "(" << Opcode
                << ")\n");
 
   const uint8_t *Beads = getGenInstrBeads(MI);

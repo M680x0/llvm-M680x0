@@ -25,8 +25,8 @@
 name: MxMOVEM_MR_ARID
 body: |
   bb.0:
-    MOVM32pm  0, %a1, 1
-    MOVM32pm -1, %a1, 3
+    MOVM32pm  0, $a1, 1
+    MOVM32pm -1, $a1, 3
 
 ...
 --- # ARI
@@ -46,7 +46,7 @@ body: |
 name: MxMOVEM_MR_ARI
 body: |
   bb.0:
-    MOVM32jm %a1, 1
-    MOVM32jm %a1, 3
+    MOVM32jm $a1, 1
+    MOVM32jm $a1, 3
 
 ...

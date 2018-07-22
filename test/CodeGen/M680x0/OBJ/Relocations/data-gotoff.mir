@@ -22,8 +22,8 @@
 name: DATA
 body: |
   bb.0:
-    %a5 = LEA32q target-flags(M680x0-gotpcrel) $_GLOBAL_OFFSET_TABLE_
-    %d0 = MOV32rf target-flags(M680x0-gotoff) @dst, %a5, %d0, implicit-def %ccr
-    %d0 = MOV32rp target-flags(M680x0-gotoff) @dst, %a5,      implicit-def %ccr
+    $a5 = LEA32q target-flags(M680x0-gotpcrel) &_GLOBAL_OFFSET_TABLE_
+    $d0 = MOV32rf target-flags(M680x0-gotoff) @dst, $a5, $d0, implicit-def $ccr
+    $d0 = MOV32rp target-flags(M680x0-gotoff) @dst, $a5,      implicit-def $ccr
 
 ...
