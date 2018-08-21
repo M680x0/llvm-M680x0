@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HexagonAsmPrinter.h"
 #include "HexagonInstPrinter.h"
+#include "HexagonAsmPrinter.h"
 #include "MCTargetDesc/HexagonBaseInfo.h"
 #include "MCTargetDesc/HexagonMCInstrInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -69,19 +69,12 @@ void HexagonInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
     OS << "\n";
   }
 
-  auto Separator = "";
-  if (HexagonMCInstrInfo::isInnerLoop(*MI)) {
-    OS << Separator;
-    Separator = " ";
-    MCInst ME;
-    ME.setOpcode(Hexagon::ENDLOOP0);
-    printInstruction(&ME, OS);
-  }
-  if (HexagonMCInstrInfo::isOuterLoop(*MI)) {
-    OS << Separator;
-    MCInst ME;
-    ME.setOpcode(Hexagon::ENDLOOP1);
-    printInstruction(&ME, OS);
+  bool IsLoop0 = HexagonMCInstrInfo::isInnerLoop(*MI);
+  bool IsLoop1 = HexagonMCInstrInfo::isOuterLoop(*MI);
+  if (IsLoop0) {
+    OS << (IsLoop1 ? " :endloop01" : " :endloop0");
+  } else if (IsLoop1) {
+    OS << " :endloop1";
   }
 }
 
@@ -123,46 +116,6 @@ void HexagonInstPrinter::printNegImmOperand(MCInst const *MI, unsigned OpNo,
 void HexagonInstPrinter::printNOneImmOperand(MCInst const *MI, unsigned OpNo,
                                              raw_ostream &O) const {
   O << -1;
-}
-
-void HexagonInstPrinter::prints3_6ImmOperand(MCInst const *MI, unsigned OpNo,
-                                             raw_ostream &O) const {
-  int64_t Imm;
-  bool Success = MI->getOperand(OpNo).getExpr()->evaluateAsAbsolute(Imm);
-  Imm = SignExtend64<9>(Imm);
-  assert(Success); (void)Success;
-  assert(((Imm & 0x3f) == 0) && "Lower 6 bits must be ZERO.");
-  O << formatImm(Imm/64);
-}
-
-void HexagonInstPrinter::prints3_7ImmOperand(MCInst const *MI, unsigned OpNo,
-                                             raw_ostream &O) const {
-  int64_t Imm;
-  bool Success = MI->getOperand(OpNo).getExpr()->evaluateAsAbsolute(Imm);
-  Imm = SignExtend64<10>(Imm);
-  assert(Success); (void)Success;
-  assert(((Imm & 0x7f) == 0) && "Lower 7 bits must be ZERO.");
-  O << formatImm(Imm/128);
-}
-
-void HexagonInstPrinter::prints4_6ImmOperand(MCInst const *MI, unsigned OpNo,
-                                             raw_ostream &O) const {
-  int64_t Imm;
-  bool Success = MI->getOperand(OpNo).getExpr()->evaluateAsAbsolute(Imm);
-  Imm = SignExtend64<10>(Imm);
-  assert(Success); (void)Success;
-  assert(((Imm & 0x3f) == 0) && "Lower 6 bits must be ZERO.");
-  O << formatImm(Imm/64);
-}
-
-void HexagonInstPrinter::prints4_7ImmOperand(MCInst const *MI, unsigned OpNo,
-                                             raw_ostream &O) const {
-  int64_t Imm;
-  bool Success = MI->getOperand(OpNo).getExpr()->evaluateAsAbsolute(Imm);
-  Imm = SignExtend64<11>(Imm);
-  assert(Success); (void)Success;
-  assert(((Imm & 0x7f) == 0) && "Lower 7 bits must be ZERO.");
-  O << formatImm(Imm/128);
 }
 
 void HexagonInstPrinter::printGlobalOperand(MCInst const *MI, unsigned OpNo,

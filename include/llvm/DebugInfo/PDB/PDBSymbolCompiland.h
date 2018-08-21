@@ -29,11 +29,12 @@ public:
   void dump(PDBSymDumper &Dumper) const override;
 
   FORWARD_SYMBOL_METHOD(isEditAndContinueEnabled)
-  FORWARD_SYMBOL_METHOD(getLexicalParentId)
+  FORWARD_SYMBOL_ID_METHOD(getLexicalParent)
   FORWARD_SYMBOL_METHOD(getLibraryName)
   FORWARD_SYMBOL_METHOD(getName)
 
   std::string getSourceFileName() const;
+  std::string getSourceFileFullPath() const;
 };
 }
 }

@@ -12,21 +12,21 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
-
 #include "llvm/DebugInfo/MSF/MSFCommon.h"
-
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
-
+#include <cstdint>
 #include <utility>
 #include <vector>
 
 namespace llvm {
+class FileBufferByteStream;
+class WritableBinaryStream;
 namespace msf {
+
 class MSFBuilder {
 public:
-  /// \brief Create a new `MSFBuilder`.
+  /// Create a new `MSFBuilder`.
   ///
   /// \param BlockSize The internal block size used by the PDB file.  See
   /// isValidBlockSize() for a list of valid block sizes.
@@ -71,13 +71,13 @@ public:
   /// particular stream to occupy the original set of blocks.  If the given
   /// blocks are already allocated, or if the number of blocks specified is
   /// incorrect for the given stream size, this function will return an Error.
-  Error addStream(uint32_t Size, ArrayRef<uint32_t> Blocks);
+  Expected<uint32_t> addStream(uint32_t Size, ArrayRef<uint32_t> Blocks);
 
   /// Add a stream to the MSF file with the given size, occupying any available
   /// blocks that the builder decides to use.  This is useful when building a
   /// new PDB file from scratch and you don't care what blocks a stream occupies
   /// but you just want it to work.
-  Error addStream(uint32_t Size);
+  Expected<uint32_t> addStream(uint32_t Size);
 
   /// Update the size of an existing stream.  This will allocate or deallocate
   /// blocks as needed to match the requested size.  This can fail if `CanGrow`
@@ -111,7 +111,12 @@ public:
 
   /// Finalize the layout and build the headers and structures that describe the
   /// MSF layout and can be written directly to the MSF file.
-  Expected<MSFLayout> build();
+  Expected<MSFLayout> generateLayout();
+
+  /// Write the MSF layout to the underlying file.
+  Expected<FileBufferByteStream> commit(StringRef Path, MSFLayout &Layout);
+
+  BumpPtrAllocator &getAllocator() { return Allocator; }
 
 private:
   MSFBuilder(uint32_t BlockSize, uint32_t MinBlockCount, bool CanGrow,
@@ -120,21 +125,21 @@ private:
   Error allocateBlocks(uint32_t NumBlocks, MutableArrayRef<uint32_t> Blocks);
   uint32_t computeDirectoryByteSize() const;
 
-  typedef std::vector<uint32_t> BlockList;
+  using BlockList = std::vector<uint32_t>;
 
   BumpPtrAllocator &Allocator;
 
   bool IsGrowable;
   uint32_t FreePageMap;
-  uint32_t Unknown1;
+  uint32_t Unknown1 = 0;
   uint32_t BlockSize;
-  uint32_t MininumBlocks;
   uint32_t BlockMapAddr;
   BitVector FreeBlocks;
   std::vector<uint32_t> DirectoryBlocks;
   std::vector<std::pair<uint32_t, BlockList>> StreamData;
 };
-} // namespace msf
-} // namespace llvm
+
+} // end namespace msf
+} // end namespace llvm
 
 #endif // LLVM_DEBUGINFO_MSF_MSFBUILDER_H

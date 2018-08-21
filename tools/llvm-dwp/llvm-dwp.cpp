@@ -15,41 +15,44 @@
 #include "DWPStringPool.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringSet.h"
-#include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/DebugInfo/DWARF/DWARFUnitIndex.h"
+#include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.h"
+#include "llvm/MC/MCTargetOptionsCommandFlags.inc"
+#include "llvm/Object/Decompressor.h"
 #include "llvm/Object/ObjectFile.h"
-#include "llvm/Support/Compression.h"
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/Options.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
-#include <deque>
-#include <iostream>
-#include <memory>
 
 using namespace llvm;
 using namespace llvm::object;
 using namespace cl;
 
 OptionCategory DwpCategory("Specific Options");
-static list<std::string> InputFiles(Positional, OneOrMore,
+static list<std::string> InputFiles(Positional, ZeroOrMore,
                                     desc("<input files>"), cat(DwpCategory));
+
+static list<std::string> ExecFilenames(
+    "e", ZeroOrMore,
+    desc("Specify the executable/library files to get the list of *.dwo from"),
+    value_desc("filename"), cat(DwpCategory));
 
 static opt<std::string> OutputFilename(Required, "o",
                                        desc("Specify the output file."),
@@ -112,8 +115,8 @@ struct CompileUnitIdentifiers {
 };
 
 static Expected<const char *>
-getIndexedString(uint32_t Form, DataExtractor InfoData, uint32_t &InfoOffset,
-                 StringRef StrOffsets, StringRef Str) {
+getIndexedString(dwarf::Form Form, DataExtractor InfoData,
+                 uint32_t &InfoOffset, StringRef StrOffsets, StringRef Str) {
   if (Form == dwarf::DW_FORM_string)
     return InfoData.getCStr(&InfoOffset);
   if (Form != dwarf::DW_FORM_GNU_str_index)
@@ -133,7 +136,14 @@ static Expected<CompileUnitIdentifiers> getCUIdentifiers(StringRef Abbrev,
                                                          StringRef Str) {
   uint32_t Offset = 0;
   DataExtractor InfoData(Info, true, 0);
-  InfoData.getU32(&Offset); // Length
+  dwarf::DwarfFormat Format = dwarf::DwarfFormat::DWARF32;
+  uint64_t Length = InfoData.getU32(&Offset);
+  // If the length is 0xffffffff, then this indictes that this is a DWARF 64
+  // stream and the length is actually encoded into a 64 bit value that follows.
+  if (Length == 0xffffffffU) {
+    Format = dwarf::DwarfFormat::DWARF64;
+    Length = InfoData.getU64(&Offset);
+  }
   uint16_t Version = InfoData.getU16(&Offset);
   InfoData.getU32(&Offset); // Abbrev offset (should be zero)
   uint8_t AddrSize = InfoData.getU8(&Offset);
@@ -142,16 +152,16 @@ static Expected<CompileUnitIdentifiers> getCUIdentifiers(StringRef Abbrev,
 
   DataExtractor AbbrevData(Abbrev, true, 0);
   uint32_t AbbrevOffset = getCUAbbrev(Abbrev, AbbrCode);
-  uint64_t Tag = AbbrevData.getULEB128(&AbbrevOffset);
+  auto Tag = static_cast<dwarf::Tag>(AbbrevData.getULEB128(&AbbrevOffset));
   if (Tag != dwarf::DW_TAG_compile_unit)
     return make_error<DWPError>("top level DIE is not a compile unit");
   // DW_CHILDREN
   AbbrevData.getU8(&AbbrevOffset);
   uint32_t Name;
-  uint32_t Form;
+  dwarf::Form Form;
   CompileUnitIdentifiers ID;
   while ((Name = AbbrevData.getULEB128(&AbbrevOffset)) |
-             (Form = AbbrevData.getULEB128(&AbbrevOffset)) &&
+         (Form = static_cast<dwarf::Form>(AbbrevData.getULEB128(&AbbrevOffset))) &&
          (Name != 0 || Form != 0)) {
     switch (Name) {
     case dwarf::DW_AT_name: {
@@ -174,7 +184,8 @@ static Expected<CompileUnitIdentifiers> getCUIdentifiers(StringRef Abbrev,
       ID.Signature = InfoData.getU64(&Offset);
       break;
     default:
-      DWARFFormValue::skipValue(Form, InfoData, &Offset, Version, AddrSize);
+      DWARFFormValue::skipValue(Form, InfoData, &Offset,
+                                dwarf::FormParams({Version, AddrSize, Format}));
     }
   }
   return ID;
@@ -326,21 +337,6 @@ writeIndex(MCStreamer &Out, MCSection *Section,
   writeIndexTable(Out, ContributionOffsets, IndexEntries,
                   &DWARFUnitIndex::Entry::SectionContribution::Length);
 }
-static bool consumeCompressedDebugSectionHeader(StringRef &data,
-                                                uint64_t &OriginalSize) {
-  // Consume "ZLIB" prefix.
-  if (!data.startswith("ZLIB"))
-    return false;
-  data = data.substr(4);
-  // Consume uncompressed section size (big-endian 8 bytes).
-  DataExtractor extractor(data, false, 8);
-  uint32_t Offset = 0;
-  OriginalSize = extractor.getU64(&Offset);
-  if (Offset == 0)
-    return false;
-  data = data.substr(Offset);
-  return true;
-}
 
 std::string buildDWODescription(StringRef Name, StringRef DWPName, StringRef DWOName) {
   std::string Text = "\'";
@@ -360,24 +356,31 @@ std::string buildDWODescription(StringRef Name, StringRef DWPName, StringRef DWO
   return Text;
 }
 
-static Error handleCompressedSection(
-    std::deque<SmallString<32>> &UncompressedSections, StringRef &Name,
-    StringRef &Contents) {
-  if (!Name.startswith("zdebug_"))
-    return Error();
+static Error createError(StringRef Name, Error E) {
+  return make_error<DWPError>(
+      ("failure while decompressing compressed section: '" + Name + "', " +
+       llvm::toString(std::move(E)))
+          .str());
+}
+
+static Error
+handleCompressedSection(std::deque<SmallString<32>> &UncompressedSections,
+                        StringRef &Name, StringRef &Contents) {
+  if (!Decompressor::isGnuStyle(Name))
+    return Error::success();
+
+  Expected<Decompressor> Dec =
+      Decompressor::create(Name, Contents, false /*IsLE*/, false /*Is64Bit*/);
+  if (!Dec)
+    return createError(Name, Dec.takeError());
+
   UncompressedSections.emplace_back();
-  uint64_t OriginalSize;
-  if (!zlib::isAvailable())
-    return make_error<DWPError>("zlib not available");
-  if (!consumeCompressedDebugSectionHeader(Contents, OriginalSize) ||
-      zlib::uncompress(Contents, UncompressedSections.back(), OriginalSize) !=
-          zlib::StatusOK)
-    return make_error<DWPError>(
-        ("failure while decompressing compressed section: '" + Name + "\'")
-            .str());
-  Name = Name.substr(1);
+  if (Error E = Dec->resizeAndDecompress(UncompressedSections.back()))
+    return createError(Name, std::move(E));
+
+  Name = Name.substr(2); // Drop ".z"
   Contents = UncompressedSections.back();
-  return Error();
+  return Error::success();
 }
 
 static Error handleSection(
@@ -392,16 +395,14 @@ static Error handleSection(
     StringRef &AbbrevSection, StringRef &CurCUIndexSection,
     StringRef &CurTUIndexSection) {
   if (Section.isBSS())
-    return Error();
+    return Error::success();
 
   if (Section.isVirtual())
-    return Error();
+    return Error::success();
 
   StringRef Name;
   if (std::error_code Err = Section.getName(Name))
     return errorCodeToError(Err);
-
-  Name = Name.substr(Name.find_first_not_of("._"));
 
   StringRef Contents;
   if (auto Err = Section.getContents(Contents))
@@ -410,9 +411,11 @@ static Error handleSection(
   if (auto Err = handleCompressedSection(UncompressedSections, Name, Contents))
     return Err;
 
+  Name = Name.substr(Name.find_first_not_of("._"));
+
   auto SectionPair = KnownSections.find(Name);
   if (SectionPair == KnownSections.end())
-    return Error();
+    return Error::success();
 
   if (DWARFSectionKind Kind = SectionPair->second.second) {
     auto Index = Kind - DW_SECT_INFO;
@@ -449,7 +452,7 @@ static Error handleSection(
     Out.SwitchSection(OutSection);
     Out.EmitBytes(Contents);
   }
-  return Error();
+  return Error::success();
 }
 
 static Error
@@ -460,6 +463,35 @@ buildDuplicateError(const std::pair<uint64_t, UnitIndexEntry> &PrevE,
       buildDWODescription(PrevE.second.Name, PrevE.second.DWPName,
                           PrevE.second.DWOName) +
       " and " + buildDWODescription(ID.Name, DWPName, ID.DWOName));
+}
+
+static Expected<SmallVector<std::string, 16>>
+getDWOFilenames(StringRef ExecFilename) {
+  auto ErrOrObj = object::ObjectFile::createObjectFile(ExecFilename);
+  if (!ErrOrObj)
+    return ErrOrObj.takeError();
+
+  const ObjectFile &Obj = *ErrOrObj.get().getBinary();
+  std::unique_ptr<DWARFContext> DWARFCtx = DWARFContext::create(Obj);
+
+  SmallVector<std::string, 16> DWOPaths;
+  for (const auto &CU : DWARFCtx->compile_units()) {
+    const DWARFDie &Die = CU->getUnitDIE();
+    std::string DWOName = dwarf::toString(
+        Die.find({dwarf::DW_AT_dwo_name, dwarf::DW_AT_GNU_dwo_name}), "");
+    if (DWOName.empty())
+      continue;
+    std::string DWOCompDir =
+        dwarf::toString(Die.find(dwarf::DW_AT_comp_dir), "");
+    if (!DWOCompDir.empty()) {
+      SmallString<16> DWOPath;
+      sys::path::append(DWOPath, DWOCompDir, DWOName);
+      DWOPaths.emplace_back(DWOPath.data(), DWOPath.size());
+    } else {
+      DWOPaths.push_back(std::move(DWOName));
+    }
+  }
+  return std::move(DWOPaths);
 }
 
 static Error write(MCStreamer &Out, ArrayRef<std::string> Inputs) {
@@ -600,7 +632,7 @@ static Error write(MCStreamer &Out, ArrayRef<std::string> Inputs) {
   writeIndex(Out, MCOFI.getDwarfCUIndexSection(), ContributionOffsets,
              IndexEntries);
 
-  return Error();
+  return Error::success();
 }
 
 static int error(const Twine &Error, const Twine &Context) {
@@ -610,6 +642,7 @@ static int error(const Twine &Error, const Twine &Context) {
 }
 
 int main(int argc, char **argv) {
+  InitLLVM X(argc, argv);
 
   ParseCommandLineOptions(argc, argv, "merge split dwarf (.dwo) files");
 
@@ -641,21 +674,21 @@ int main(int argc, char **argv) {
 
   MCObjectFileInfo MOFI;
   MCContext MC(MAI.get(), MRI.get(), &MOFI);
-  MOFI.InitMCObjectFileInfo(TheTriple, /*PIC*/ false, CodeModel::Default, MC);
+  MOFI.InitMCObjectFileInfo(TheTriple, /*PIC*/ false, MC);
+
+  std::unique_ptr<MCSubtargetInfo> MSTI(
+      TheTarget->createMCSubtargetInfo(TripleName, "", ""));
+  if (!MSTI)
+    return error("no subtarget info for target " + TripleName, Context);
 
   MCTargetOptions Options;
-  auto MAB = TheTarget->createMCAsmBackend(*MRI, TripleName, "", Options);
+  auto MAB = TheTarget->createMCAsmBackend(*MSTI, *MRI, Options);
   if (!MAB)
     return error("no asm backend for target " + TripleName, Context);
 
   std::unique_ptr<MCInstrInfo> MII(TheTarget->createMCInstrInfo());
   if (!MII)
     return error("no instr info info for target " + TripleName, Context);
-
-  std::unique_ptr<MCSubtargetInfo> MSTI(
-      TheTarget->createMCSubtargetInfo(TripleName, "", ""));
-  if (!MSTI)
-    return error("no subtarget info for target " + TripleName, Context);
 
   MCCodeEmitter *MCE = TheTarget->createMCCodeEmitter(*MII, *MRI, MC);
   if (!MCE)
@@ -669,13 +702,26 @@ int main(int argc, char **argv) {
 
   MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
   std::unique_ptr<MCStreamer> MS(TheTarget->createMCObjectStreamer(
-      TheTriple, MC, *MAB, OutFile, MCE, *MSTI, MCOptions.MCRelaxAll,
-      MCOptions.MCIncrementalLinkerCompatible,
+      TheTriple, MC, std::unique_ptr<MCAsmBackend>(MAB),
+      MAB->createObjectWriter(OutFile), std::unique_ptr<MCCodeEmitter>(MCE),
+      *MSTI, MCOptions.MCRelaxAll, MCOptions.MCIncrementalLinkerCompatible,
       /*DWARFMustBeAtTheEnd*/ false));
   if (!MS)
     return error("no object streamer for target " + TripleName, Context);
 
-  if (auto Err = write(*MS, InputFiles)) {
+  std::vector<std::string> DWOFilenames = InputFiles;
+  for (const auto &ExecFilename : ExecFilenames) {
+    auto DWOs = getDWOFilenames(ExecFilename);
+    if (!DWOs) {
+      logAllUnhandledErrors(DWOs.takeError(), errs(), "error: ");
+      return 1;
+    }
+    DWOFilenames.insert(DWOFilenames.end(),
+                        std::make_move_iterator(DWOs->begin()),
+                        std::make_move_iterator(DWOs->end()));
+  }
+
+  if (auto Err = write(*MS, DWOFilenames)) {
     logAllUnhandledErrors(std::move(Err), errs(), "error: ");
     return 1;
   }

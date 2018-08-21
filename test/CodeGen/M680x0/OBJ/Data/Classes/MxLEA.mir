@@ -20,8 +20,8 @@
 name: MxLEA_PCD
 body: |
   bb.0:
-     %a0 = LEA32q  0, implicit-def %ccr
-     %a0 = LEA32q -1, implicit-def %ccr
+     $a0 = LEA32q  0, implicit-def $ccr
+     $a0 = LEA32q -1, implicit-def $ccr
 
 ...
 --- # ARII
@@ -41,8 +41,8 @@ body: |
 name: MxLEA_ARII
 body: |
   bb.0:
-     %a0 = LEA32f 0,  %a1, %d1, implicit-def %ccr
-     %a1 = LEA32f 0,  %a2, %a2, implicit-def %ccr
+     $a0 = LEA32f 0,  $a1, $d1, implicit-def $ccr
+     $a1 = LEA32f 0,  $a2, $a2, implicit-def $ccr
 
 ...
 --- # ARID
@@ -59,7 +59,7 @@ body: |
 name: MxLEA_ARID
 body: |
   bb.0:
-     %a0 = LEA32p -1, %a1, implicit-def %ccr
-     %a0 = LEA32p -1, %a1, implicit-def %ccr
+     $a0 = LEA32p -1, $a1, implicit-def $ccr
+     $a0 = LEA32p -1, $a1, implicit-def $ccr
 
 ...

@@ -21,16 +21,13 @@ using namespace llvm;
 
 static const ManagedStaticBase *StaticList = nullptr;
 static sys::Mutex *ManagedStaticMutex = nullptr;
-LLVM_DEFINE_ONCE_FLAG(mutex_init_flag);
+static llvm::once_flag mutex_init_flag;
 
 static void initializeMutex() {
   ManagedStaticMutex = new sys::Mutex();
 }
 
 static sys::Mutex* getManagedStaticMutex() {
-  // We need to use a function local static here, since this can get called
-  // during a static constructor and we need to guarantee that it's initialized
-  // correctly.
   llvm::call_once(mutex_init_flag, initializeMutex);
   return ManagedStaticMutex;
 }

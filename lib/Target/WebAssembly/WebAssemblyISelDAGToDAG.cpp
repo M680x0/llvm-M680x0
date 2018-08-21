@@ -8,16 +8,17 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file defines an instruction selector for the WebAssembly target.
+/// This file defines an instruction selector for the WebAssembly target.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssembly.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "WebAssembly.h"
 #include "WebAssemblyTargetMachine.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/IR/Function.h" // To access function attributes.
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/KnownBits.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -42,14 +43,13 @@ public:
       : SelectionDAGISel(tm, OptLevel), Subtarget(nullptr), ForCodeSize(false) {
   }
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "WebAssembly Instruction Selection";
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-    ForCodeSize =
-        MF.getFunction()->hasFnAttribute(Attribute::OptimizeForSize) ||
-        MF.getFunction()->hasFnAttribute(Attribute::MinSize);
+    ForCodeSize = MF.getFunction().hasFnAttribute(Attribute::OptimizeForSize) ||
+                  MF.getFunction().hasFnAttribute(Attribute::MinSize);
     Subtarget = &MF.getSubtarget<WebAssemblySubtarget>();
     return SelectionDAGISel::runOnMachineFunction(MF);
   }
@@ -68,27 +68,21 @@ private:
 } // end anonymous namespace
 
 void WebAssemblyDAGToDAGISel::Select(SDNode *Node) {
-  // Dump information about the Node being selected.
-  DEBUG(errs() << "Selecting: ");
-  DEBUG(Node->dump(CurDAG));
-  DEBUG(errs() << "\n");
-
   // If we have a custom node, we already have selected!
   if (Node->isMachineOpcode()) {
-    DEBUG(errs() << "== "; Node->dump(CurDAG); errs() << "\n");
+    LLVM_DEBUG(errs() << "== "; Node->dump(CurDAG); errs() << "\n");
     Node->setNodeId(-1);
     return;
   }
 
-  // Few custom selection stuff.
-  EVT VT = Node->getValueType(0);
-
+  // Few custom selection stuff. If we need WebAssembly-specific selection,
+  // uncomment this block add corresponding case statements.
+  /*
   switch (Node->getOpcode()) {
   default:
     break;
-    // If we need WebAssembly-specific selection, it would go here.
-    (void)VT;
   }
+  */
 
   // Select the default instruction.
   SelectCode(Node);

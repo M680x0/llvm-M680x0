@@ -57,11 +57,7 @@ entry:
   store i64 %arg2, i64* %arg2_var
   store i64 %arg3, i64* %arg3_var
 
-  ; CHECK:      movq  40(%rsp), %r15
-  ; CHECK-NEXT: movq  32(%rsp), %rbp
-  ; CHECK-NEXT: movq  24(%rsp), %rsi
-  ; CHECK-NEXT: movq  16(%rsp), %rdx
-  ; CHECK-NEXT: movq  8(%rsp), %rcx
+  ; Loads are reading values just writen from corresponding register and are therefore noops. 
   %0 = load i64, i64* %hp_var
   %1 = load i64, i64* %p_var
   %2 = load i64, i64* %arg0_var
@@ -91,6 +87,7 @@ define cc 11 { i64, i64, i64 } @tailcaller(i64 %hp, i64 %p) #0 {
   ; CHECK-NEXT: movl	$47, %ecx
   ; CHECK-NEXT: movl	$63, %r8d
   ; CHECK-NEXT: popq	%rax
+  ; CHECK-NEXT: .cfi_def_cfa_offset 16
   ; CHECK-NEXT: jmp	tailcallee
   %ret = tail call cc11 { i64, i64, i64 } @tailcallee(i64 %hp, i64 %p, i64 15,
      i64 31, i64 47, i64 63, i64 79) #1

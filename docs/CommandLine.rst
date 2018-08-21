@@ -355,8 +355,7 @@ library fill it in with the appropriate level directly, which is used like this:
       clEnumVal(g , "No optimizations, enable debugging"),
       clEnumVal(O1, "Enable trivial optimizations"),
       clEnumVal(O2, "Enable default optimizations"),
-      clEnumVal(O3, "Enable expensive optimizations"),
-     clEnumValEnd));
+      clEnumVal(O3, "Enable expensive optimizations")));
 
   ...
     if (OptimizationLevel >= O2) doPartialRedundancyElimination(...);
@@ -364,8 +363,7 @@ library fill it in with the appropriate level directly, which is used like this:
 
 This declaration defines a variable "``OptimizationLevel``" of the
 "``OptLevel``" enum type.  This variable can be assigned any of the values that
-are listed in the declaration (Note that the declaration list must be terminated
-with the "``clEnumValEnd``" argument!).  The CommandLine library enforces that
+are listed in the declaration.  The CommandLine library enforces that
 the user can only specify one of the options, and it ensure that only valid enum
 values can be specified.  The "``clEnumVal``" macros ensure that the command
 line arguments matched the enum values.  With this option added, our help output
@@ -401,8 +399,7 @@ program.  Because of this, we can alternatively write this example like this:
      clEnumValN(Debug, "g", "No optimizations, enable debugging"),
       clEnumVal(O1        , "Enable trivial optimizations"),
       clEnumVal(O2        , "Enable default optimizations"),
-      clEnumVal(O3        , "Enable expensive optimizations"),
-     clEnumValEnd));
+      clEnumVal(O3        , "Enable expensive optimizations")));
 
   ...
     if (OptimizationLevel == Debug) outputDebugInfo(...);
@@ -436,8 +433,7 @@ the code looks like this:
     cl::values(
       clEnumValN(nodebuginfo, "none", "disable debug information"),
        clEnumVal(quick,               "enable quick debug information"),
-       clEnumVal(detailed,            "enable detailed debug information"),
-      clEnumValEnd));
+       clEnumVal(detailed,            "enable detailed debug information")));
 
 This definition defines an enumerated command line variable of type "``enum
 DebugLev``", which works exactly the same way as before.  The difference here is
@@ -498,8 +494,7 @@ Then define your "``cl::list``" variable:
       clEnumVal(dce               , "Dead Code Elimination"),
       clEnumVal(constprop         , "Constant Propagation"),
      clEnumValN(inlining, "inline", "Procedure Integration"),
-      clEnumVal(strip             , "Strip Symbols"),
-    clEnumValEnd));
+      clEnumVal(strip             , "Strip Symbols")));
 
 This defines a variable that is conceptually of the type
 "``std::vector<enum Opts>``".  Thus, you can access it with standard vector
@@ -558,8 +553,7 @@ Reworking the above list example, we could replace `cl::list`_ with `cl::bits`_:
       clEnumVal(dce               , "Dead Code Elimination"),
       clEnumVal(constprop         , "Constant Propagation"),
      clEnumValN(inlining, "inline", "Procedure Integration"),
-      clEnumVal(strip             , "Strip Symbols"),
-    clEnumValEnd));
+      clEnumVal(strip             , "Strip Symbols")));
 
 To test to see if ``constprop`` was specified, we can use the ``cl:bits::isSet``
 function:
@@ -892,12 +886,12 @@ To do this, set up your .h file with your option, like this for example:
   // debug build, then the code specified as the option to the macro will be
   // executed.  Otherwise it will not be.
   #ifdef NDEBUG
-  #define DEBUG(X)
+  #define LLVM_DEBUG(X)
   #else
-  #define DEBUG(X) do { if (DebugFlag) { X; } } while (0)
+  #define LLVM_DEBUG(X) do { if (DebugFlag) { X; } } while (0)
   #endif
 
-This allows clients to blissfully use the ``DEBUG()`` macro, or the
+This allows clients to blissfully use the ``LLVM_DEBUG()`` macro, or the
 ``DebugFlag`` explicitly if they want to.  Now we just need to be able to set
 the ``DebugFlag`` boolean when the option is set.  To do this, we pass an
 additional argument to our command line argument processor, and we specify where
@@ -967,11 +961,10 @@ This section describes the basic attributes that you can specify on options.
 .. _cl::values:
 
 * The **cl::values** attribute specifies the string-to-value mapping to be used
-  by the generic parser.  It takes a **clEnumValEnd terminated** list of
-  (option, value, description) triplets that specify the option name, the value
-  mapped to, and the description shown in the ``-help`` for the tool.  Because
-  the generic parser is used most frequently with enum values, two macros are
-  often useful:
+  by the generic parser.  It takes a list of (option, value, description)
+  triplets that specify the option name, the value mapped to, and the
+  description shown in the ``-help`` for the tool.  Because the generic parser
+  is used most frequently with enum values, two macros are often useful:
 
   #. The **clEnumVal** macro is used as a nice simple way to specify a triplet
      for an enum.  This macro automatically makes the option name be the same as
@@ -1258,9 +1251,7 @@ Unices have a relatively low limit on command-line length. It is therefore
 customary to use the so-called 'response files' to circumvent this
 restriction. These files are mentioned on the command-line (using the "@file")
 syntax. The program reads these files and inserts the contents into argv,
-thereby working around the command-line length limits. Response files are
-enabled by an optional fourth argument to `cl::ParseEnvironmentOptions`_ and
-`cl::ParseCommandLineOptions`_.
+thereby working around the command-line length limits.
 
 Top-Level Classes and Functions
 -------------------------------
@@ -1296,8 +1287,7 @@ Here is an example of how the function could be used:
   int main(int argc, char **argv) {
     cl::OptionCategory AnotherCategory("Some options");
 
-    StringMap<cl::Option*> Map;
-    cl::getRegisteredOptions(Map);
+    StringMap<cl::Option*> &Map = cl::getRegisteredOptions();
 
     //Unhide useful option and put it in a different category
     assert(Map.count("print-all-options") > 0);
@@ -1332,8 +1322,7 @@ option variables once ``argc`` and ``argv`` are available.
 
 The ``cl::ParseCommandLineOptions`` function requires two parameters (``argc``
 and ``argv``), but may also take an optional third parameter which holds
-`additional extra text`_ to emit when the ``-help`` option is invoked, and a
-fourth boolean parameter that enables `response files`_.
+`additional extra text`_ to emit when the ``-help`` option is invoked.
 
 .. _cl::ParseEnvironmentOptions:
 
@@ -1348,9 +1337,8 @@ command line option variables just like `cl::ParseCommandLineOptions`_ does.
 
 It takes four parameters: the name of the program (since ``argv`` may not be
 available, it can't just look in ``argv[0]``), the name of the environment
-variable to examine, the optional `additional extra text`_ to emit when the
-``-help`` option is invoked, and the boolean switch that controls whether
-`response files`_ should be read.
+variable to examine, and the optional `additional extra text`_ to emit when the
+``-help`` option is invoked.
 
 ``cl::ParseEnvironmentOptions`` will break the environment variable's value up
 into words and then process them using `cl::ParseCommandLineOptions`_.
@@ -1728,7 +1716,7 @@ line option outside of the library. In these cases the library does or should
 provide an external storage location that is accessible to users of the
 library. Examples of this include the ``llvm::DebugFlag`` exported by the
 ``lib/Support/Debug.cpp`` file and the ``llvm::TimePassesIsEnabled`` flag
-exported by the ``lib/VMCore/PassManager.cpp`` file.
+exported by the ``lib/IR/PassManager.cpp`` file.
 
 .. todo::
 

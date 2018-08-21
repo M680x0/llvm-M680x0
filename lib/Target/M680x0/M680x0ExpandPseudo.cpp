@@ -1,4 +1,5 @@
-//===------- M680x0ExpandPseudo.cpp - Expand pseudo instructions -------------===//
+//===------- M680x0ExpandPseudo.cpp - Expand pseudo instructions
+//-------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -20,8 +21,8 @@
 #include "M680x0Subtarget.h"
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h" // For IDs of passes that are preserved.
 #include "llvm/IR/GlobalValue.h"
 using namespace llvm;
@@ -54,7 +55,7 @@ public:
         MachineFunctionProperties::Property::NoVRegs);
   }
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "M680x0 pseudo instruction expansion pass";
   }
 
@@ -65,12 +66,11 @@ private:
 char M680x0ExpandPseudo::ID = 0;
 } // End anonymous namespace.
 
-
 /// If \p MBBI is a pseudo instruction, this method expands
 /// it to the corresponding (sequence of) actual instruction(s).
 /// \returns true if \p MBBI has been expanded.
 bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
-                               MachineBasicBlock::iterator MBBI) {
+                                  MachineBasicBlock::iterator MBBI) {
   MachineInstr &MI = *MBBI;
   MachineInstrBuilder MIB(*MI.getParent()->getParent(), MI);
   unsigned Opcode = MI.getOpcode();
@@ -78,7 +78,7 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   switch (Opcode) {
   default:
     return false;
-  /// TODO would be nice to infer all these parameters
+    /// TODO would be nice to infer all these parameters
 
   case M680x0::MOVXd16d8:
     return TII->ExpandMOVX_RR(MIB, MVT::i16, MVT::i8);
@@ -86,7 +86,6 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     return TII->ExpandMOVX_RR(MIB, MVT::i32, MVT::i8);
   case M680x0::MOVXd32d16:
     return TII->ExpandMOVX_RR(MIB, MVT::i32, MVT::i16);
-
 
   case M680x0::MOVSXd16d8:
     return TII->ExpandMOVSZX_RR(MIB, true, MVT::i16, MVT::i8);
@@ -102,57 +101,70 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   case M680x0::MOVZXd32d16:
     return TII->ExpandMOVSZX_RR(MIB, false, MVT::i32, MVT::i16);
 
-
   case M680x0::MOVSXd16j8:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dj), MVT::i16, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dj), MVT::i16,
+                                MVT::i8);
   case M680x0::MOVSXd32j8:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dj), MVT::i32, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dj), MVT::i32,
+                                MVT::i8);
   case M680x0::MOVSXd32j16:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV16rj), MVT::i32, MVT::i16);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV16rj), MVT::i32,
+                                MVT::i16);
 
   case M680x0::MOVZXd16j8:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dj), MVT::i16, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dj), MVT::i16,
+                                MVT::i8);
   case M680x0::MOVZXd32j8:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dj), MVT::i32, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dj), MVT::i32,
+                                MVT::i8);
   case M680x0::MOVZXd32j16:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rj), MVT::i32, MVT::i16);
-
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rj), MVT::i32,
+                                MVT::i16);
 
   case M680x0::MOVSXd16p8:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dp), MVT::i16, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dp), MVT::i16,
+                                MVT::i8);
   case M680x0::MOVSXd32p8:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dp), MVT::i32, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8dp), MVT::i32,
+                                MVT::i8);
   case M680x0::MOVSXd32p16:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV16rp), MVT::i32, MVT::i16);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV16rp), MVT::i32,
+                                MVT::i16);
 
   case M680x0::MOVZXd16p8:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dp), MVT::i16, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dp), MVT::i16,
+                                MVT::i8);
   case M680x0::MOVZXd32p8:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dp), MVT::i32, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8dp), MVT::i32,
+                                MVT::i8);
   case M680x0::MOVZXd32p16:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rp), MVT::i32, MVT::i16);
-
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rp), MVT::i32,
+                                MVT::i16);
 
   case M680x0::MOVSXd16f8:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8df), MVT::i16, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8df), MVT::i16,
+                                MVT::i8);
   case M680x0::MOVSXd32f8:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8df), MVT::i32, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV8df), MVT::i32,
+                                MVT::i8);
   case M680x0::MOVSXd32f16:
-    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV16rf), MVT::i32, MVT::i16);
+    return TII->ExpandMOVSZX_RM(MIB, true, TII->get(M680x0::MOV16rf), MVT::i32,
+                                MVT::i16);
 
   case M680x0::MOVZXd16f8:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8df), MVT::i16, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8df), MVT::i16,
+                                MVT::i8);
   case M680x0::MOVZXd32f8:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8df), MVT::i32, MVT::i8);
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV8df), MVT::i32,
+                                MVT::i8);
   case M680x0::MOVZXd32f16:
-    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rf), MVT::i32, MVT::i16);
-
+    return TII->ExpandMOVSZX_RM(MIB, false, TII->get(M680x0::MOV16rf), MVT::i32,
+                                MVT::i16);
 
   case M680x0::MOV8cd:
     return TII->ExpandCCR(MIB, /* isToCCR */ true);
   case M680x0::MOV8dc:
     return TII->ExpandCCR(MIB, /* isToCCR */ false);
-
 
   case M680x0::MOVM8jm_P:
     return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32jm), /* isRM */ false);
@@ -182,7 +194,6 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   case M680x0::MOVM32mp_P:
     return TII->ExpandMOVEM(MIB, TII->get(M680x0::MOVM32mp), /* isRM */ true);
 
-
   case M680x0::TCRETURNq:
   case M680x0::TCRETURNj: {
     MachineOperand &JumpTarget = MI.getOperand(0);
@@ -196,7 +207,7 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     assert(MaxTCDelta <= 0 && "MaxTCDelta should never be positive");
 
     // Incoporate the retaddr area.
-    Offset = StackAdj-MaxTCDelta;
+    Offset = StackAdj - MaxTCDelta;
     assert(Offset >= 0 && "Offset should never be negative");
 
     if (Offset) {
@@ -207,7 +218,8 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
 
     // Jump to label or value in register.
     if (Opcode == M680x0::TCRETURNq) {
-      MachineInstrBuilder MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::TAILJMPq));
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, MBBI, DL, TII->get(M680x0::TAILJMPq));
       if (JumpTarget.isGlobal()) {
         MIB.addGlobalAddress(JumpTarget.getGlobal(), JumpTarget.getOffset(),
                              JumpTarget.getTargetFlags());
@@ -245,14 +257,15 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
         // Copy PC from stack to a free address(A0 or A1) register
         // TODO check if it is really free
         BuildMI(MBB, MBBI, DL, TII->get(M680x0::MOV32aj), M680x0::A1)
-          .addReg(M680x0::SP);
+            .addReg(M680x0::SP);
 
         // Adjust SP
         FL->emitSPUpdate(MBB, MBBI, StackAdj, /*InEpilogue=*/true);
 
         // Put the return address on stack
         BuildMI(MBB, MBBI, DL, TII->get(M680x0::MOV32ja))
-          .addReg(M680x0::SP).addReg(M680x0::A1);
+            .addReg(M680x0::SP)
+            .addReg(M680x0::A1);
 
         // RTS
         BuildMI(MBB, MBBI, DL, TII->get(M680x0::RTS));
@@ -262,10 +275,11 @@ bool M680x0ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       // RTD can only handle immediates as big as 2**16-1.  If we need to pop
       // off bytes before the return address, we must do it manually.
       //
-      // BuildMI(MBB, MBBI, DL, TII->get(M680x0::POP32r)).addReg(M680x0::ECX, RegState::Define);
-      // FL->emitSPUpdate(MBB, MBBI, StackAdj, #<{(|InEpilogue=|)}>#true);
-      // BuildMI(MBB, MBBI, DL, TII->get(M680x0::PUSH32r)).addReg(M680x0::ECX);
-      // MIB = BuildMI(MBB, MBBI, DL, TII->get(M680x0::RETL));
+      // BuildMI(MBB, MBBI, DL, TII->get(M680x0::POP32r)).addReg(M680x0::ECX,
+      // RegState::Define); FL->emitSPUpdate(MBB, MBBI, StackAdj,
+      // #<{(|InEpilogue=|)}>#true); BuildMI(MBB, MBBI, DL,
+      // TII->get(M680x0::PUSH32r)).addReg(M680x0::ECX); MIB = BuildMI(MBB,
+      // MBBI, DL, TII->get(M680x0::RETL));
     }
 
     // ??? The rest can be ignored?

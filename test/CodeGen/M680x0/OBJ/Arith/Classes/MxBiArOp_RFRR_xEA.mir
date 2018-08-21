@@ -22,9 +22,9 @@
 name: MxBiArOp_RFRR_xEA
 body: |
   bb.0:
-    %wd0 = ADD16dd %wd0, %wd1, implicit-def %ccr
-    %wd3 = ADD16dd %wd3, %wd2, implicit-def %ccr
-    %d0  = ADD32rr  %d0,  %d1, implicit-def %ccr
-    %d0  = ADD32rr  %d0,  %a1, implicit-def %ccr
-    %d7  = ADD32rr  %d7,  %a1, implicit-def %ccr
-    %a0  = ADD32rr  %a0,  %d1, implicit-def %ccr
+    $wd0 = ADD16dd $wd0, $wd1, implicit-def $ccr
+    $wd3 = ADD16dd $wd3, $wd2, implicit-def $ccr
+    $d0  = ADD32rr  $d0,  $d1, implicit-def $ccr
+    $d0  = ADD32rr  $d0,  $a1, implicit-def $ccr
+    $d7  = ADD32rr  $d7,  $a1, implicit-def $ccr
+    $a0  = ADD32rr  $a0,  $d1, implicit-def $ccr

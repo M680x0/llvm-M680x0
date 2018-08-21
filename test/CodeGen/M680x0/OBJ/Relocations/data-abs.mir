@@ -21,6 +21,6 @@
 name: DATA
 body: |
   bb.0:
-    %d0 = MOV32rb @dst, implicit-def %ccr
+    $d0 = MOV32rb @dst, implicit-def $ccr
 
 ...

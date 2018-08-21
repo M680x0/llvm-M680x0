@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 //
 /// \file
-/// \brief Interface definition for SIRegisterInfo
+/// Interface definition for SIRegisterInfo
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +16,15 @@
 #define LLVM_LIB_TARGET_AMDGPU_SIREGISTERINFO_H
 
 #include "AMDGPURegisterInfo.h"
+#include "SIDefines.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 
 namespace llvm {
 
-class SISubtarget;
+class GCNSubtarget;
+class LiveIntervals;
 class MachineRegisterInfo;
+class SIMachineFunctionInfo;
 
 class SIRegisterInfo final : public AMDGPURegisterInfo {
 private:
@@ -29,13 +32,21 @@ private:
   unsigned VGPRSetID;
   BitVector SGPRPressureSets;
   BitVector VGPRPressureSets;
+  bool SpillSGPRToVGPR;
+  bool SpillSGPRToSMEM;
 
-  void reserveRegisterTuples(BitVector &, unsigned Reg) const;
   void classifyPressureSet(unsigned PSetID, unsigned Reg,
                            BitVector &PressureSets) const;
-
 public:
-  SIRegisterInfo();
+  SIRegisterInfo(const GCNSubtarget &ST);
+
+  bool spillSGPRToVGPR() const {
+    return SpillSGPRToVGPR;
+  }
+
+  bool spillSGPRToSMEM() const {
+    return SpillSGPRToSMEM;
+  }
 
   /// Return the end register initially reserved for the scratch buffer in case
   /// spilling is needed.
@@ -46,20 +57,32 @@ public:
   unsigned reservedPrivateSegmentWaveByteOffsetReg(
     const MachineFunction &MF) const;
 
+  unsigned reservedStackPtrOffsetReg(const MachineFunction &MF) const;
+
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
-  unsigned getRegPressureSetLimit(const MachineFunction &MF,
-                                  unsigned Idx) const override;
+  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
+  const MCPhysReg *getCalleeSavedRegsViaCopy(const MachineFunction *MF) const;
+  const uint32_t *getCallPreservedMask(const MachineFunction &MF,
+                                       CallingConv::ID) const override;
 
-  unsigned getDefaultRegPressureSetLimit(const MachineFunction &MF,
-                                         unsigned Idx) const;
+  // Stack access is very expensive. CSRs are also the high registers, and we
+  // want to minimize the number of used registers.
+  unsigned getCSRFirstUseCost() const override {
+    return 100;
+  }
+
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
 
   bool requiresRegisterScavenging(const MachineFunction &Fn) const override;
 
-
   bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
+  bool requiresFrameIndexReplacementScavenging(
+    const MachineFunction &MF) const override;
   bool requiresVirtualBaseRegisters(const MachineFunction &Fn) const override;
   bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override;
+
+  int64_t getMUBUFInstrOffset(const MachineInstr *MI) const;
 
   int64_t getFrameIndexInstrOffset(const MachineInstr *MI,
                                    int Idx) const override;
@@ -79,15 +102,29 @@ public:
   const TargetRegisterClass *getPointerRegClass(
     const MachineFunction &MF, unsigned Kind = 0) const override;
 
+  /// If \p OnlyToVGPR is true, this will only succeed if this
+  bool spillSGPR(MachineBasicBlock::iterator MI,
+                 int FI, RegScavenger *RS,
+                 bool OnlyToVGPR = false) const;
+
+  bool restoreSGPR(MachineBasicBlock::iterator MI,
+                   int FI, RegScavenger *RS,
+                   bool OnlyToVGPR = false) const;
+
   void eliminateFrameIndex(MachineBasicBlock::iterator MI, int SPAdj,
                            unsigned FIOperandNum,
                            RegScavenger *RS) const override;
+
+  bool eliminateSGPRToVGPRSpillFrameIndex(MachineBasicBlock::iterator MI,
+                                          int FI, RegScavenger *RS) const;
+
+  StringRef getRegAsmName(unsigned Reg) const override;
 
   unsigned getHWRegIndex(unsigned Reg) const {
     return getEncodingValue(Reg) & 0xff;
   }
 
-  /// \brief Return the 'base' register class for this register.
+  /// Return the 'base' register class for this register.
   /// e.g. SGPR0 => SReg_32, VGPR => VGPR_32 SGPR0_SGPR1 -> SReg_32, etc.
   const TargetRegisterClass *getPhysRegClass(unsigned Reg) const;
 
@@ -113,13 +150,6 @@ public:
   /// \returns true if this class contains VGPR registers.
   bool hasVGPRs(const TargetRegisterClass *RC) const;
 
-  /// returns true if this is a pseudoregister class combination of VGPRs and
-  /// SGPRs for operand modeling. FIXME: We should set isAllocatable = 0 on
-  /// them.
-  static bool isPseudoRegClass(const TargetRegisterClass *RC) {
-    return RC == &AMDGPU::VS_32RegClass || RC == &AMDGPU::VS_64RegClass;
-  }
-
   /// \returns A VGPR reg class with the same width as \p SRC
   const TargetRegisterClass *getEquivalentVGPRClass(
                                           const TargetRegisterClass *SRC) const;
@@ -141,44 +171,19 @@ public:
 
   /// \returns True if operands defined with this operand type can accept
   /// a literal constant (i.e. any 32-bit immediate).
-  bool opCanUseLiteralConstant(unsigned OpType) const;
+  bool opCanUseLiteralConstant(unsigned OpType) const {
+    // TODO: 64-bit operands have extending behavior from 32-bit literal.
+    return OpType >= AMDGPU::OPERAND_REG_IMM_FIRST &&
+           OpType <= AMDGPU::OPERAND_REG_IMM_LAST;
+  }
 
   /// \returns True if operands defined with this operand type can accept
   /// an inline constant. i.e. An integer value in the range (-16, 64) or
   /// -4.0f, -2.0f, -1.0f, -0.5f, 0.0f, 0.5f, 1.0f, 2.0f, 4.0f.
-  bool opCanUseInlineConstant(unsigned OpType) const;
-
-  enum PreloadedValue {
-    // SGPRS:
-    PRIVATE_SEGMENT_BUFFER = 0,
-    DISPATCH_PTR        =  1,
-    QUEUE_PTR           =  2,
-    KERNARG_SEGMENT_PTR =  3,
-    DISPATCH_ID         =  4,
-    FLAT_SCRATCH_INIT   =  5,
-    WORKGROUP_ID_X      = 10,
-    WORKGROUP_ID_Y      = 11,
-    WORKGROUP_ID_Z      = 12,
-    PRIVATE_SEGMENT_WAVE_BYTE_OFFSET = 14,
-
-    // VGPRS:
-    FIRST_VGPR_VALUE    = 15,
-    WORKITEM_ID_X       = FIRST_VGPR_VALUE,
-    WORKITEM_ID_Y       = 16,
-    WORKITEM_ID_Z       = 17
-  };
-
-  /// \brief Returns the physical register that \p Value is stored in.
-  unsigned getPreloadedValue(const MachineFunction &MF,
-                             enum PreloadedValue Value) const;
-
-  /// \brief Give the maximum number of VGPRs that can be used by \p WaveCount
-  ///        concurrent waves.
-  unsigned getNumVGPRsAllowed(unsigned WaveCount) const;
-
-  /// \brief Give the maximum number of SGPRs that can be used by \p WaveCount
-  ///        concurrent waves.
-  unsigned getNumSGPRsAllowed(const SISubtarget &ST, unsigned WaveCount) const;
+  bool opCanUseInlineConstant(unsigned OpType) const {
+    return OpType >= AMDGPU::OPERAND_SRC_FIRST &&
+           OpType <= AMDGPU::OPERAND_SRC_LAST;
+  }
 
   unsigned findUnusedRegister(const MachineRegisterInfo &MRI,
                               const TargetRegisterClass *RC,
@@ -187,6 +192,8 @@ public:
   unsigned getSGPRPressureSet() const { return SGPRSetID; };
   unsigned getVGPRPressureSet() const { return VGPRSetID; };
 
+  const TargetRegisterClass *getRegClassForReg(const MachineRegisterInfo &MRI,
+                                               unsigned Reg) const;
   bool isVGPR(const MachineRegisterInfo &MRI, unsigned Reg) const;
 
   bool isSGPRPressureSet(unsigned SetID) const {
@@ -196,12 +203,42 @@ public:
     return VGPRPressureSets.test(SetID) && !SGPRPressureSets.test(SetID);
   }
 
+  ArrayRef<int16_t> getRegSplitParts(const TargetRegisterClass *RC,
+                                     unsigned EltSize) const;
+
+  bool shouldCoalesce(MachineInstr *MI,
+                      const TargetRegisterClass *SrcRC,
+                      unsigned SubReg,
+                      const TargetRegisterClass *DstRC,
+                      unsigned DstSubReg,
+                      const TargetRegisterClass *NewRC,
+                      LiveIntervals &LIS) const override;
+
+  unsigned getRegPressureLimit(const TargetRegisterClass *RC,
+                               MachineFunction &MF) const override;
+
+  unsigned getRegPressureSetLimit(const MachineFunction &MF,
+                                  unsigned Idx) const override;
+
+  const int *getRegUnitPressureSets(unsigned RegUnit) const override;
+
+  unsigned getReturnAddressReg(const MachineFunction &MF) const;
+
+  const TargetRegisterClass *
+  getConstrainedRegClassForOperand(const MachineOperand &MO,
+                                 const MachineRegisterInfo &MRI) const override;
+
 private:
-  void buildScratchLoadStore(MachineBasicBlock::iterator MI,
-                             unsigned LoadStoreOp, const MachineOperand *SrcDst,
-                             unsigned ScratchRsrcReg, unsigned ScratchOffset,
-                             int64_t Offset,
-                             RegScavenger *RS) const;
+  void buildSpillLoadStore(MachineBasicBlock::iterator MI,
+                           unsigned LoadStoreOp,
+                           int Index,
+                           unsigned ValueReg,
+                           bool ValueIsKill,
+                           unsigned ScratchRsrcReg,
+                           unsigned ScratchOffsetReg,
+                           int64_t InstrOffset,
+                           MachineMemOperand *MMO,
+                           RegScavenger *RS) const;
 };
 
 } // End namespace llvm

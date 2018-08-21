@@ -18,8 +18,8 @@
 #include "M680x0Subtarget.h"
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/IR/GlobalValue.h"
 using namespace llvm;
 
@@ -27,7 +27,7 @@ using namespace llvm;
 
 namespace {
 
-  enum UpdateType { Ascending, Descending, Intermixed };
+enum UpdateType { Ascending, Descending, Intermixed };
 
 struct MOVEMState {
 private:
@@ -44,8 +44,9 @@ private:
   enum { None, Load, Store } Type;
 
 public:
-  MOVEMState() : Begin(nullptr), End(nullptr),
-    Base(0), Start(INT_MIN), Stop(INT_MAX), Mask(0), Type(None) {}
+  MOVEMState()
+      : Begin(nullptr), End(nullptr), Base(0), Start(INT_MIN), Stop(INT_MAX),
+        Mask(0), Type(None) {}
 
   void SetBegin(MachineBasicBlock::iterator &MI) {
     assert(Begin == nullptr);
@@ -57,9 +58,7 @@ public:
     End = MI;
   }
 
-  bool HasBase() {
-    return Base != 0;
-  }
+  bool HasBase() { return Base != 0; }
 
   unsigned GetBase() {
     assert(Base);
@@ -76,9 +75,7 @@ public:
     return End;
   }
 
-  unsigned GetMask() {
-    return Mask;
-  }
+  unsigned GetMask() { return Mask; }
 
   void SetBase(int Value) {
     assert(!HasBase());
@@ -87,8 +84,8 @@ public:
 
   // You need to call this before Mask update
   UpdateType ClassifyUpdateByMask(unsigned Value) {
-    assert (Value);
-    
+    assert(Value);
+
     if (Mask == 0) {
       return Ascending;
     } else if (Mask < Value) {
@@ -130,16 +127,17 @@ public:
 
   bool UpdateMask(unsigned Value) {
     assert(Value == (Value & 0xFFFF) && "Mask must fit 16 bit");
-    assert(!(Value & Mask) && "This is weird, there should be no intersections");
+    assert(!(Value & Mask) &&
+           "This is weird, there should be no intersections");
     Mask |= Value;
     return true;
   }
 
-  void SetLoad()  { Type = Load;  }
+  void SetLoad() { Type = Load; }
   void SetStore() { Type = Store; }
 
-  bool IsLoad()   { return Type == Load;  }
-  bool IsStore()  { return Type == Store; }
+  bool IsLoad() { return Type == Load; }
+  bool IsStore() { return Type == Store; }
 };
 
 class M680x0CollapseMOVEM : public MachineFunctionPass {
@@ -175,14 +173,16 @@ public:
     // Add a unified one
     if (State.IsLoad()) {
       BuildMI(MBB, End, DL, TII->get(M680x0::MOVM32mp))
-        .addImm(State.GetMask())
-        .addImm(State.GetFinalOffset()).addReg(State.GetBase());
+          .addImm(State.GetMask())
+          .addImm(State.GetFinalOffset())
+          .addReg(State.GetBase());
     } else {
       BuildMI(MBB, End, DL, TII->get(M680x0::MOVM32pm))
-        .addImm(State.GetFinalOffset()).addReg(State.GetBase())
-        .addImm(State.GetMask());
+          .addImm(State.GetFinalOffset())
+          .addReg(State.GetBase())
+          .addImm(State.GetMask());
     }
-      
+
     State = MOVEMState();
   }
 
@@ -196,15 +196,15 @@ public:
       if (State.IsStore() == IsStore && State.GetBase() == Reg &&
           State.Update(Offset, Mask)) {
         return true;
-      // Otherwise we Finish processing of the current MOVEM sequance and start
-      // a new one
-      } else  {
+        // Otherwise we Finish processing of the current MOVEM sequance and
+        // start a new one
+      } else {
         State = Temp;
         State.SetEnd(MI);
         Finish(MBB, State);
         return ProcessMI(MBB, MI, State, Mask, Offset, Reg, IsStore);
       }
-    // If this is the first instruction is sequance then initialize the State
+      // If this is the first instruction is sequance then initialize the State
     } else if (Reg == TRI->getStackRegister() ||
                Reg == TRI->getBaseRegister() ||
                Reg == TRI->getFrameRegister(*MBB.getParent())) {
@@ -218,26 +218,26 @@ public:
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-  STI = &static_cast<const M680x0Subtarget &>(MF.getSubtarget());
-  TII = STI->getInstrInfo();
-  TRI = STI->getRegisterInfo();
-  MFI = MF.getInfo<M680x0MachineFunctionInfo>();
-  FL = STI->getFrameLowering();
+    STI = &static_cast<const M680x0Subtarget &>(MF.getSubtarget());
+    TII = STI->getInstrInfo();
+    TRI = STI->getRegisterInfo();
+    MFI = MF.getInfo<M680x0MachineFunctionInfo>();
+    FL = STI->getFrameLowering();
 
-  bool Modified = false;
+    bool Modified = false;
 
-  MOVEMState State;
+    MOVEMState State;
 
-  unsigned Mask = 0;
-  unsigned Reg = 0;
-  int Offset = 0;
+    unsigned Mask = 0;
+    unsigned Reg = 0;
+    int Offset = 0;
 
-  for (auto &MBB : MF) {
-    auto MI = MBB.begin(), E = MBB.end();
-    while (MI != E) {
-      // Processing might change current instruction, save next first
-      auto NMI = std::next(MI);
-      switch (MI->getOpcode()) {
+    for (auto &MBB : MF) {
+      auto MI = MBB.begin(), E = MBB.end();
+      while (MI != E) {
+        // Processing might change current instruction, save next first
+        auto NMI = std::next(MI);
+        switch (MI->getOpcode()) {
         default:
           if (State.HasBase()) {
             State.SetEnd(MI);
@@ -269,20 +269,20 @@ public:
           Offset = MI->getOperand(1).getImm();
           Modified |= ProcessMI(MBB, MI, State, Mask, Offset, Reg, false);
           break;
+        }
+        MI = NMI;
       }
-      MI = NMI;
+
+      if (State.HasBase()) {
+        State.SetEnd(MI);
+        Finish(MBB, State);
+      }
     }
 
-    if (State.HasBase()) {
-      State.SetEnd(MI);
-      Finish(MBB, State);
-    }
+    return Modified;
   }
 
-  return Modified;
-  }
-
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "M680x0 MOVEM collapser pass";
   }
 };

@@ -157,9 +157,10 @@ static const char *isLabelTail(const char *CurPtr) {
 // Lexer definition.
 //===----------------------------------------------------------------------===//
 
-LLLexer::LLLexer(StringRef StartBuf, SourceMgr &sm, SMDiagnostic &Err,
+LLLexer::LLLexer(StringRef StartBuf, SourceMgr &SM, SMDiagnostic &Err,
                  LLVMContext &C)
-  : CurBuf(StartBuf), ErrorInfo(Err), SM(sm), Context(C), APFloatVal(0.0) {
+    : CurBuf(StartBuf), ErrorInfo(Err), SM(SM), Context(C), APFloatVal(0.0),
+      IgnoreColonInIdentifiers(false) {
   CurPtr = CurBuf.begin();
 }
 
@@ -180,61 +181,67 @@ int LLLexer::getNextChar() {
 }
 
 lltok::Kind LLLexer::LexToken() {
-  TokStart = CurPtr;
+  while (true) {
+    TokStart = CurPtr;
 
-  int CurChar = getNextChar();
-  switch (CurChar) {
-  default:
-    // Handle letters: [a-zA-Z_]
-    if (isalpha(static_cast<unsigned char>(CurChar)) || CurChar == '_')
-      return LexIdentifier();
+    int CurChar = getNextChar();
+    switch (CurChar) {
+    default:
+      // Handle letters: [a-zA-Z_]
+      if (isalpha(static_cast<unsigned char>(CurChar)) || CurChar == '_')
+        return LexIdentifier();
 
-    return lltok::Error;
-  case EOF: return lltok::Eof;
-  case 0:
-  case ' ':
-  case '\t':
-  case '\n':
-  case '\r':
-    // Ignore whitespace.
-    return LexToken();
-  case '+': return LexPositive();
-  case '@': return LexAt();
-  case '$': return LexDollar();
-  case '%': return LexPercent();
-  case '"': return LexQuote();
-  case '.':
-    if (const char *Ptr = isLabelTail(CurPtr)) {
-      CurPtr = Ptr;
-      StrVal.assign(TokStart, CurPtr-1);
-      return lltok::LabelStr;
+      return lltok::Error;
+    case EOF: return lltok::Eof;
+    case 0:
+    case ' ':
+    case '\t':
+    case '\n':
+    case '\r':
+      // Ignore whitespace.
+      continue;
+    case '+': return LexPositive();
+    case '@': return LexAt();
+    case '$': return LexDollar();
+    case '%': return LexPercent();
+    case '"': return LexQuote();
+    case '.':
+      if (const char *Ptr = isLabelTail(CurPtr)) {
+        CurPtr = Ptr;
+        StrVal.assign(TokStart, CurPtr-1);
+        return lltok::LabelStr;
+      }
+      if (CurPtr[0] == '.' && CurPtr[1] == '.') {
+        CurPtr += 2;
+        return lltok::dotdotdot;
+      }
+      return lltok::Error;
+    case ';':
+      SkipLineComment();
+      continue;
+    case '!': return LexExclaim();
+    case '^':
+      return LexCaret();
+    case ':':
+      return lltok::colon;
+    case '#': return LexHash();
+    case '0': case '1': case '2': case '3': case '4':
+    case '5': case '6': case '7': case '8': case '9':
+    case '-':
+      return LexDigitOrNegative();
+    case '=': return lltok::equal;
+    case '[': return lltok::lsquare;
+    case ']': return lltok::rsquare;
+    case '{': return lltok::lbrace;
+    case '}': return lltok::rbrace;
+    case '<': return lltok::less;
+    case '>': return lltok::greater;
+    case '(': return lltok::lparen;
+    case ')': return lltok::rparen;
+    case ',': return lltok::comma;
+    case '*': return lltok::star;
+    case '|': return lltok::bar;
     }
-    if (CurPtr[0] == '.' && CurPtr[1] == '.') {
-      CurPtr += 2;
-      return lltok::dotdotdot;
-    }
-    return lltok::Error;
-  case ';':
-    SkipLineComment();
-    return LexToken();
-  case '!': return LexExclaim();
-  case '#': return LexHash();
-  case '0': case '1': case '2': case '3': case '4':
-  case '5': case '6': case '7': case '8': case '9':
-  case '-':
-    return LexDigitOrNegative();
-  case '=': return lltok::equal;
-  case '[': return lltok::lsquare;
-  case ']': return lltok::rsquare;
-  case '{': return lltok::lbrace;
-  case '}': return lltok::rbrace;
-  case '<': return lltok::less;
-  case '>': return lltok::greater;
-  case '(': return lltok::lparen;
-  case ')': return lltok::rparen;
-  case ',': return lltok::comma;
-  case '*': return lltok::star;
-  case '|': return lltok::bar;
   }
 }
 
@@ -326,6 +333,22 @@ bool LLLexer::ReadVarName() {
   return false;
 }
 
+// Lex an ID: [0-9]+. On success, the ID is stored in UIntVal and Token is
+// returned, otherwise the Error token is returned.
+lltok::Kind LLLexer::LexUIntID(lltok::Kind Token) {
+  if (!isdigit(static_cast<unsigned char>(CurPtr[0])))
+    return lltok::Error;
+
+  for (++CurPtr; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
+    /*empty*/;
+
+  uint64_t Val = atoull(TokStart + 1, CurPtr);
+  if ((unsigned)Val != Val)
+    Error("invalid value number (too large)!");
+  UIntVal = unsigned(Val);
+  return Token;
+}
+
 lltok::Kind LLLexer::LexVar(lltok::Kind Var, lltok::Kind VarID) {
   // Handle StringConstant: \"[^\"]*\"
   if (CurPtr[0] == '"') {
@@ -355,17 +378,7 @@ lltok::Kind LLLexer::LexVar(lltok::Kind Var, lltok::Kind VarID) {
     return Var;
 
   // Handle VarID: [0-9]+
-  if (isdigit(static_cast<unsigned char>(CurPtr[0]))) {
-    for (++CurPtr; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
-      /*empty*/;
-
-    uint64_t Val = atoull(TokStart+1, CurPtr);
-    if ((unsigned)Val != Val)
-      Error("invalid value number (too large)!");
-    UIntVal = unsigned(Val);
-    return VarID;
-  }
-  return lltok::Error;
+  return LexUIntID(VarID);
 }
 
 /// Lex all tokens that start with a % character.
@@ -418,22 +431,18 @@ lltok::Kind LLLexer::LexExclaim() {
   return lltok::exclaim;
 }
 
+/// Lex all tokens that start with a ^ character.
+///    SummaryID ::= ^[0-9]+
+lltok::Kind LLLexer::LexCaret() {
+  // Handle SummaryID: ^[0-9]+
+  return LexUIntID(lltok::SummaryID);
+}
+
 /// Lex all tokens that start with a # character.
 ///    AttrGrpID ::= #[0-9]+
 lltok::Kind LLLexer::LexHash() {
   // Handle AttrGrpID: #[0-9]+
-  if (isdigit(static_cast<unsigned char>(CurPtr[0]))) {
-    for (++CurPtr; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
-      /*empty*/;
-
-    uint64_t Val = atoull(TokStart+1, CurPtr);
-    if ((unsigned)Val != Val)
-      Error("invalid value number (too large)!");
-    UIntVal = unsigned(Val);
-    return lltok::AttrGrpID;
-  }
-
-  return lltok::Error;
+  return LexUIntID(lltok::AttrGrpID);
 }
 
 /// Lex a label, integer type, keyword, or hexadecimal integer constant.
@@ -455,8 +464,9 @@ lltok::Kind LLLexer::LexIdentifier() {
       KeywordEnd = CurPtr;
   }
 
-  // If we stopped due to a colon, this really is a label.
-  if (*CurPtr == ':') {
+  // If we stopped due to a colon, unless we were directed to ignore it,
+  // this really is a label.
+  if (!IgnoreColonInIdentifiers && *CurPtr == ':') {
     StrVal.assign(StartChar-1, CurPtr++);
     return lltok::LabelStr;
   }
@@ -491,6 +501,9 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(true);    KEYWORD(false);
   KEYWORD(declare); KEYWORD(define);
   KEYWORD(global);  KEYWORD(constant);
+
+  KEYWORD(dso_local);
+  KEYWORD(dso_preemptable);
 
   KEYWORD(private);
   KEYWORD(internal);
@@ -540,17 +553,21 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(release);
   KEYWORD(acq_rel);
   KEYWORD(seq_cst);
-  KEYWORD(singlethread);
+  KEYWORD(syncscope);
 
   KEYWORD(nnan);
   KEYWORD(ninf);
   KEYWORD(nsz);
   KEYWORD(arcp);
+  KEYWORD(contract);
+  KEYWORD(reassoc);
+  KEYWORD(afn);
   KEYWORD(fast);
   KEYWORD(nuw);
   KEYWORD(nsw);
   KEYWORD(exact);
   KEYWORD(inbounds);
+  KEYWORD(inrange);
   KEYWORD(align);
   KEYWORD(addrspace);
   KEYWORD(section);
@@ -584,7 +601,8 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(spir_func);
   KEYWORD(intel_ocl_bicc);
   KEYWORD(x86_64_sysvcc);
-  KEYWORD(x86_64_win64cc);
+  KEYWORD(win64cc);
+  KEYWORD(x86_regcallcc);
   KEYWORD(webkit_jscc);
   KEYWORD(swiftcc);
   KEYWORD(anyregcc);
@@ -596,6 +614,9 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(hhvm_ccc);
   KEYWORD(cxx_fast_tlscc);
   KEYWORD(amdgpu_vs);
+  KEYWORD(amdgpu_ls);
+  KEYWORD(amdgpu_hs);
+  KEYWORD(amdgpu_es);
   KEYWORD(amdgpu_gs);
   KEYWORD(amdgpu_ps);
   KEYWORD(amdgpu_cs);
@@ -635,7 +656,9 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(nonnull);
   KEYWORD(noredzone);
   KEYWORD(noreturn);
+  KEYWORD(nocf_check);
   KEYWORD(nounwind);
+  KEYWORD(optforfuzzing);
   KEYWORD(optnone);
   KEYWORD(optsize);
   KEYWORD(readnone);
@@ -643,12 +666,16 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(returned);
   KEYWORD(returns_twice);
   KEYWORD(signext);
+  KEYWORD(speculatable);
   KEYWORD(sret);
   KEYWORD(ssp);
   KEYWORD(sspreq);
   KEYWORD(sspstrong);
+  KEYWORD(strictfp);
   KEYWORD(safestack);
+  KEYWORD(shadowcallstack);
   KEYWORD(sanitize_address);
+  KEYWORD(sanitize_hwaddress);
   KEYWORD(sanitize_thread);
   KEYWORD(sanitize_memory);
   KEYWORD(swifterror);
@@ -691,6 +718,73 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(cleanup);
   KEYWORD(catch);
   KEYWORD(filter);
+
+  // Summary index keywords.
+  KEYWORD(path);
+  KEYWORD(hash);
+  KEYWORD(gv);
+  KEYWORD(guid);
+  KEYWORD(name);
+  KEYWORD(summaries);
+  KEYWORD(flags);
+  KEYWORD(linkage);
+  KEYWORD(notEligibleToImport);
+  KEYWORD(live);
+  KEYWORD(dsoLocal);
+  KEYWORD(function);
+  KEYWORD(insts);
+  KEYWORD(funcFlags);
+  KEYWORD(readNone);
+  KEYWORD(readOnly);
+  KEYWORD(noRecurse);
+  KEYWORD(returnDoesNotAlias);
+  KEYWORD(calls);
+  KEYWORD(callee);
+  KEYWORD(hotness);
+  KEYWORD(unknown);
+  KEYWORD(hot);
+  KEYWORD(critical);
+  KEYWORD(relbf);
+  KEYWORD(variable);
+  KEYWORD(aliasee);
+  KEYWORD(refs);
+  KEYWORD(typeIdInfo);
+  KEYWORD(typeTests);
+  KEYWORD(typeTestAssumeVCalls);
+  KEYWORD(typeCheckedLoadVCalls);
+  KEYWORD(typeTestAssumeConstVCalls);
+  KEYWORD(typeCheckedLoadConstVCalls);
+  KEYWORD(vFuncId);
+  KEYWORD(offset);
+  KEYWORD(args);
+  KEYWORD(typeid);
+  KEYWORD(summary);
+  KEYWORD(typeTestRes);
+  KEYWORD(kind);
+  KEYWORD(unsat);
+  KEYWORD(byteArray);
+  KEYWORD(inline);
+  KEYWORD(single);
+  KEYWORD(allOnes);
+  KEYWORD(sizeM1BitWidth);
+  KEYWORD(alignLog2);
+  KEYWORD(sizeM1);
+  KEYWORD(bitMask);
+  KEYWORD(inlineBits);
+  KEYWORD(wpdResolutions);
+  KEYWORD(wpdRes);
+  KEYWORD(indir);
+  KEYWORD(singleImpl);
+  KEYWORD(branchFunnel);
+  KEYWORD(singleImplName);
+  KEYWORD(resByArg);
+  KEYWORD(byArg);
+  KEYWORD(uniformRetVal);
+  KEYWORD(uniqueRetVal);
+  KEYWORD(virtualConstProp);
+  KEYWORD(info);
+  KEYWORD(byte);
+  KEYWORD(bit);
 
 #undef KEYWORD
 
@@ -804,6 +898,12 @@ lltok::Kind LLLexer::LexIdentifier() {
     StrVal.assign(Keyword.begin(), Keyword.end());
     return lltok::DIFlag;
   }
+
+  if (Keyword.startswith("CSK_")) {
+    StrVal.assign(Keyword.begin(), Keyword.end());
+    return lltok::ChecksumKind;
+  }
+
   if (Keyword == "NoDebug" || Keyword == "FullDebug" ||
       Keyword == "LineTablesOnly") {
     StrVal.assign(Keyword.begin(), Keyword.end());
@@ -872,7 +972,7 @@ lltok::Kind LLLexer::Lex0x() {
     // HexFPConstant - Floating point constant represented in IEEE format as a
     // hexadecimal number for when exponential notation is not precise enough.
     // Half, Float, and double only.
-    APFloatVal = APFloat(APFloat::IEEEdouble,
+    APFloatVal = APFloat(APFloat::IEEEdouble(),
                          APInt(64, HexIntToVal(TokStart + 2, CurPtr)));
     return lltok::APFloat;
   }
@@ -883,20 +983,20 @@ lltok::Kind LLLexer::Lex0x() {
   case 'K':
     // F80HexFPConstant - x87 long double in hexadecimal format (10 bytes)
     FP80HexToIntPair(TokStart+3, CurPtr, Pair);
-    APFloatVal = APFloat(APFloat::x87DoubleExtended, APInt(80, Pair));
+    APFloatVal = APFloat(APFloat::x87DoubleExtended(), APInt(80, Pair));
     return lltok::APFloat;
   case 'L':
     // F128HexFPConstant - IEEE 128-bit in hexadecimal format (16 bytes)
     HexToIntPair(TokStart+3, CurPtr, Pair);
-    APFloatVal = APFloat(APFloat::IEEEquad, APInt(128, Pair));
+    APFloatVal = APFloat(APFloat::IEEEquad(), APInt(128, Pair));
     return lltok::APFloat;
   case 'M':
     // PPC128HexFPConstant - PowerPC 128-bit in hexadecimal format (16 bytes)
     HexToIntPair(TokStart+3, CurPtr, Pair);
-    APFloatVal = APFloat(APFloat::PPCDoubleDouble, APInt(128, Pair));
+    APFloatVal = APFloat(APFloat::PPCDoubleDouble(), APInt(128, Pair));
     return lltok::APFloat;
   case 'H':
-    APFloatVal = APFloat(APFloat::IEEEhalf,
+    APFloatVal = APFloat(APFloat::IEEEhalf(),
                          APInt(16,HexIntToVal(TokStart+3, CurPtr)));
     return lltok::APFloat;
   }
@@ -963,7 +1063,7 @@ lltok::Kind LLLexer::LexDigitOrNegative() {
     }
   }
 
-  APFloatVal = APFloat(APFloat::IEEEdouble,
+  APFloatVal = APFloat(APFloat::IEEEdouble(),
                        StringRef(TokStart, CurPtr - TokStart));
   return lltok::APFloat;
 }
@@ -1000,7 +1100,7 @@ lltok::Kind LLLexer::LexPositive() {
     }
   }
 
-  APFloatVal = APFloat(APFloat::IEEEdouble,
+  APFloatVal = APFloat(APFloat::IEEEdouble(),
                        StringRef(TokStart, CurPtr - TokStart));
   return lltok::APFloat;
 }

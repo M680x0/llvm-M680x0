@@ -1,5 +1,5 @@
-; RUN: llc < %s -march=x86
-; RUN: llc < %s -march=x86-64
+; RUN: llc < %s -mtriple=i686--
+; RUN: llc < %s -mtriple=x86_64--
 
 ;
 ; Scalars
@@ -115,4 +115,35 @@ entry:
 	%1 = shl <2 x i128> %0, <i128  1, i128  1>
 	store <2 x i128> %1, <2 x i128>* %r, align 16
 	ret void
+}
+
+;
+; Combines
+;
+
+define <2 x i256> @shl_sext_shl_outofrange(<2 x i128> %a0) {
+  %1 = shl <2 x i128> %a0, <i128 -1, i128 -1>
+  %2 = sext <2 x i128> %1 to <2 x i256>
+  %3 = shl <2 x i256> %2, <i256 128, i256 128>
+  ret <2 x i256> %3
+}
+
+define <2 x i256> @shl_zext_shl_outofrange(<2 x i128> %a0) {
+  %1 = shl <2 x i128> %a0, <i128 -1, i128 -1>
+  %2 = zext <2 x i128> %1 to <2 x i256>
+  %3 = shl <2 x i256> %2, <i256 128, i256 128>
+  ret <2 x i256> %3
+}
+
+define <2 x i256> @shl_zext_lshr_outofrange(<2 x i128> %a0) {
+  %1 = lshr <2 x i128> %a0, <i128 -1, i128 -1>
+  %2 = zext <2 x i128> %1 to <2 x i256>
+  %3 = shl <2 x i256> %2, <i256 128, i256 128>
+  ret <2 x i256> %3
+}
+
+define i128 @lshr_shl_mask(i128 %a0) {
+  %1 = shl i128 %a0, 1
+  %2 = lshr i128 %1, 1
+  ret i128 %2
 }

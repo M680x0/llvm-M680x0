@@ -2,34 +2,56 @@
 
 	.arch axp64
 # CHECK: error: unknown arch name
-# CHECK: 	.arch axp64
-# CHECK:	      ^
+# CHECK-NEXT: 	.arch axp64
+# CHECK-NEXT:	      ^
+
+	.arch armv8
+	aese v0.8h, v1.8h
+
+# CHECK: error: invalid operand for instruction
+# CHECK-NEXT: 	aese v0.8h, v1.8h
+# CHECK-NEXT:	^
+
+// We silently ignore invalid features.
+	.arch armv8+foo
+	aese v0.8h, v1.8h
+
+# CHECK: error: invalid operand for instruction
+# CHECK-NEXT:	aese v0.8h, v1.8h
+# CHECK-NEXT:	^
+
+	.arch armv8+crypto
 
 	.arch armv8
 
-	fminnm d0, d0, d1
+	aese v0.8h, v1.8h
 
-# CHECK: error: instruction requires: fp-armv8
-# CHECK: 	fminnm d0, d0, d1
-# CHECK:	^
+# CHECK: error: invalid operand for instruction
+# CHECK-NEXT: 	aese v0.8h, v1.8h
+# CHECK-NEXT:	^
 
-	.arch armv8+fp
+	.arch armv8.1-a+noras
+	esb
 
-# CHECK: '+fp' is not a recognized feature for this target (ignoring feature)
+# CHECK: error: instruction requires: ras
+# CHECK-NEXT:   esb
 
-	fminnm d0, d0, d1
+// PR32873: without extra features, '.arch' is currently ignored.
+// Add an unrelated feature to accept the directive.
+	.arch armv8+crc
+        casa  w5, w7, [x19]
 
-# CHECK: error: instruction requires: fp-armv8
-# CHECK: 	fminnm d0, d0, d1
-# CHECK:	^
+# CHECK: error: instruction requires: lse
+# CHECK-NEXT:   casa  w5, w7, [x19]
 
-	.arch armv8+neon
+	.arch armv8+crypto
+        crc32b w0, w1, w2
 
-	.arch armv8
+# CHECK: error: instruction requires: crc
+# CHECK-NEXT:   crc32b w0, w1, w2
 
-	fminnm d0, d0, d1
+	.arch armv8.1-a+nolse
+        casa  w5, w7, [x20]
 
-# CHECK: error: instruction requires: fp-armv8
-# CHECK: 	fminnm d0, d0, d1
-# CHECK:	^
-
+# CHECK: error: instruction requires: lse
+# CHECK-NEXT:   casa  w5, w7, [x20]

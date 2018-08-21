@@ -17,12 +17,14 @@ add_llvm_library(LLVMSelectionDAG
   ScheduleDAGVLIW.cpp
   SelectionDAGBuilder.cpp
   SelectionDAG.cpp
+  SelectionDAGAddressAnalysis.cpp
   SelectionDAGDumper.cpp
   SelectionDAGISel.cpp
   SelectionDAGPrinter.cpp
   SelectionDAGTargetInfo.cpp
   StatepointLowering.cpp
   TargetLowering.cpp
-  )
 
-add_dependencies(LLVMSelectionDAG intrinsics_gen)
+  DEPENDS
+  intrinsics_gen
+  )

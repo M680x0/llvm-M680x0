@@ -7,14 +7,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Lanai.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
 
-Target llvm::TheLanaiTarget;
+namespace llvm {
+Target &getTheLanaiTarget() {
+  static Target TheLanaiTarget;
+  return TheLanaiTarget;
+}
+} // namespace llvm
 
 extern "C" void LLVMInitializeLanaiTargetInfo() {
-  RegisterTarget<Triple::lanai> X(TheLanaiTarget, "lanai", "Lanai");
+  RegisterTarget<Triple::lanai> X(getTheLanaiTarget(), "lanai", "Lanai",
+                                  "Lanai");
 }

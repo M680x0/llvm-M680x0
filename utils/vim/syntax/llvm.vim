@@ -54,6 +54,7 @@ syn keyword llvmKeyword
       \ atomic
       \ available_externally
       \ blockaddress
+      \ builtin
       \ byval
       \ c
       \ catch
@@ -62,6 +63,7 @@ syn keyword llvmKeyword
       \ ccc
       \ cleanup
       \ coldcc
+      \ comdat
       \ common
       \ constant
       \ datalayout
@@ -73,6 +75,8 @@ syn keyword llvmKeyword
       \ distinct
       \ dllexport
       \ dllimport
+      \ dso_local
+      \ dso_preemptable
       \ except
       \ external
       \ externally_initialized
@@ -104,10 +108,13 @@ syn keyword llvmKeyword
       \ naked
       \ nest
       \ noalias
+      \ nobuiltin
       \ nocapture
       \ noimplicitfloat
       \ noinline
       \ nonlazybind
+      \ nonnull
+      \ norecurse
       \ noredzone
       \ noreturn
       \ nounwind
@@ -121,6 +128,7 @@ syn keyword llvmKeyword
       \ readnone
       \ readonly
       \ release
+      \ returned
       \ returns_twice
       \ sanitize_address
       \ sanitize_memory
@@ -129,14 +137,16 @@ syn keyword llvmKeyword
       \ seq_cst
       \ sideeffect
       \ signext
-      \ singlethread
+      \ syncscope
       \ source_filename
+      \ speculatable
       \ spir_func
       \ spir_kernel
       \ sret
       \ ssp
       \ sspreq
       \ sspstrong
+      \ strictfp
       \ swiftcc
       \ tail
       \ target
@@ -154,7 +164,7 @@ syn keyword llvmKeyword
       \ within
       \ writeonly
       \ x86_64_sysvcc
-      \ x86_64_win64cc
+      \ win64cc
       \ x86_fastcallcc
       \ x86_stdcallcc
       \ x86_thiscallcc
@@ -190,6 +200,8 @@ syn match   llvmConstant /\<DIFlag[A-Za-z]\+\>/
 syn match  llvmSpecialComment /;\s*PR\d*\s*$/
 syn match  llvmSpecialComment /;\s*REQUIRES:.*$/
 syn match  llvmSpecialComment /;\s*RUN:.*$/
+syn match  llvmSpecialComment /;\s*CHECK:.*$/
+syn match  llvmSpecialComment "\v;\s*CHECK-(NEXT|NOT|DAG|SAME|LABEL):.*$"
 syn match  llvmSpecialComment /;\s*XFAIL:.*$/
 
 if version >= 508 || !exists("did_c_syn_inits")

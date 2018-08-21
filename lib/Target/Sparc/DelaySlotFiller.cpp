@@ -19,10 +19,10 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 
 using namespace llvm;
 
@@ -43,9 +43,7 @@ namespace {
     static char ID;
     Filler() : MachineFunctionPass(ID) {}
 
-    const char *getPassName() const override {
-      return "SPARC Delay Slot Filler";
-    }
+    StringRef getPassName() const override { return "SPARC Delay Slot Filler"; }
 
     bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
     bool runOnMachineFunction(MachineFunction &F) override {
@@ -98,7 +96,7 @@ namespace {
 /// createSparcDelaySlotFillerPass - Returns a pass that fills in delay
 /// slots in Sparc MachineFunctions
 ///
-FunctionPass *llvm::createSparcDelaySlotFillerPass(TargetMachine &tm) {
+FunctionPass *llvm::createSparcDelaySlotFillerPass() {
   return new Filler;
 }
 
@@ -209,8 +207,8 @@ Filler::findDelayInstr(MachineBasicBlock &MBB,
     if (!done)
       --I;
 
-    // skip debug value
-    if (I->isDebugValue())
+    // skip debug instruction
+    if (I->isDebugInstr())
       continue;
 
     if (I->hasUnmodeledSideEffects() || I->isInlineAsm() || I->isPosition() ||

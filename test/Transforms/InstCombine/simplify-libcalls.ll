@@ -120,9 +120,9 @@ define i32 @MemCpy() {
   %hello_u_p = getelementptr [8 x i8], [8 x i8]* @hello_u, i32 0, i32 0
   %target = alloca [1024 x i8]
   %target_p = getelementptr [1024 x i8], [1024 x i8]* %target, i32 0, i32 0
-  call void @llvm.memcpy.p0i8.p0i8.i32(i8* %target_p, i8* %h_p, i32 2, i32 2, i1 false)
-  call void @llvm.memcpy.p0i8.p0i8.i32(i8* %target_p, i8* %hel_p, i32 4, i32 4, i1 false)
-  call void @llvm.memcpy.p0i8.p0i8.i32(i8* %target_p, i8* %hello_u_p, i32 8, i32 8, i1 false)
+  call void @llvm.memcpy.p0i8.p0i8.i32(i8* align 2 %target_p, i8* align 2 %h_p, i32 2, i1 false)
+  call void @llvm.memcpy.p0i8.p0i8.i32(i8* align 4 %target_p, i8* align 4 %hel_p, i32 4, i1 false)
+  call void @llvm.memcpy.p0i8.p0i8.i32(i8* align 8 %target_p, i8* align 8 %hello_u_p, i32 8, i1 false)
   ret i32 0
 
 ; CHECK-LABEL: @MemCpy(
@@ -130,7 +130,7 @@ define i32 @MemCpy() {
 ; CHECK: ret i32 0
 }
 
-declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture, i32, i32, i1) nounwind
+declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture, i32, i1) nounwind
 
 declare i32 @strcmp(i8*, i8*) #0
 
@@ -140,6 +140,41 @@ define void @test9(i8* %x) {
   %y = call i32 @strcmp(i8* %x, i8* %x) #1
   ret void
 }
+
+; PR30484 - https://llvm.org/bugs/show_bug.cgi?id=30484
+; These aren't the library functions you're looking for...
+
+declare i32 @isdigit(i8)
+declare i32 @isascii(i8)
+declare i32 @toascii(i8)
+
+define i32 @fake_isdigit(i8 %x) {
+; CHECK-LABEL: @fake_isdigit(
+; CHECK-NEXT:    [[Y:%.*]] = call i32 @isdigit(i8 %x)
+; CHECK-NEXT:    ret i32 [[Y]]
+;
+  %y = call i32 @isdigit(i8 %x)
+  ret i32 %y
+}
+
+define i32 @fake_isascii(i8 %x) {
+; CHECK-LABEL: @fake_isascii(
+; CHECK-NEXT:    [[Y:%.*]] = call i32 @isascii(i8 %x)
+; CHECK-NEXT:    ret i32 [[Y]]
+;
+  %y = call i32 @isascii(i8 %x)
+  ret i32 %y
+}
+
+define i32 @fake_toascii(i8 %x) {
+; CHECK-LABEL: @fake_toascii(
+; CHECK-NEXT:    [[Y:%.*]] = call i32 @toascii(i8 %x)
+; CHECK-NEXT:    ret i32 [[Y]]
+;
+  %y = call i32 @toascii(i8 %x)
+  ret i32 %y
+}
+
 
 attributes #0 = { nobuiltin }
 attributes #1 = { builtin }

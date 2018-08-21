@@ -7,9 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include <algorithm>
 #include <string>
@@ -115,7 +113,7 @@ void Attributes::emitFnAttrCompatCheck(raw_ostream &OS, bool IsStringAttr) {
       Records.getAllDerivedDefinitions("CompatRule");
 
   for (auto *Rule : CompatRules) {
-    std::string FuncName = Rule->getValueAsString("CompatFunc");
+    StringRef FuncName = Rule->getValueAsString("CompatFunc");
     OS << "  Ret &= " << FuncName << "(Caller, Callee);\n";
   }
 
@@ -129,7 +127,7 @@ void Attributes::emitFnAttrCompatCheck(raw_ostream &OS, bool IsStringAttr) {
      << "                                const Function &Callee) {\n";
 
   for (auto *Rule : MergeRules) {
-    std::string FuncName = Rule->getValueAsString("MergeFunc");
+    StringRef FuncName = Rule->getValueAsString("MergeFunc");
     OS << "  " << FuncName << "(Caller, Callee);\n";
   }
 
@@ -156,7 +154,7 @@ void Attributes::printStrBoolAttrClasses(raw_ostream &OS,
   OS << "// StrBoolAttr classes\n";
   for (const auto *R : Records) {
     OS << "struct " << R->getName() << "Attr : StrBoolAttr {\n";
-    OS << "  static const char *getKind() {\n";
+    OS << "  static StringRef getKind() {\n";
     OS << "    return \"" << R->getValueAsString("AttrString") << "\";\n";
     OS << "  }\n";
     OS << "};\n";

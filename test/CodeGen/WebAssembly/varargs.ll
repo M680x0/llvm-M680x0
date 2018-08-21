@@ -1,4 +1,4 @@
-; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -verify-machineinstrs | FileCheck %s
+; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -disable-wasm-explicit-locals -verify-machineinstrs | FileCheck %s
 
 ; Test varargs constructs.
 
@@ -15,7 +15,7 @@ define void @start(i8** %ap, ...) {
 entry:
   %0 = bitcast i8** %ap to i8*
 ; Store the second argument (the hidden vararg buffer pointer) into ap
-; CHECK: i32.store $drop=, 0($0), $1
+; CHECK: i32.store 0($0), $1
   call void @llvm.va_start(i8* %0)
   ret void
 }
@@ -37,7 +37,7 @@ entry:
 ; CHECK-LABEL: copy:
 ; CHECK-NEXT: .param i32, i32{{$}}
 ; CHECK-NEXT: i32.load  $push0=, 0($1){{$}}
-; CHECK-NEXT: i32.store $drop=, 0($0), $pop0{{$}}
+; CHECK-NEXT: i32.store 0($0), $pop0{{$}}
 ; CHECK-NEXT: return{{$}}
 define void @copy(i8** %ap, i8** %bp) {
 entry:
@@ -52,12 +52,11 @@ entry:
 ; CHECK-LABEL: arg_i8:
 ; CHECK-NEXT: .param     i32{{$}}
 ; CHECK-NEXT: .result    i32{{$}}
-; CHECK-NEXT: .local     i32{{$}}
 ; CHECK-NEXT: i32.load   $push[[NUM0:[0-9]+]]=, 0($0){{$}}
 ; CHECK-NEXT: tee_local  $push[[NUM1:[0-9]+]]=, $1=, $pop[[NUM0]]{{$}}
 ; CHECK-NEXT: i32.const  $push[[NUM2:[0-9]+]]=, 4{{$}}
 ; CHECK-NEXT: i32.add    $push[[NUM3:[0-9]+]]=, $pop[[NUM1]], $pop[[NUM2]]{{$}}
-; CHECK-NEXT: i32.store  $drop=, 0($0), $pop[[NUM3]]{{$}}
+; CHECK-NEXT: i32.store  0($0), $pop[[NUM3]]{{$}}
 ; CHECK-NEXT: i32.load   $push[[NUM4:[0-9]+]]=, 0($1){{$}}
 ; CHECK-NEXT: return     $pop[[NUM4]]{{$}}
 define i8 @arg_i8(i8** %ap) {
@@ -71,7 +70,6 @@ entry:
 ; CHECK-LABEL: arg_i32:
 ; CHECK-NEXT: .param     i32{{$}}
 ; CHECK-NEXT: .result    i32{{$}}
-; CHECK-NEXT: .local     i32{{$}}
 ; CHECK-NEXT: i32.load   $push[[NUM0:[0-9]+]]=, 0($0){{$}}
 ; CHECK-NEXT: i32.const  $push[[NUM1:[0-9]+]]=, 3{{$}}
 ; CHECK-NEXT: i32.add    $push[[NUM2:[0-9]+]]=, $pop[[NUM0]], $pop[[NUM1]]{{$}}
@@ -80,7 +78,7 @@ entry:
 ; CHECK-NEXT: tee_local  $push[[NUM5:[0-9]+]]=, $1=, $pop[[NUM4]]{{$}}
 ; CHECK-NEXT: i32.const  $push[[NUM6:[0-9]+]]=, 4{{$}}
 ; CHECK-NEXT: i32.add    $push[[NUM7:[0-9]+]]=, $pop[[NUM5]], $pop[[NUM6]]{{$}}
-; CHECK-NEXT: i32.store  $drop=, 0($0), $pop[[NUM7]]{{$}}
+; CHECK-NEXT: i32.store  0($0), $pop[[NUM7]]{{$}}
 ; CHECK-NEXT: i32.load   $push[[NUM8:[0-9]+]]=, 0($1){{$}}
 ; CHECK-NEXT: return     $pop[[NUM8]]{{$}}
 define i32 @arg_i32(i8** %ap) {
@@ -93,7 +91,6 @@ entry:
 
 ; CHECK-LABEL: arg_i128:
 ; CHECK-NEXT: .param i32, i32{{$}}
-; CHECK-NEXT: .local
 ; CHECK: i32.and
 ; CHECK: i64.load
 ; CHECK: i64.load
@@ -123,8 +120,8 @@ define void @caller_none() {
 ; disabling it.
 
 ; CHECK-LABEL: caller_some
-; CHECK: i32.store
-; CHECK: i64.store
+; CHECK-DAG: i32.store
+; CHECK-DAG: i64.store
 define void @caller_some() {
   call void (...) @callee(i32 0, double 2.0)
   ret void
@@ -141,11 +138,32 @@ bb0:
 bb1:
   %0 = bitcast i8** %ap to i8*
 ; Store the second argument (the hidden vararg buffer pointer) into ap
-; CHECK: i32.store $drop=, 0($1), $2
+; CHECK: i32.store 0($1), $2
   call void @llvm.va_start(i8* %0)
   ret void
 }
 
+; Test a call to a varargs function with a non-legal fixed argument.
+
+declare void @callee_with_nonlegal_fixed(fp128, ...) nounwind
+
+; CHECK-LABEL: call_nonlegal_fixed:
+; CHECK: i64.const       $push[[L0:[0-9]+]]=, 0
+; CHECK: i64.const       $push[[L1:[0-9]+]]=, 0
+; CHECK: i32.const       $push[[L2:[0-9]+]]=, 0
+; CHECK: call            callee_with_nonlegal_fixed@FUNCTION, $pop[[L0]], $pop[[L1]], $pop[[L2]]{{$}}
+define void @call_nonlegal_fixed() nounwind {
+  call void (fp128, ...) @callee_with_nonlegal_fixed(fp128 0xL00000000000000000000000000000000)
+  ret void
+}
+
+; Test a definition a varargs function with a non-legal fixed argument.
+
+; CHECK-LABEL: nonlegal_fixed:
+; CHECK-NEXT: .param          i64, i64, i32{{$}}
+define void @nonlegal_fixed(fp128 %x, ...) nounwind {
+  ret void
+}
 
 declare void @llvm.va_start(i8*)
 declare void @llvm.va_end(i8*)

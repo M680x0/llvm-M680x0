@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file is part of the XCore Disassembler.
+/// This file is part of the XCore Disassembler.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -29,7 +29,7 @@ typedef MCDisassembler::DecodeStatus DecodeStatus;
 
 namespace {
 
-/// \brief A disassembler class for XCore.
+/// A disassembler class for XCore.
 class XCoreDisassembler : public MCDisassembler {
 public:
   XCoreDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx) :
@@ -769,7 +769,7 @@ MCDisassembler::DecodeStatus XCoreDisassembler::getInstruction(
 }
 
 namespace llvm {
-  extern Target TheXCoreTarget;
+  Target &getTheXCoreTarget();
 }
 
 static MCDisassembler *createXCoreDisassembler(const Target &T,
@@ -780,6 +780,6 @@ static MCDisassembler *createXCoreDisassembler(const Target &T,
 
 extern "C" void LLVMInitializeXCoreDisassembler() {
   // Register the disassembler.
-  TargetRegistry::RegisterMCDisassembler(TheXCoreTarget,
+  TargetRegistry::RegisterMCDisassembler(getTheXCoreTarget(),
                                          createXCoreDisassembler);
 }

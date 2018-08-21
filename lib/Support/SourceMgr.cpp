@@ -14,34 +14,28 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/Locale.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/SMLoc.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <limits>
+#include <memory>
+#include <string>
+#include <utility>
+
 using namespace llvm;
 
 static const size_t TabStop = 8;
-
-namespace {
-  struct LineNoCacheTy {
-    const char *LastQuery;
-    unsigned LastQueryBufferID;
-    unsigned LineNoOfQuery;
-  };
-}
-
-static LineNoCacheTy *getCache(void *Ptr) {
-  return (LineNoCacheTy*)Ptr;
-}
-
-
-SourceMgr::~SourceMgr() {
-  // Delete the line # cache if allocated.
-  if (LineNoCacheTy *Cache = getCache(LineNoCache))
-    delete Cache;
-}
 
 unsigned SourceMgr::AddIncludeFile(const std::string &Filename,
                                    SMLoc IncludeLoc,
@@ -74,46 +68,85 @@ unsigned SourceMgr::FindBufferContainingLoc(SMLoc Loc) const {
   return 0;
 }
 
+template <typename T>
+unsigned SourceMgr::SrcBuffer::getLineNumber(const char *Ptr) const {
+
+  // Ensure OffsetCache is allocated and populated with offsets of all the
+  // '\n' bytes.
+  std::vector<T> *Offsets = nullptr;
+  if (OffsetCache.isNull()) {
+    Offsets = new std::vector<T>();
+    OffsetCache = Offsets;
+    size_t Sz = Buffer->getBufferSize();
+    assert(Sz <= std::numeric_limits<T>::max());
+    StringRef S = Buffer->getBuffer();
+    for (size_t N = 0; N < Sz; ++N) {
+      if (S[N] == '\n') {
+        Offsets->push_back(static_cast<T>(N));
+      }
+    }
+  } else {
+    Offsets = OffsetCache.get<std::vector<T> *>();
+  }
+
+  const char *BufStart = Buffer->getBufferStart();
+  assert(Ptr >= BufStart && Ptr <= Buffer->getBufferEnd());
+  ptrdiff_t PtrDiff = Ptr - BufStart;
+  assert(PtrDiff >= 0 && static_cast<size_t>(PtrDiff) <= std::numeric_limits<T>::max());
+  T PtrOffset = static_cast<T>(PtrDiff);
+
+  // std::lower_bound returns the first EOL offset that's not-less-than
+  // PtrOffset, meaning the EOL that _ends the line_ that PtrOffset is on
+  // (including if PtrOffset refers to the EOL itself). If there's no such
+  // EOL, returns end().
+  auto EOL = std::lower_bound(Offsets->begin(), Offsets->end(), PtrOffset);
+
+  // Lines count from 1, so add 1 to the distance from the 0th line.
+  return (1 + (EOL - Offsets->begin()));
+}
+
+SourceMgr::SrcBuffer::SrcBuffer(SourceMgr::SrcBuffer &&Other)
+  : Buffer(std::move(Other.Buffer)),
+    OffsetCache(Other.OffsetCache),
+    IncludeLoc(Other.IncludeLoc) {
+  Other.OffsetCache = nullptr;
+}
+
+SourceMgr::SrcBuffer::~SrcBuffer() {
+  if (!OffsetCache.isNull()) {
+    if (OffsetCache.is<std::vector<uint8_t>*>())
+      delete OffsetCache.get<std::vector<uint8_t>*>();
+    else if (OffsetCache.is<std::vector<uint16_t>*>())
+      delete OffsetCache.get<std::vector<uint16_t>*>();
+    else if (OffsetCache.is<std::vector<uint32_t>*>())
+      delete OffsetCache.get<std::vector<uint32_t>*>();
+    else
+      delete OffsetCache.get<std::vector<uint64_t>*>();
+    OffsetCache = nullptr;
+  }
+}
+
 std::pair<unsigned, unsigned>
 SourceMgr::getLineAndColumn(SMLoc Loc, unsigned BufferID) const {
   if (!BufferID)
     BufferID = FindBufferContainingLoc(Loc);
   assert(BufferID && "Invalid Location!");
 
-  const MemoryBuffer *Buff = getMemoryBuffer(BufferID);
+  auto &SB = getBufferInfo(BufferID);
+  const char *Ptr = Loc.getPointer();
 
-  // Count the number of \n's between the start of the file and the specified
-  // location.
-  unsigned LineNo = 1;
+  size_t Sz = SB.Buffer->getBufferSize();
+  unsigned LineNo;
+  if (Sz <= std::numeric_limits<uint8_t>::max())
+    LineNo = SB.getLineNumber<uint8_t>(Ptr);
+  else if (Sz <= std::numeric_limits<uint16_t>::max())
+    LineNo = SB.getLineNumber<uint16_t>(Ptr);
+  else if (Sz <= std::numeric_limits<uint32_t>::max())
+    LineNo = SB.getLineNumber<uint32_t>(Ptr);
+  else
+    LineNo = SB.getLineNumber<uint64_t>(Ptr);
 
-  const char *BufStart = Buff->getBufferStart();
-  const char *Ptr = BufStart;
-
-  // If we have a line number cache, and if the query is to a later point in the
-  // same file, start searching from the last query location.  This optimizes
-  // for the case when multiple diagnostics come out of one file in order.
-  if (LineNoCacheTy *Cache = getCache(LineNoCache))
-    if (Cache->LastQueryBufferID == BufferID &&
-        Cache->LastQuery <= Loc.getPointer()) {
-      Ptr = Cache->LastQuery;
-      LineNo = Cache->LineNoOfQuery;
-    }
-
-  // Scan for the location being queried, keeping track of the number of lines
-  // we see.
-  for (; SMLoc::getFromPointer(Ptr) != Loc; ++Ptr)
-    if (*Ptr == '\n') ++LineNo;
-
-  // Allocate the line number cache if it doesn't exist.
-  if (!LineNoCache)
-    LineNoCache = new LineNoCacheTy();
-
-  // Update the line # cache.
-  LineNoCacheTy &Cache = *getCache(LineNoCache);
-  Cache.LastQueryBufferID = BufferID;
-  Cache.LastQuery = Ptr;
-  Cache.LineNoOfQuery = LineNo;
-  
+  const char *BufStart = SB.Buffer->getBufferStart();
   size_t NewlineOffs = StringRef(BufStart, Ptr-BufStart).find_last_of("\n\r");
   if (NewlineOffs == StringRef::npos) NewlineOffs = ~(size_t)0;
   return std::make_pair(LineNo, Ptr-BufStart-NewlineOffs);
@@ -132,17 +165,15 @@ void SourceMgr::PrintIncludeStack(SMLoc IncludeLoc, raw_ostream &OS) const {
      << ":" << FindLineNumber(IncludeLoc, CurBuf) << ":\n";
 }
 
-
 SMDiagnostic SourceMgr::GetMessage(SMLoc Loc, SourceMgr::DiagKind Kind,
                                    const Twine &Msg,
                                    ArrayRef<SMRange> Ranges,
                                    ArrayRef<SMFixIt> FixIts) const {
-
   // First thing to do: find the current buffer containing the specified
   // location to pull out the source line.
   SmallVector<std::pair<unsigned, unsigned>, 4> ColRanges;
   std::pair<unsigned, unsigned> LineAndCol;
-  const char *BufferID = "<unknown>";
+  StringRef BufferID = "<unknown>";
   std::string LineStr;
   
   if (Loc.isValid()) {
@@ -223,7 +254,7 @@ void SourceMgr::PrintMessage(raw_ostream &OS, SMLoc Loc,
 void SourceMgr::PrintMessage(SMLoc Loc, SourceMgr::DiagKind Kind,
                              const Twine &Msg, ArrayRef<SMRange> Ranges,
                              ArrayRef<SMFixIt> FixIts, bool ShowColors) const {
-  PrintMessage(llvm::errs(), Loc, Kind, Msg, Ranges, FixIts, ShowColors);
+  PrintMessage(errs(), Loc, Kind, Msg, Ranges, FixIts, ShowColors);
 }
 
 //===----------------------------------------------------------------------===//
@@ -233,12 +264,12 @@ void SourceMgr::PrintMessage(SMLoc Loc, SourceMgr::DiagKind Kind,
 SMDiagnostic::SMDiagnostic(const SourceMgr &sm, SMLoc L, StringRef FN,
                            int Line, int Col, SourceMgr::DiagKind Kind,
                            StringRef Msg, StringRef LineStr,
-                           ArrayRef<std::pair<unsigned,unsigned> > Ranges,
+                           ArrayRef<std::pair<unsigned,unsigned>> Ranges,
                            ArrayRef<SMFixIt> Hints)
   : SM(&sm), Loc(L), Filename(FN), LineNo(Line), ColumnNo(Col), Kind(Kind),
     Message(Msg), LineContents(LineStr), Ranges(Ranges.vec()),
     FixIts(Hints.begin(), Hints.end()) {
-  std::sort(FixIts.begin(), FixIts.end());
+  llvm::sort(FixIts.begin(), FixIts.end());
 }
 
 static void buildFixItLine(std::string &CaretLine, std::string &FixItLine,
@@ -286,7 +317,7 @@ static void buildFixItLine(std::string &CaretLine, std::string &FixItLine,
     // FIXME: This assertion is intended to catch unintended use of multibyte
     // characters in fixits. If we decide to do this, we'll have to track
     // separate byte widths for the source and fixit lines.
-    assert((size_t)llvm::sys::locale::columnWidth(I->getText()) ==
+    assert((size_t)sys::locale::columnWidth(I->getText()) ==
            I->getText().size());
 
     // This relies on one byte per column in our fixit hints.
@@ -374,6 +405,11 @@ void SMDiagnostic::print(const char *ProgName, raw_ostream &S, bool ShowColors,
       if (ShowColors)
         S.changeColor(raw_ostream::BLACK, true);
       S << "note: ";
+      break;
+    case SourceMgr::DK_Remark:
+      if (ShowColors)
+        S.changeColor(raw_ostream::BLUE, true);
+      S << "remark: ";
       break;
     }
 

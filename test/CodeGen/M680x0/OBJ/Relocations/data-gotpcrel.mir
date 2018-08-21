@@ -21,7 +21,7 @@
 name: DATA
 body: |
   bb.0:
-    %a0 = MOV32rk target-flags(M680x0-gotpcrel) @dst, %d0, implicit-def %ccr
-    %a0 = MOV32rq target-flags(M680x0-gotpcrel) @dst,      implicit-def %ccr
+    $a0 = MOV32rk target-flags(M680x0-gotpcrel) @dst, $d0, implicit-def $ccr
+    $a0 = MOV32rq target-flags(M680x0-gotpcrel) @dst,      implicit-def $ccr
 
 ...

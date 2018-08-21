@@ -62,7 +62,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Scalar/SpeculativeExecution.h"
-#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Instructions.h"
@@ -112,7 +112,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override;
   bool runOnFunction(Function &F) override;
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     if (OnlyIfDivergentTarget)
       return "Speculatively execute instructions if target has divergent "
              "branches";
@@ -137,6 +137,7 @@ INITIALIZE_PASS_END(SpeculativeExecutionLegacyPass, "speculative-execution",
 void SpeculativeExecutionLegacyPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetTransformInfoWrapperPass>();
   AU.addPreserved<GlobalsAAWrapperPass>();
+  AU.setPreservesCFG();
 }
 
 bool SpeculativeExecutionLegacyPass::runOnFunction(Function &F) {
@@ -151,8 +152,8 @@ namespace llvm {
 
 bool SpeculativeExecutionPass::runImpl(Function &F, TargetTransformInfo *TTI) {
   if (OnlyIfDivergentTarget && !TTI->hasBranchDivergence()) {
-    DEBUG(dbgs() << "Not running SpeculativeExecution because "
-                    "TTI->hasBranchDivergence() is false.\n");
+    LLVM_DEBUG(dbgs() << "Not running SpeculativeExecution because "
+                         "TTI->hasBranchDivergence() is false.\n");
     return false;
   }
 
@@ -224,6 +225,24 @@ static unsigned ComputeSpeculationCost(const Instruction *I,
     case Instruction::Xor:
     case Instruction::ZExt:
     case Instruction::SExt:
+    case Instruction::Call:
+    case Instruction::BitCast:
+    case Instruction::PtrToInt:
+    case Instruction::IntToPtr:
+    case Instruction::AddrSpaceCast:
+    case Instruction::FPToUI:
+    case Instruction::FPToSI:
+    case Instruction::UIToFP:
+    case Instruction::SIToFP:
+    case Instruction::FPExt:
+    case Instruction::FPTrunc:
+    case Instruction::FAdd:
+    case Instruction::FSub:
+    case Instruction::FMul:
+    case Instruction::FDiv:
+    case Instruction::FRem:
+    case Instruction::ICmp:
+    case Instruction::FCmp:
       return TTI.getUserCost(I);
 
     default:
@@ -233,7 +252,7 @@ static unsigned ComputeSpeculationCost(const Instruction *I,
 
 bool SpeculativeExecutionPass::considerHoistingFromTo(
     BasicBlock &FromBlock, BasicBlock &ToBlock) {
-  SmallSet<const Instruction *, 8> NotHoisted;
+  SmallPtrSet<const Instruction *, 8> NotHoisted;
   const auto AllPrecedingUsesFromBlockHoisted = [&NotHoisted](User *U) {
     for (Value* V : U->operand_values()) {
       if (Instruction *I = dyn_cast<Instruction>(V)) {
@@ -296,6 +315,7 @@ PreservedAnalyses SpeculativeExecutionPass::run(Function &F,
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserve<GlobalsAA>();
+  PA.preserveSet<CFGAnalyses>();
   return PA;
 }
 }  // namespace llvm

@@ -21,7 +21,7 @@
 name: MxBiArOp_RFRRF
 body: |
   bb.0:
-    %wd0 = ADDX16dd %wd0, %wd1, implicit %ccr, implicit-def %ccr
-    %wd3 = ADDX16dd %wd3, %wd2, implicit %ccr, implicit-def %ccr
-    %d0  = ADDX32dd  %d0,  %d1, implicit %ccr, implicit-def %ccr
-    %d7  = ADDX32dd  %d7,  %d1, implicit %ccr, implicit-def %ccr
+    $wd0 = ADDX16dd $wd0, $wd1, implicit $ccr, implicit-def $ccr
+    $wd3 = ADDX16dd $wd3, $wd2, implicit $ccr, implicit-def $ccr
+    $d0  = ADDX32dd  $d0,  $d1, implicit $ccr, implicit-def $ccr
+    $d7  = ADDX32dd  $d7,  $d1, implicit $ccr, implicit-def $ccr

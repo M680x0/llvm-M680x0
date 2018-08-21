@@ -1,4 +1,4 @@
-//===-- AArch64AsmPrinter.cpp - AArch64 LLVM assembly writer --------------===//
+//===- AArch64AsmPrinter.cpp - AArch64 LLVM assembly writer ---------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,34 +12,47 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/AArch64AddressingModes.h"
 #include "AArch64.h"
 #include "AArch64MCInstLower.h"
 #include "AArch64MachineFunctionInfo.h"
 #include "AArch64RegisterInfo.h"
 #include "AArch64Subtarget.h"
+#include "AArch64TargetObjectFile.h"
 #include "InstPrinter/AArch64InstPrinter.h"
-#include "MCTargetDesc/AArch64MCExpr.h"
+#include "MCTargetDesc/AArch64AddressingModes.h"
+#include "MCTargetDesc/AArch64MCTargetDesc.h"
+#include "Utils/AArch64BaseInfo.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineModuleInfoImpls.h"
+#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/StackMaps.h"
-#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DataLayout.h"
-#include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstBuilder.h"
-#include "llvm/MC/MCLinkerOptimizationHint.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/Support/Debug.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <map>
+#include <memory>
+
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -54,13 +67,11 @@ class AArch64AsmPrinter : public AsmPrinter {
 public:
   AArch64AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
       : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(OutContext, *this),
-        SM(*this), AArch64FI(nullptr) {}
+        SM(*this) {}
 
-  const char *getPassName() const override {
-    return "AArch64 Assembly Printer";
-  }
+  StringRef getPassName() const override { return "AArch64 Assembly Printer"; }
 
-  /// \brief Wrapper for MCInstLowering.lowerOperand() for the
+  /// Wrapper for MCInstLowering.lowerOperand() for the
   /// tblgen'erated pseudo lowering.
   bool lowerOperand(const MachineOperand &MO, MCOperand &MCOp) const {
     return MCInstLowering.lowerOperand(MO, MCOp);
@@ -70,7 +81,14 @@ public:
                      const MachineInstr &MI);
   void LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
                        const MachineInstr &MI);
-  /// \brief tblgen'erated driver function for lowering simple MI->MC
+
+  void LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI);
+  void LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI);
+  void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI);
+
+  void EmitSled(const MachineInstr &MI, SledKind Kind);
+
+  /// tblgen'erated driver function for lowering simple MI->MC
   /// pseudo instructions.
   bool emitPseudoExpansionLowering(MCStreamer &OutStreamer,
                                    const MachineInstr *MI);
@@ -85,7 +103,9 @@ public:
   bool runOnMachineFunction(MachineFunction &F) override {
     AArch64FI = F.getInfo<AArch64FunctionInfo>();
     STI = static_cast<const AArch64Subtarget*>(&F.getSubtarget());
-    return AsmPrinter::runOnMachineFunction(F);
+    bool Result = AsmPrinter::runOnMachineFunction(F);
+    emitXRayTable();
+    return Result;
   }
 
 private:
@@ -108,21 +128,76 @@ private:
 
   MCSymbol *GetCPISymbol(unsigned CPID) const override;
   void EmitEndOfAsmFile(Module &M) override;
-  AArch64FunctionInfo *AArch64FI;
 
-  /// \brief Emit the LOHs contained in AArch64FI.
+  AArch64FunctionInfo *AArch64FI = nullptr;
+
+  /// Emit the LOHs contained in AArch64FI.
   void EmitLOHs();
 
   /// Emit instruction to set float register to zero.
   void EmitFMov0(const MachineInstr &MI);
 
-  typedef std::map<const MachineInstr *, MCSymbol *> MInstToMCSymbol;
+  using MInstToMCSymbol = std::map<const MachineInstr *, MCSymbol *>;
+
   MInstToMCSymbol LOHInstToLabel;
 };
 
-} // end of anonymous namespace
+} // end anonymous namespace
 
-//===----------------------------------------------------------------------===//
+void AArch64AsmPrinter::LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI)
+{
+  EmitSled(MI, SledKind::FUNCTION_ENTER);
+}
+
+void AArch64AsmPrinter::LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI)
+{
+  EmitSled(MI, SledKind::FUNCTION_EXIT);
+}
+
+void AArch64AsmPrinter::LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI)
+{
+  EmitSled(MI, SledKind::TAIL_CALL);
+}
+
+void AArch64AsmPrinter::EmitSled(const MachineInstr &MI, SledKind Kind)
+{
+  static const int8_t NoopsInSledCount = 7;
+  // We want to emit the following pattern:
+  //
+  // .Lxray_sled_N:
+  //   ALIGN
+  //   B #32
+  //   ; 7 NOP instructions (28 bytes)
+  // .tmpN
+  //
+  // We need the 28 bytes (7 instructions) because at runtime, we'd be patching
+  // over the full 32 bytes (8 instructions) with the following pattern:
+  //
+  //   STP X0, X30, [SP, #-16]! ; push X0 and the link register to the stack
+  //   LDR W0, #12 ; W0 := function ID
+  //   LDR X16,#12 ; X16 := addr of __xray_FunctionEntry or __xray_FunctionExit
+  //   BLR X16 ; call the tracing trampoline
+  //   ;DATA: 32 bits of function ID
+  //   ;DATA: lower 32 bits of the address of the trampoline
+  //   ;DATA: higher 32 bits of the address of the trampoline
+  //   LDP X0, X30, [SP], #16 ; pop X0 and the link register from the stack
+  //
+  OutStreamer->EmitCodeAlignment(4);
+  auto CurSled = OutContext.createTempSymbol("xray_sled_", true);
+  OutStreamer->EmitLabel(CurSled);
+  auto Target = OutContext.createTempSymbol();
+
+  // Emit "B #32" instruction, which jumps over the next 28 bytes.
+  // The operand has to be the number of 4-byte instructions to jump over,
+  // including the current instruction.
+  EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::B).addImm(8));
+
+  for (int8_t I = 0; I < NoopsInSledCount; I++)
+    EmitToStreamer(*OutStreamer, MCInstBuilder(AArch64::HINT).addImm(0));
+
+  OutStreamer->EmitLabel(Target);
+  recordSled(CurSled, MI, Kind);
+}
 
 void AArch64AsmPrinter::EmitEndOfAsmFile(Module &M) {
   const Triple &TT = TM.getTargetTriple();
@@ -162,7 +237,7 @@ MCSymbol *AArch64AsmPrinter::GetCPISymbol(unsigned CPID) const {
   // Darwin uses a linker-private symbol name for constant-pools (to
   // avoid addends on the relocation?), ELF has no such concept and
   // uses a normal private symbol.
-  if (getDataLayout().getLinkerPrivateGlobalPrefix()[0])
+  if (!getDataLayout().getLinkerPrivateGlobalPrefix().empty())
     return OutContext.getOrCreateSymbol(
         Twine(getDataLayout().getLinkerPrivateGlobalPrefix()) + "CPI" +
         Twine(getFunctionNumber()) + "_" + Twine(CPID));
@@ -199,6 +274,11 @@ void AArch64AsmPrinter::printOperand(const MachineInstr *MI, unsigned OpNum,
 
     Sym->print(O, MAI);
     printOffset(MO.getOffset(), O);
+    break;
+  }
+  case MachineOperand::MO_BlockAddress: {
+    MCSymbol *Sym = GetBlockAddressSymbol(MO.getBlockAddress());
+    Sym->print(O, MAI);
     break;
   }
   }
@@ -255,6 +335,9 @@ bool AArch64AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
     switch (ExtraCode[0]) {
     default:
       return true; // Unknown modifier.
+    case 'a':      // Print 'a' modifier
+      PrintAsmMemoryOperand(MI, OpNum, AsmVariant, ExtraCode, O);
+      return false;
     case 'w':      // Print W register
     case 'x':      // Print X register
       if (MO.isReg())
@@ -323,7 +406,7 @@ bool AArch64AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
                                               unsigned AsmVariant,
                                               const char *ExtraCode,
                                               raw_ostream &O) {
-  if (ExtraCode && ExtraCode[0])
+  if (ExtraCode && ExtraCode[0] && ExtraCode[0] != 'a')
     return true; // Unknown modifier.
 
   const MachineOperand &MO = MI->getOperand(OpNum);
@@ -354,7 +437,7 @@ void AArch64AsmPrinter::PrintDebugValueComment(const MachineInstr *MI,
 
 void AArch64AsmPrinter::LowerSTACKMAP(MCStreamer &OutStreamer, StackMaps &SM,
                                       const MachineInstr &MI) {
-  unsigned NumNOPBytes = MI.getOperand(1).getImm();
+  unsigned NumNOPBytes = StackMapOpers(&MI).getNumPatchBytes();
 
   SM.recordStackMap(MI);
   assert(NumNOPBytes % 4 == 0 && "Invalid number of NOP bytes requested!");
@@ -422,11 +505,13 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
 
 void AArch64AsmPrinter::EmitFMov0(const MachineInstr &MI) {
   unsigned DestReg = MI.getOperand(0).getReg();
-  if (STI->hasZeroCycleZeroing()) {
-    // Convert S/D register to corresponding Q register
-    if (AArch64::S0 <= DestReg && DestReg <= AArch64::S31) {
+  if (STI->hasZeroCycleZeroing() && !STI->hasZeroCycleZeroingFPWorkaround()) {
+    // Convert H/S/D register to corresponding Q register
+    if (AArch64::H0 <= DestReg && DestReg <= AArch64::H31)
+      DestReg = AArch64::Q0 + (DestReg - AArch64::H0);
+    else if (AArch64::S0 <= DestReg && DestReg <= AArch64::S31)
       DestReg = AArch64::Q0 + (DestReg - AArch64::S0);
-    } else {
+    else {
       assert(AArch64::D0 <= DestReg && DestReg <= AArch64::D31);
       DestReg = AArch64::Q0 + (DestReg - AArch64::D0);
     }
@@ -439,6 +524,11 @@ void AArch64AsmPrinter::EmitFMov0(const MachineInstr &MI) {
     MCInst FMov;
     switch (MI.getOpcode()) {
     default: llvm_unreachable("Unexpected opcode");
+    case AArch64::FMOVH0:
+      FMov.setOpcode(AArch64::FMOVWHr);
+      FMov.addOperand(MCOperand::createReg(DestReg));
+      FMov.addOperand(MCOperand::createReg(AArch64::WZR));
+      break;
     case AArch64::FMOVS0:
       FMov.setOpcode(AArch64::FMOVWSr);
       FMov.addOperand(MCOperand::createReg(DestReg));
@@ -475,6 +565,20 @@ void AArch64AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
     break;
+  case AArch64::MOVIv2d_ns:
+    // If the target has <rdar://problem/16473581>, lower this
+    // instruction to movi.16b instead.
+    if (STI->hasZeroCycleZeroingFPWorkaround() &&
+        MI->getOperand(1).getImm() == 0) {
+      MCInst TmpInst;
+      TmpInst.setOpcode(AArch64::MOVIv16b_ns);
+      TmpInst.addOperand(MCOperand::createReg(MI->getOperand(0).getReg()));
+      TmpInst.addOperand(MCOperand::createImm(MI->getOperand(1).getImm()));
+      EmitToStreamer(*OutStreamer, TmpInst);
+      return;
+    }
+    break;
+
   case AArch64::DBG_VALUE: {
     if (isVerbose() && OutStreamer->hasRawTextSupport()) {
       SmallString<128> TmpStr;
@@ -515,8 +619,7 @@ void AArch64AsmPrinter::EmitInstruction(const MachineInstr *MI) {
     const MachineOperand &MO_Sym = MI->getOperand(0);
     MachineOperand MO_TLSDESC_LO12(MO_Sym), MO_TLSDESC(MO_Sym);
     MCOperand Sym, SymTLSDescLo12, SymTLSDesc;
-    MO_TLSDESC_LO12.setTargetFlags(AArch64II::MO_TLS | AArch64II::MO_PAGEOFF |
-                                   AArch64II::MO_NC);
+    MO_TLSDESC_LO12.setTargetFlags(AArch64II::MO_TLS | AArch64II::MO_PAGEOFF);
     MO_TLSDESC.setTargetFlags(AArch64II::MO_TLS | AArch64II::MO_PAGE);
     MCInstLowering.lowerOperand(MO_Sym, Sym);
     MCInstLowering.lowerOperand(MO_TLSDESC_LO12, SymTLSDescLo12);
@@ -559,6 +662,7 @@ void AArch64AsmPrinter::EmitInstruction(const MachineInstr *MI) {
     return;
   }
 
+  case AArch64::FMOVH0:
   case AArch64::FMOVS0:
   case AArch64::FMOVD0:
     EmitFMov0(*MI);
@@ -569,6 +673,18 @@ void AArch64AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
   case TargetOpcode::PATCHPOINT:
     return LowerPATCHPOINT(*OutStreamer, SM, *MI);
+
+  case TargetOpcode::PATCHABLE_FUNCTION_ENTER:
+    LowerPATCHABLE_FUNCTION_ENTER(*MI);
+    return;
+
+  case TargetOpcode::PATCHABLE_FUNCTION_EXIT:
+    LowerPATCHABLE_FUNCTION_EXIT(*MI);
+    return;
+
+  case TargetOpcode::PATCHABLE_TAIL_CALL:
+    LowerPATCHABLE_TAIL_CALL(*MI);
+    return;
   }
 
   // Finally, do the automated lowerings for everything else.
@@ -579,7 +695,7 @@ void AArch64AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 // Force static initialization.
 extern "C" void LLVMInitializeAArch64AsmPrinter() {
-  RegisterAsmPrinter<AArch64AsmPrinter> X(TheAArch64leTarget);
-  RegisterAsmPrinter<AArch64AsmPrinter> Y(TheAArch64beTarget);
-  RegisterAsmPrinter<AArch64AsmPrinter> Z(TheARM64Target);
+  RegisterAsmPrinter<AArch64AsmPrinter> X(getTheAArch64leTarget());
+  RegisterAsmPrinter<AArch64AsmPrinter> Y(getTheAArch64beTarget());
+  RegisterAsmPrinter<AArch64AsmPrinter> Z(getTheARM64Target());
 }

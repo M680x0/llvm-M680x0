@@ -1,4 +1,4 @@
-//===-- M680x0TargetInfo.cpp - M680x0 Target Implementation -------------------===//
+//===-- M680x0TargetInfo.cpp - M680x0 Target Implementation ---------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -15,6 +15,6 @@ using namespace llvm;
 Target llvm::TheM680x0Target;
 
 extern "C" void LLVMInitializeM680x0TargetInfo() {
-  RegisterTarget<Triple::m680x0, /*HasJIT=*/true>
-      X(TheM680x0Target, "m680x0", "Motorola 68000 family");
+  RegisterTarget<Triple::m680x0, /*HasJIT=*/true> X(
+      TheM680x0Target, "m680x0", "Motorola 68000 family", "M680x0");
 }

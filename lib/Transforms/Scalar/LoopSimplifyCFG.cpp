@@ -18,29 +18,32 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/DependenceAnalysis.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
-#include "llvm/Analysis/LoopPassManager.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "loop-simplifycfg"
 
-static bool simplifyLoopCFG(Loop &L, DominatorTree &DT, LoopInfo &LI) {
+static bool simplifyLoopCFG(Loop &L, DominatorTree &DT, LoopInfo &LI,
+                            ScalarEvolution &SE) {
   bool Changed = false;
   // Copy blocks into a temporary array to avoid iterator invalidation issues
   // as we remove them.
-  SmallVector<WeakVH, 16> Blocks(L.blocks());
+  SmallVector<WeakTrackingVH, 16> Blocks(L.blocks());
 
   for (auto &Block : Blocks) {
     // Attempt to merge blocks in the trivial case. Don't modify blocks which
@@ -53,28 +56,22 @@ static bool simplifyLoopCFG(Loop &L, DominatorTree &DT, LoopInfo &LI) {
     if (!Pred || !Pred->getSingleSuccessor() || LI.getLoopFor(Pred) != &L)
       continue;
 
-    // Pred is going to disappear, so we need to update the loop info.
-    if (L.getHeader() == Pred)
-      L.moveToHeader(Succ);
-    LI.removeBlock(Pred);
-    MergeBasicBlockIntoOnlyPred(Succ, &DT);
+    // Merge Succ into Pred and delete it.
+    MergeBlockIntoPredecessor(Succ, &DT, &LI);
+
+    SE.forgetLoop(&L);
     Changed = true;
   }
 
   return Changed;
 }
 
-PreservedAnalyses LoopSimplifyCFGPass::run(Loop &L, LoopAnalysisManager &AM) {
-  const auto &FAM =
-      AM.getResult<FunctionAnalysisManagerLoopProxy>(L).getManager();
-  Function *F = L.getHeader()->getParent();
-
-  auto *LI = FAM.getCachedResult<LoopAnalysis>(*F);
-  auto *DT = FAM.getCachedResult<DominatorTreeAnalysis>(*F);
-  assert((LI && DT) && "Analyses for LoopSimplifyCFG not available");
-
-  if (!simplifyLoopCFG(L, *DT, *LI))
+PreservedAnalyses LoopSimplifyCFGPass::run(Loop &L, LoopAnalysisManager &AM,
+                                           LoopStandardAnalysisResults &AR,
+                                           LPMUpdater &) {
+  if (!simplifyLoopCFG(L, AR.DT, AR.LI, AR.SE))
     return PreservedAnalyses::all();
+
   return getLoopPassPreservedAnalyses();
 }
 
@@ -92,7 +89,8 @@ public:
 
     DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-    return simplifyLoopCFG(*L, DT, LI);
+    ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+    return simplifyLoopCFG(*L, DT, LI, SE);
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {

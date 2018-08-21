@@ -13,7 +13,7 @@
 
 #include "llvm/Bitcode/BitcodeWriterPass.h"
 #include "llvm/Analysis/ModuleSummaryAnalysis.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
@@ -23,7 +23,7 @@ PreservedAnalyses BitcodeWriterPass::run(Module &M, ModuleAnalysisManager &AM) {
   const ModuleSummaryIndex *Index =
       EmitSummaryIndex ? &(AM.getResult<ModuleSummaryIndexAnalysis>(M))
                        : nullptr;
-  WriteBitcodeToFile(&M, OS, ShouldPreserveUseListOrder, Index, EmitModuleHash);
+  WriteBitcodeToFile(M, OS, ShouldPreserveUseListOrder, Index, EmitModuleHash);
   return PreservedAnalyses::all();
 }
 
@@ -48,14 +48,14 @@ namespace {
       initializeWriteBitcodePassPass(*PassRegistry::getPassRegistry());
     }
 
-    const char *getPassName() const override { return "Bitcode Writer"; }
+    StringRef getPassName() const override { return "Bitcode Writer"; }
 
     bool runOnModule(Module &M) override {
       const ModuleSummaryIndex *Index =
           EmitSummaryIndex
               ? &(getAnalysis<ModuleSummaryIndexWrapperPass>().getIndex())
               : nullptr;
-      WriteBitcodeToFile(&M, OS, ShouldPreserveUseListOrder, Index,
+      WriteBitcodeToFile(M, OS, ShouldPreserveUseListOrder, Index,
                          EmitModuleHash);
       return false;
     }
@@ -79,4 +79,8 @@ ModulePass *llvm::createBitcodeWriterPass(raw_ostream &Str,
                                           bool EmitSummaryIndex, bool EmitModuleHash) {
   return new WriteBitcodePass(Str, ShouldPreserveUseListOrder,
                               EmitSummaryIndex, EmitModuleHash);
+}
+
+bool llvm::isBitcodeWriterPass(Pass *P) {
+  return P->getPassID() == (llvm::AnalysisID)&WriteBitcodePass::ID;
 }

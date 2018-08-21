@@ -70,13 +70,8 @@ template <typename T> class ArrayRef;
   /// itelf.
   class Dependence {
   protected:
-    Dependence(const Dependence &) = default;
-
-    // FIXME: When we move to MSVC 2015 as the base compiler for Visual Studio
-    // support, uncomment this line to allow a defaulted move constructor for
-    // Dependence. Currently, FullDependence relies on the copy constructor, but
-    // that is acceptable given the triviality of the class.
-    // Dependence(Dependence &&) = default;
+    Dependence(Dependence &&) = default;
+    Dependence &operator=(Dependence &&) = default;
 
   public:
     Dependence(Instruction *Source,
@@ -221,11 +216,6 @@ template <typename T> class ArrayRef;
   public:
     FullDependence(Instruction *Src, Instruction *Dst, bool LoopIndependent,
                    unsigned Levels);
-
-    FullDependence(FullDependence &&RHS)
-        : Dependence(std::move(RHS)), Levels(RHS.Levels),
-          LoopIndependent(RHS.LoopIndependent), Consistent(RHS.Consistent),
-          DV(std::move(RHS.DV)) {}
 
     /// isLoopIndependent - Returns true if this is a loop-independent
     /// dependence.
@@ -566,6 +556,17 @@ template <typename T> class ArrayRef;
     bool isKnownPredicate(ICmpInst::Predicate Pred,
                           const SCEV *X,
                           const SCEV *Y) const;
+
+    /// isKnownLessThan - Compare to see if S is less than Size
+    /// Another wrapper for isKnownNegative(S - max(Size, 1)) with some extra
+    /// checking if S is an AddRec and we can prove lessthan using the loop
+    /// bounds.
+    bool isKnownLessThan(const SCEV *S, const SCEV *Size) const;
+
+    /// isKnownNonNegative - Compare to see if S is known not to be negative
+    /// Uses the fact that S comes from Ptr, which may be an inbound GEP,
+    /// Proving there is no wrapping going on.
+    bool isKnownNonNegative(const SCEV *S, const Value *Ptr) const;
 
     /// collectUpperBound - All subscripts are the same type (on my machine,
     /// an i64). The loop bound may be a smaller type. collectUpperBound
@@ -924,18 +925,18 @@ template <typename T> class ArrayRef;
                         SmallVectorImpl<Subscript> &Pair);
   }; // class DependenceInfo
 
-  /// \brief AnalysisPass to compute dependence information in a function
+  /// AnalysisPass to compute dependence information in a function
   class DependenceAnalysis : public AnalysisInfoMixin<DependenceAnalysis> {
   public:
     typedef DependenceInfo Result;
     Result run(Function &F, FunctionAnalysisManager &FAM);
 
   private:
-    static char PassID;
+    static AnalysisKey Key;
     friend struct AnalysisInfoMixin<DependenceAnalysis>;
   }; // class DependenceAnalysis
 
-  /// \brief Legacy pass manager pass to access dependence information
+  /// Legacy pass manager pass to access dependence information
   class DependenceAnalysisWrapperPass : public FunctionPass {
   public:
     static char ID; // Class identification, replacement for typeinfo

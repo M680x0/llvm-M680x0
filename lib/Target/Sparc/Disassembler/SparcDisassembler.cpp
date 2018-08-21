@@ -14,11 +14,11 @@
 #include "Sparc.h"
 #include "SparcRegisterInfo.h"
 #include "SparcSubtarget.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCFixedLenDisassembler.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
@@ -44,7 +44,9 @@ public:
 }
 
 namespace llvm {
-extern Target TheSparcTarget, TheSparcV9Target, TheSparcelTarget;
+Target &getTheSparcTarget();
+Target &getTheSparcV9Target();
+Target &getTheSparcelTarget();
 }
 
 static MCDisassembler *createSparcDisassembler(const Target &T,
@@ -56,11 +58,11 @@ static MCDisassembler *createSparcDisassembler(const Target &T,
 
 extern "C" void LLVMInitializeSparcDisassembler() {
   // Register the disassembler.
-  TargetRegistry::RegisterMCDisassembler(TheSparcTarget,
+  TargetRegistry::RegisterMCDisassembler(getTheSparcTarget(),
                                          createSparcDisassembler);
-  TargetRegistry::RegisterMCDisassembler(TheSparcV9Target,
+  TargetRegistry::RegisterMCDisassembler(getTheSparcV9Target(),
                                          createSparcDisassembler);
-  TargetRegistry::RegisterMCDisassembler(TheSparcelTarget,
+  TargetRegistry::RegisterMCDisassembler(getTheSparcelTarget(),
                                          createSparcDisassembler);
 }
 

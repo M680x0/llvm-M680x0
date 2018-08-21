@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file contains code to lower XCore MachineInstrs to their
+/// This file contains code to lower XCore MachineInstrs to their
 /// corresponding MCInst records.
 ///
 //===----------------------------------------------------------------------===//
@@ -25,12 +25,9 @@
 using namespace llvm;
 
 XCoreMCInstLower::XCoreMCInstLower(class AsmPrinter &asmprinter)
-: Printer(asmprinter) {}
+    : Printer(asmprinter) {}
 
-void XCoreMCInstLower::Initialize(Mangler *M, MCContext *C) {
-  Mang = M;
-  Ctx = C;
-}
+void XCoreMCInstLower::Initialize(MCContext *C) { Ctx = C; }
 
 MCOperand XCoreMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
                                                MachineOperandType MOTy,

@@ -37,9 +37,9 @@
 name: MxBiArOp_RFRI_xEA
 body: |
   bb.0:
-    %wd0 = ADD16di %wd0, 0,      implicit-def %ccr
-    %wd3 = ADD16di %wd3, -1,     implicit-def %ccr
-    %d0  = ADD32ri  %d0, -1,     implicit-def %ccr
-    %d0  = ADD32ri  %d0, 131071, implicit-def %ccr
-    %d7  = ADD32ri  %d7, 458752, implicit-def %ccr
-    %a0  = ADD32ri  %a0, 0,      implicit-def %ccr
+    $wd0 = ADD16di $wd0, 0,      implicit-def $ccr
+    $wd3 = ADD16di $wd3, -1,     implicit-def $ccr
+    $d0  = ADD32ri  $d0, -1,     implicit-def $ccr
+    $d0  = ADD32ri  $d0, 131071, implicit-def $ccr
+    $d7  = ADD32ri  $d7, 458752, implicit-def $ccr
+    $a0  = ADD32ri  $a0, 0,      implicit-def $ccr

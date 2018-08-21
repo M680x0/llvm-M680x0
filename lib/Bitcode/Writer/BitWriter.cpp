@@ -8,9 +8,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm-c/BitWriter.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
@@ -24,7 +25,7 @@ int LLVMWriteBitcodeToFile(LLVMModuleRef M, const char *Path) {
   if (EC)
     return -1;
 
-  WriteBitcodeToFile(unwrap(M), OS);
+  WriteBitcodeToFile(*unwrap(M), OS);
   return 0;
 }
 
@@ -32,7 +33,7 @@ int LLVMWriteBitcodeToFD(LLVMModuleRef M, int FD, int ShouldClose,
                          int Unbuffered) {
   raw_fd_ostream OS(FD, ShouldClose, Unbuffered);
 
-  WriteBitcodeToFile(unwrap(M), OS);
+  WriteBitcodeToFile(*unwrap(M), OS);
   return 0;
 }
 
@@ -44,6 +45,6 @@ LLVMMemoryBufferRef LLVMWriteBitcodeToMemoryBuffer(LLVMModuleRef M) {
   std::string Data;
   raw_string_ostream OS(Data);
 
-  WriteBitcodeToFile(unwrap(M), OS);
+  WriteBitcodeToFile(*unwrap(M), OS);
   return wrap(MemoryBuffer::getMemBufferCopy(OS.str()).release());
 }

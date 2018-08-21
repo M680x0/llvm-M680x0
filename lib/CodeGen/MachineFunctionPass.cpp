@@ -24,7 +24,6 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/StackProtector.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 
@@ -42,7 +41,7 @@ bool MachineFunctionPass::runOnFunction(Function &F) {
     return false;
 
   MachineModuleInfo &MMI = getAnalysis<MachineModuleInfo>();
-  MachineFunction &MF = MMI.getMachineFunction(F);
+  MachineFunction &MF = MMI.getOrCreateMachineFunction(F);
 
   MachineFunctionProperties &MFProps = MF.getProperties();
 
@@ -85,7 +84,6 @@ void MachineFunctionPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<MemoryDependenceWrapperPass>();
   AU.addPreserved<ScalarEvolutionWrapperPass>();
   AU.addPreserved<SCEVAAWrapperPass>();
-  AU.addPreserved<StackProtector>();
 
   FunctionPass::getAnalysisUsage(AU);
 }

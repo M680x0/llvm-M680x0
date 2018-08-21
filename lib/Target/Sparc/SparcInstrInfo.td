@@ -27,6 +27,9 @@ def Is32Bit : Predicate<"!Subtarget->is64Bit()">;
 // True when generating 64-bit code. This also implies HasV9.
 def Is64Bit : Predicate<"Subtarget->is64Bit()">;
 
+def UseSoftMulDiv : Predicate<"Subtarget->useSoftMulDiv()">,
+              AssemblerPredicate<"FeatureSoftMulDiv">;
+
 // HasV9 - This predicate is true when the target processor supports V9
 // instructions.  Note that the machine may be running in 32-bit mode.
 def HasV9   : Predicate<"Subtarget->isV9()">,
@@ -58,8 +61,8 @@ def HasLeonCASA : Predicate<"Subtarget->hasLeonCasa()">;
 def HasUMAC_SMAC : Predicate<"Subtarget->hasUmacSmac()">;
 
 def HasNoFdivSqrtFix : Predicate<"!Subtarget->fixAllFDIVSQRT()">;
-def HasNoFmulsFix : Predicate<"!Subtarget->replaceFMULS()">;
-def HasNoFsmuldFix : Predicate<"!Subtarget->fixFSMULD()">;
+def HasFMULS : Predicate<"!Subtarget->hasNoFMULS()">;
+def HasFSMULD : Predicate<"!Subtarget->hasNoFSMULD()">;
 
 // UseDeprecatedInsts - This predicate is true when the target processor is a
 // V8, or when it is V9 but the V8 deprecated instructions are efficient enough
@@ -195,7 +198,8 @@ def SPsjlj_longjmp: SDNode<"SPISD::EH_SJLJ_LONGJMP",
                            [SDNPHasChain, SDNPSideEffect]>;
 
 //  These are target-independent nodes, but have target-specific formats.
-def SDT_SPCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32> ]>;
+def SDT_SPCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32>,
+                                          SDTCisVT<1, i32> ]>;
 def SDT_SPCallSeqEnd   : SDCallSeqEnd<[ SDTCisVT<0, i32>,
                                         SDTCisVT<1, i32> ]>;
 
@@ -404,9 +408,9 @@ let Defs = [O7] in {
 }
 
 let Defs = [O6], Uses = [O6] in {
-def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt),
-                               "!ADJCALLSTACKDOWN $amt",
-                               [(callseq_start timm:$amt)]>;
+def ADJCALLSTACKDOWN : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
+                               "!ADJCALLSTACKDOWN $amt1, $amt2",
+                               [(callseq_start timm:$amt1, timm:$amt2)]>;
 def ADJCALLSTACKUP : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                             "!ADJCALLSTACKUP $amt1",
                             [(callseq_end timm:$amt1, timm:$amt2)]>;
@@ -417,7 +421,7 @@ let hasSideEffects = 1, mayStore = 1 in {
     def FLUSHW : F3_1<0b10, 0b101011, (outs), (ins),
                       "flushw",
                       [(flushw)]>, Requires<[HasV9]>;
-  let rd = 0, rs1 = 1, simm13 = 3 in
+  let rd = 8, rs1 = 0, simm13 = 3 in
     def TA3 : F3_2<0b10, 0b111010, (outs), (ins),
                    "ta 3",
                    [(flushw)]>;
@@ -734,8 +738,8 @@ let Defs = [ICC], rd = 0 in {
 
 // Section B.18 - Multiply Instructions, p. 113
 let Defs = [Y] in {
-  defm UMUL : F3_12np<"umul", 0b001010, IIC_iu_umul>;
-  defm SMUL : F3_12  <"smul", 0b001011, mul, IntRegs, i32, simm13Op, IIC_iu_smul>;
+  defm UMUL : F3_12<"umul", 0b001010, umullohi, IntRegs, i32, simm13Op, IIC_iu_umul>;
+  defm SMUL : F3_12<"smul", 0b001011, smullohi, IntRegs, i32, simm13Op, IIC_iu_smul>;
 }
 
 let Defs = [Y, ICC] in {
@@ -1005,6 +1009,9 @@ let DecoderNamespace = "SparcV9", DecoderMethod = "DecodeTRAP", Predicates = [Ha
 let isBarrier = 1, isTerminator = 1, rd = 0b01000, rs1 = 0, simm13 = 5 in
   def TA5 : F3_2<0b10, 0b111010, (outs), (ins), "ta 5", [(trap)]>;
 
+let hasSideEffects = 1, rd = 0b01000, rs1 = 0, simm13 = 1 in
+  def TA1 : F3_2<0b10, 0b111010, (outs), (ins), "ta 1", [(debugtrap)]>;
+
 // Section B.28 - Read State Register Instructions
 let rs2 = 0 in
   def RDASR : F3_1<2, 0b101000,
@@ -1232,14 +1239,12 @@ def FSUBQ  : F3_3<2, 0b110100, 0b001000111,
 
 
 // Floating-point Multiply and Divide Instructions, p. 147
-// FMULS generates an erratum on LEON processors, so by disabling this instruction
-// this will be promoted to use FMULD with doubles instead.
-let Predicates = [HasNoFmulsFix] in 
 def FMULS  : F3_3<2, 0b110100, 0b001001001,
                   (outs FPRegs:$rd), (ins FPRegs:$rs1, FPRegs:$rs2),
                   "fmuls $rs1, $rs2, $rd",
                   [(set f32:$rd, (fmul f32:$rs1, f32:$rs2))],
-                  IIC_fpu_muls>;
+                  IIC_fpu_muls>,
+		  Requires<[HasFMULS]>;
 def FMULD  : F3_3<2, 0b110100, 0b001001010,
                   (outs DFPRegs:$rd), (ins DFPRegs:$rs1, DFPRegs:$rs2),
                   "fmuld $rs1, $rs2, $rd",
@@ -1251,13 +1256,13 @@ def FMULQ  : F3_3<2, 0b110100, 0b001001011,
                   [(set f128:$rd, (fmul f128:$rs1, f128:$rs2))]>,
                   Requires<[HasHardQuad]>;
 
-let Predicates = [HasNoFsmuldFix] in
 def FSMULD : F3_3<2, 0b110100, 0b001101001,
                   (outs DFPRegs:$rd), (ins FPRegs:$rs1, FPRegs:$rs2),
                   "fsmuld $rs1, $rs2, $rd",
                   [(set f64:$rd, (fmul (fpextend f32:$rs1),
                                         (fpextend f32:$rs2)))],
-                  IIC_fpu_muld>;
+                  IIC_fpu_muld>,
+		  Requires<[HasFSMULD]>;
 def FDMULQ : F3_3<2, 0b110100, 0b001101110,
                   (outs QFPRegs:$rd), (ins DFPRegs:$rs1, DFPRegs:$rs2),
                   "fdmulq $rs1, $rs2, $rd",
@@ -1597,6 +1602,9 @@ let Predicates = [HasV9] in {
 // Non-Instruction Patterns
 //===----------------------------------------------------------------------===//
 
+// Zero immediate.
+def : Pat<(i32 0),
+          (ORrr (i32 G0), (i32 G0))>;
 // Small immediates.
 def : Pat<(i32 simm13:$val),
           (ORri (i32 G0), imm:$val)>;

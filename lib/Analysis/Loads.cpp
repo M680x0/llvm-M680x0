@@ -55,6 +55,10 @@ static bool isDereferenceableAndAlignedPointer(
     const Value *V, unsigned Align, const APInt &Size, const DataLayout &DL,
     const Instruction *CtxI, const DominatorTree *DT,
     SmallPtrSetImpl<const Value *> &Visited) {
+  // Already visited?  Bail out, we've likely hit unreachable code.
+  if (!Visited.insert(V).second)
+    return false;
+
   // Note that it is not safe to speculate into a malloc'd region because
   // malloc may return null.
 
@@ -68,7 +72,7 @@ static bool isDereferenceableAndAlignedPointer(
                         V->getPointerDereferenceableBytes(DL, CheckForNonNull));
   if (KnownDerefBytes.getBoolValue()) {
     if (KnownDerefBytes.uge(Size))
-      if (!CheckForNonNull || isKnownNonNullAt(V, CtxI, DT))
+      if (!CheckForNonNull || isKnownNonZero(V, DL, 0, nullptr, CtxI, DT))
         return isAligned(V, Align, DL);
   }
 
@@ -76,7 +80,7 @@ static bool isDereferenceableAndAlignedPointer(
   if (const GEPOperator *GEP = dyn_cast<GEPOperator>(V)) {
     const Value *Base = GEP->getPointerOperand();
 
-    APInt Offset(DL.getPointerTypeSizeInBits(GEP->getType()), 0);
+    APInt Offset(DL.getIndexTypeSizeInBits(GEP->getType()), 0);
     if (!GEP->accumulateConstantOffset(DL, Offset) || Offset.isNegative() ||
         !Offset.urem(APInt(Offset.getBitWidth(), Align)).isMinValue())
       return false;
@@ -87,9 +91,11 @@ static bool isDereferenceableAndAlignedPointer(
     // then the GEP (== Base + Offset == k_0 * Align + k_1 * Align) is also
     // aligned to Align bytes.
 
-    return Visited.insert(Base).second &&
-           isDereferenceableAndAlignedPointer(Base, Align, Offset + Size, DL,
-                                              CtxI, DT, Visited);
+    // Offset and Size may have different bit widths if we have visited an
+    // addrspacecast, so we can't do arithmetic directly on the APInt values.
+    return isDereferenceableAndAlignedPointer(
+        Base, Align, Offset + Size.sextOrTrunc(Offset.getBitWidth()),
+        DL, CtxI, DT, Visited);
   }
 
   // For gc.relocate, look through relocations
@@ -102,12 +108,22 @@ static bool isDereferenceableAndAlignedPointer(
                                               DL, CtxI, DT, Visited);
 
   if (auto CS = ImmutableCallSite(V))
-    if (const Value *RV = CS.getReturnedArgOperand())
-      return isDereferenceableAndAlignedPointer(RV, Align, Size, DL, CtxI, DT,
+    if (auto *RP = getArgumentAliasingToReturnedPointer(CS))
+      return isDereferenceableAndAlignedPointer(RP, Align, Size, DL, CtxI, DT,
                                                 Visited);
 
   // If we don't know, assume the worst.
   return false;
+}
+
+bool llvm::isDereferenceableAndAlignedPointer(const Value *V, unsigned Align,
+                                              const APInt &Size,
+                                              const DataLayout &DL,
+                                              const Instruction *CtxI,
+                                              const DominatorTree *DT) {
+  SmallPtrSet<const Value *, 32> Visited;
+  return ::isDereferenceableAndAlignedPointer(V, Align, Size, DL, CtxI, DT,
+                                              Visited);
 }
 
 bool llvm::isDereferenceableAndAlignedPointer(const Value *V, unsigned Align,
@@ -130,7 +146,7 @@ bool llvm::isDereferenceableAndAlignedPointer(const Value *V, unsigned Align,
 
   SmallPtrSet<const Value *, 32> Visited;
   return ::isDereferenceableAndAlignedPointer(
-      V, Align, APInt(DL.getTypeSizeInBits(VTy), DL.getTypeStoreSize(Ty)), DL,
+      V, Align, APInt(DL.getIndexTypeSizeInBits(VTy), DL.getTypeStoreSize(Ty)), DL,
       CtxI, DT, Visited);
 }
 
@@ -140,7 +156,7 @@ bool llvm::isDereferenceablePointer(const Value *V, const DataLayout &DL,
   return isDereferenceableAndAlignedPointer(V, 1, DL, CtxI, DT);
 }
 
-/// \brief Test if A and B will obviously have the same value.
+/// Test if A and B will obviously have the same value.
 ///
 /// This includes recognizing that %t0 and %t1 will have the same
 /// value in code like this:
@@ -171,7 +187,7 @@ static bool AreEquivalentAddressValues(const Value *A, const Value *B) {
   return false;
 }
 
-/// \brief Check if executing a load of this pointer value cannot trap.
+/// Check if executing a load of this pointer value cannot trap.
 ///
 /// If DT and ScanFrom are specified this method performs context-sensitive
 /// analysis and returns true if it is safe to load immediately before ScanFrom.
@@ -306,20 +322,25 @@ Value *llvm::FindAvailableLoadedValue(LoadInst *Load,
                                       BasicBlock *ScanBB,
                                       BasicBlock::iterator &ScanFrom,
                                       unsigned MaxInstsToScan,
-                                      AliasAnalysis *AA, bool *IsLoadCSE) {
-  if (MaxInstsToScan == 0)
-    MaxInstsToScan = ~0U;
-
-  Value *Ptr = Load->getPointerOperand();
-  Type *AccessTy = Load->getType();
-
-  // We can never remove a volatile load
-  if (Load->isVolatile())
-    return nullptr;
-
-  // Anything stronger than unordered is currently unimplemented.
+                                      AliasAnalysis *AA, bool *IsLoad,
+                                      unsigned *NumScanedInst) {
+  // Don't CSE load that is volatile or anything stronger than unordered.
   if (!Load->isUnordered())
     return nullptr;
+
+  return FindAvailablePtrLoadStore(
+      Load->getPointerOperand(), Load->getType(), Load->isAtomic(), ScanBB,
+      ScanFrom, MaxInstsToScan, AA, IsLoad, NumScanedInst);
+}
+
+Value *llvm::FindAvailablePtrLoadStore(Value *Ptr, Type *AccessTy,
+                                       bool AtLeastAtomic, BasicBlock *ScanBB,
+                                       BasicBlock::iterator &ScanFrom,
+                                       unsigned MaxInstsToScan,
+                                       AliasAnalysis *AA, bool *IsLoadCSE,
+                                       unsigned *NumScanedInst) {
+  if (MaxInstsToScan == 0)
+    MaxInstsToScan = ~0U;
 
   const DataLayout &DL = ScanBB->getModule()->getDataLayout();
 
@@ -338,6 +359,9 @@ Value *llvm::FindAvailableLoadedValue(LoadInst *Load,
     // Restore ScanFrom to expected value in case next test succeeds
     ScanFrom++;
 
+    if (NumScanedInst)
+      ++(*NumScanedInst);
+
     // Don't scan huge blocks.
     if (MaxInstsToScan-- == 0)
       return nullptr;
@@ -353,7 +377,7 @@ Value *llvm::FindAvailableLoadedValue(LoadInst *Load,
 
         // We can value forward from an atomic to a non-atomic, but not the
         // other way around.
-        if (LI->isAtomic() < Load->isAtomic())
+        if (LI->isAtomic() < AtLeastAtomic)
           return nullptr;
 
         if (IsLoadCSE)
@@ -372,7 +396,7 @@ Value *llvm::FindAvailableLoadedValue(LoadInst *Load,
 
         // We can value forward from an atomic to a non-atomic, but not the
         // other way around.
-        if (SI->isAtomic() < Load->isAtomic())
+        if (SI->isAtomic() < AtLeastAtomic)
           return nullptr;
 
         if (IsLoadCSE)
@@ -390,7 +414,7 @@ Value *llvm::FindAvailableLoadedValue(LoadInst *Load,
 
       // If we have alias analysis and it says the store won't modify the loaded
       // value, ignore the store.
-      if (AA && (AA->getModRefInfo(SI, StrippedPtr, AccessSize) & MRI_Mod) == 0)
+      if (AA && !isModSet(AA->getModRefInfo(SI, StrippedPtr, AccessSize)))
         continue;
 
       // Otherwise the store that may or may not alias the pointer, bail out.
@@ -402,8 +426,7 @@ Value *llvm::FindAvailableLoadedValue(LoadInst *Load,
     if (Inst->mayWriteToMemory()) {
       // If alias analysis claims that it really won't modify the load,
       // ignore it.
-      if (AA &&
-          (AA->getModRefInfo(Inst, StrippedPtr, AccessSize) & MRI_Mod) == 0)
+      if (AA && !isModSet(AA->getModRefInfo(Inst, StrippedPtr, AccessSize)))
         continue;
 
       // May modify the pointer, bail out.

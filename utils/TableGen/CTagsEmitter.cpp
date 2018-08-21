@@ -37,7 +37,7 @@ public:
   void emit(raw_ostream &OS) const {
     const MemoryBuffer *CurMB =
         SrcMgr.getMemoryBuffer(SrcMgr.FindBufferContainingLoc(Loc));
-    const char *BufferName = CurMB->getBufferIdentifier();
+    auto BufferName = CurMB->getBufferIdentifier();
     std::pair<unsigned, unsigned> LineAndColumn = SrcMgr.getLineAndColumn(Loc);
     OS << *Id << "\t" << BufferName << "\t" << LineAndColumn.first << "\n";
   }
@@ -73,7 +73,7 @@ void CTagsEmitter::run(raw_ostream &OS) {
   for (const auto &D : Defs)
     Tags.push_back(Tag(D.first, locate(D.second.get())));
   // Emit tags.
-  std::sort(Tags.begin(), Tags.end());
+  llvm::sort(Tags.begin(), Tags.end());
   OS << "!_TAG_FILE_FORMAT\t1\t/original ctags format/\n";
   OS << "!_TAG_FILE_SORTED\t1\t/0=unsorted, 1=sorted, 2=foldcase/\n";
   for (const Tag &T : Tags)

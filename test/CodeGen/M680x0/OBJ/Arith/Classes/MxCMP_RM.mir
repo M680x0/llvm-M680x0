@@ -32,9 +32,9 @@
 name: MxBiArOp_RFRM_PCI
 body: |
   bb.0:
-    CMP8dk  %bd0, 0,  %d1, implicit-def %ccr
-    CMP8dk  %bd0, -1, %d1, implicit-def %ccr
-    CMP32dk %d0, 0,  %d1, implicit-def %ccr
+    CMP8dk  $bd0, 0,  $d1, implicit-def $ccr
+    CMP8dk  $bd0, -1, $d1, implicit-def $ccr
+    CMP32dk $d0, 0,  $d1, implicit-def $ccr
 
 ...
 --- # PCD
@@ -54,8 +54,8 @@ body: |
 name: MxBiArOp_RFRM_PCD
 body: |
   bb.0:
-    CMP8dq  %bd0, 0,  implicit-def %ccr
-    CMP32dq %d0, -1, implicit-def %ccr
+    CMP8dq  $bd0, 0,  implicit-def $ccr
+    CMP32dq $d0, -1, implicit-def $ccr
 
 ...
 --- # ARII
@@ -81,10 +81,10 @@ body: |
 name: MxCMP_RM_ARII
 body: |
   bb.0:
-    CMP8df  %bd0, 0,  %a0, %d1, implicit-def %ccr
-    CMP8df  %bd0, -1, %a0, %d1, implicit-def %ccr
-    CMP32df  %d0, 0,  %a1, %d1, implicit-def %ccr
-    CMP32df  %d1, 0,  %a2, %a2, implicit-def %ccr
+    CMP8df  $bd0, 0,  $a0, $d1, implicit-def $ccr
+    CMP8df  $bd0, -1, $a0, $d1, implicit-def $ccr
+    CMP32df  $d0, 0,  $a1, $d1, implicit-def $ccr
+    CMP32df  $d1, 0,  $a2, $a2, implicit-def $ccr
 
 ...
 --- # ARID
@@ -101,8 +101,8 @@ body: |
 name: MxCMP_RM_ARID
 body: |
   bb.0:
-    CMP8dp  %bd0, 0,  %a0, implicit-def %ccr
-    CMP32dp  %d0, -1, %a1, implicit-def %ccr
+    CMP8dp  $bd0, 0,  $a0, implicit-def $ccr
+    CMP32dp  $d0, -1, $a1, implicit-def $ccr
 
 ...
 --- # ARI
@@ -117,7 +117,7 @@ body: |
 name: MxCMP_RM_ARI
 body: |
   bb.0:
-    CMP8dj  %bd0, %a0, implicit-def %ccr
-    CMP32dj  %d3, %a1, implicit-def %ccr
+    CMP8dj  $bd0, $a0, implicit-def $ccr
+    CMP32dj  $d3, $a1, implicit-def $ccr
 
 ...

@@ -8,27 +8,29 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements a register stacking pass.
+/// This file implements a register stacking pass.
 ///
 /// This pass reorders instructions to put register uses and defs in an order
 /// such that they form single-use expression trees. Registers fitting this form
 /// are then marked as "stackified", meaning references to them are replaced by
-/// "push" and "pop" from the stack.
+/// "push" and "pop" from the value stack.
 ///
 /// This is primarily a code size optimization, since temporary values on the
-/// expression don't need to be named.
+/// value stack don't need to be named.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssembly.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h" // for WebAssembly::ARGUMENT_*
+#include "WebAssembly.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblySubtarget.h"
+#include "WebAssemblyUtilities.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/CodeGen/LiveIntervalAnalysis.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineModuleInfoImpls.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Support/Debug.h"
@@ -39,7 +41,7 @@ using namespace llvm;
 
 namespace {
 class WebAssemblyRegStackify final : public MachineFunctionPass {
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "WebAssembly Register Stackify";
   }
 
@@ -65,6 +67,10 @@ public:
 } // end anonymous namespace
 
 char WebAssemblyRegStackify::ID = 0;
+INITIALIZE_PASS(WebAssemblyRegStackify, DEBUG_TYPE,
+                "Reorder instructions to use the WebAssembly value stack",
+                false, false)
+
 FunctionPass *llvm::createWebAssemblyRegStackify() {
   return new WebAssemblyRegStackify();
 }
@@ -73,17 +79,48 @@ FunctionPass *llvm::createWebAssemblyRegStackify() {
 // expression stack ordering constraints for an instruction which is on
 // the expression stack.
 static void ImposeStackOrdering(MachineInstr *MI) {
-  // Write the opaque EXPR_STACK register.
-  if (!MI->definesRegister(WebAssembly::EXPR_STACK))
-    MI->addOperand(MachineOperand::CreateReg(WebAssembly::EXPR_STACK,
+  // Write the opaque VALUE_STACK register.
+  if (!MI->definesRegister(WebAssembly::VALUE_STACK))
+    MI->addOperand(MachineOperand::CreateReg(WebAssembly::VALUE_STACK,
                                              /*isDef=*/true,
                                              /*isImp=*/true));
 
-  // Also read the opaque EXPR_STACK register.
-  if (!MI->readsRegister(WebAssembly::EXPR_STACK))
-    MI->addOperand(MachineOperand::CreateReg(WebAssembly::EXPR_STACK,
+  // Also read the opaque VALUE_STACK register.
+  if (!MI->readsRegister(WebAssembly::VALUE_STACK))
+    MI->addOperand(MachineOperand::CreateReg(WebAssembly::VALUE_STACK,
                                              /*isDef=*/false,
                                              /*isImp=*/true));
+}
+
+// Convert an IMPLICIT_DEF instruction into an instruction which defines
+// a constant zero value.
+static void ConvertImplicitDefToConstZero(MachineInstr *MI,
+                                          MachineRegisterInfo &MRI,
+                                          const TargetInstrInfo *TII,
+                                          MachineFunction &MF) {
+  assert(MI->getOpcode() == TargetOpcode::IMPLICIT_DEF);
+
+  const auto *RegClass =
+      MRI.getRegClass(MI->getOperand(0).getReg());
+  if (RegClass == &WebAssembly::I32RegClass) {
+    MI->setDesc(TII->get(WebAssembly::CONST_I32));
+    MI->addOperand(MachineOperand::CreateImm(0));
+  } else if (RegClass == &WebAssembly::I64RegClass) {
+    MI->setDesc(TII->get(WebAssembly::CONST_I64));
+    MI->addOperand(MachineOperand::CreateImm(0));
+  } else if (RegClass == &WebAssembly::F32RegClass) {
+    MI->setDesc(TII->get(WebAssembly::CONST_F32));
+    ConstantFP *Val = cast<ConstantFP>(Constant::getNullValue(
+        Type::getFloatTy(MF.getFunction().getContext())));
+    MI->addOperand(MachineOperand::CreateFPImm(Val));
+  } else if (RegClass == &WebAssembly::F64RegClass) {
+    MI->setDesc(TII->get(WebAssembly::CONST_F64));
+    ConstantFP *Val = cast<ConstantFP>(Constant::getNullValue(
+        Type::getDoubleTy(MF.getFunction().getContext())));
+    MI->addOperand(MachineOperand::CreateFPImm(Val));
+  } else {
+    llvm_unreachable("Unexpected reg class");
+  }
 }
 
 // Determine whether a call to the callee referenced by
@@ -120,17 +157,16 @@ static void QueryCallee(const MachineInstr &MI, unsigned CalleeOpNo, bool &Read,
 }
 
 // Determine whether MI reads memory, writes memory, has side effects,
-// and/or uses the __stack_pointer value.
+// and/or uses the stack pointer value.
 static void Query(const MachineInstr &MI, AliasAnalysis &AA, bool &Read,
                   bool &Write, bool &Effects, bool &StackPointer) {
-  assert(!MI.isPosition());
   assert(!MI.isTerminator());
 
-  if (MI.isDebugValue())
+  if (MI.isDebugInstr() || MI.isPosition())
     return;
 
   // Check for loads.
-  if (MI.mayLoad() && !MI.isInvariantLoad(&AA))
+  if (MI.mayLoad() && !MI.isDereferenceableInvariantLoad(&AA))
     Read = true;
 
   // Check for stores.
@@ -144,8 +180,9 @@ static void Query(const MachineInstr &MI, AliasAnalysis &AA, bool &Read,
         auto PSV = MPI.V.get<const PseudoSourceValue *>();
         if (const ExternalSymbolPseudoSourceValue *EPSV =
                 dyn_cast<ExternalSymbolPseudoSourceValue>(PSV))
-          if (StringRef(EPSV->getSymbol()) == "__stack_pointer")
+          if (StringRef(EPSV->getSymbol()) == "__stack_pointer") {
             StackPointer = true;
+          }
       }
     }
   } else if (MI.hasOrderedMemoryRef()) {
@@ -274,11 +311,11 @@ static bool HasOneUse(unsigned Reg, MachineInstr *Def,
 // TODO: Compute memory dependencies in a way that uses AliasAnalysis to be
 // more precise.
 static bool IsSafeToMove(const MachineInstr *Def, const MachineInstr *Insert,
-                         AliasAnalysis &AA, const LiveIntervals &LIS,
-                         const MachineRegisterInfo &MRI) {
+                         AliasAnalysis &AA, const MachineRegisterInfo &MRI) {
   assert(Def->getParent() == Insert->getParent());
 
   // Check for register dependencies.
+  SmallVector<unsigned, 4> MutableRegisters;
   for (const MachineOperand &MO : Def->operands()) {
     if (!MO.isReg() || MO.isUndef())
       continue;
@@ -301,21 +338,11 @@ static bool IsSafeToMove(const MachineInstr *Def, const MachineInstr *Insert,
       return false;
     }
 
-    // Ask LiveIntervals whether moving this virtual register use or def to
-    // Insert will change which value numbers are seen.
-    //
-    // If the operand is a use of a register that is also defined in the same
-    // instruction, test that the newly defined value reaches the insert point,
-    // since the operand will be moving along with the def.
-    const LiveInterval &LI = LIS.getInterval(Reg);
-    VNInfo *DefVNI =
-        (MO.isDef() || Def->definesRegister(Reg)) ?
-        LI.getVNInfoAt(LIS.getInstructionIndex(*Def).getRegSlot()) :
-        LI.getVNInfoBefore(LIS.getInstructionIndex(*Def));
-    assert(DefVNI && "Instruction input missing value number");
-    VNInfo *InsVNI = LI.getVNInfoBefore(LIS.getInstructionIndex(*Insert));
-    if (InsVNI && DefVNI != InsVNI)
-      return false;
+    // If one of the operands isn't in SSA form, it has different values at
+    // different times, and we need to make sure we don't move our use across
+    // a different def.
+    if (!MO.isDef() && !MRI.hasOneDef(Reg))
+      MutableRegisters.push_back(Reg);
   }
 
   bool Read = false, Write = false, Effects = false, StackPointer = false;
@@ -323,7 +350,8 @@ static bool IsSafeToMove(const MachineInstr *Def, const MachineInstr *Insert,
 
   // If the instruction does not access memory and has no side effects, it has
   // no additional dependencies.
-  if (!Read && !Write && !Effects && !StackPointer)
+  bool HasMutableRegisters = !MutableRegisters.empty();
+  if (!Read && !Write && !Effects && !StackPointer && !HasMutableRegisters)
     return true;
 
   // Scan through the intervening instructions between Def and Insert.
@@ -343,6 +371,11 @@ static bool IsSafeToMove(const MachineInstr *Def, const MachineInstr *Insert,
       return false;
     if (StackPointer && InterveningStackPointer)
       return false;
+
+    for (unsigned Reg : MutableRegisters)
+      for (const MachineOperand &MO : I->operands())
+        if (MO.isReg() && MO.isDef() && MO.getReg() == Reg)
+          return false;
   }
 
   return true;
@@ -408,18 +441,18 @@ static bool OneUseDominatesOtherUses(unsigned Reg, const MachineOperand &OneUse,
   return true;
 }
 
-/// Get the appropriate tee_local opcode for the given register class.
-static unsigned GetTeeLocalOpcode(const TargetRegisterClass *RC) {
+/// Get the appropriate tee opcode for the given register class.
+static unsigned GetTeeOpcode(const TargetRegisterClass *RC) {
   if (RC == &WebAssembly::I32RegClass)
-    return WebAssembly::TEE_LOCAL_I32;
+    return WebAssembly::TEE_I32;
   if (RC == &WebAssembly::I64RegClass)
-    return WebAssembly::TEE_LOCAL_I64;
+    return WebAssembly::TEE_I64;
   if (RC == &WebAssembly::F32RegClass)
-    return WebAssembly::TEE_LOCAL_F32;
+    return WebAssembly::TEE_F32;
   if (RC == &WebAssembly::F64RegClass)
-    return WebAssembly::TEE_LOCAL_F64;
+    return WebAssembly::TEE_F64;
   if (RC == &WebAssembly::V128RegClass)
-    return WebAssembly::TEE_LOCAL_V128;
+    return WebAssembly::TEE_V128;
   llvm_unreachable("Unexpected register class");
 }
 
@@ -439,7 +472,7 @@ static MachineInstr *MoveForSingleUse(unsigned Reg, MachineOperand& Op,
                                       MachineInstr *Insert, LiveIntervals &LIS,
                                       WebAssemblyFunctionInfo &MFI,
                                       MachineRegisterInfo &MRI) {
-  DEBUG(dbgs() << "Move for single use: "; Def->dump());
+  LLVM_DEBUG(dbgs() << "Move for single use: "; Def->dump());
 
   MBB.splice(Insert, &MBB, Def);
   LIS.handleMove(*Def);
@@ -466,7 +499,7 @@ static MachineInstr *MoveForSingleUse(unsigned Reg, MachineOperand& Op,
 
     MFI.stackifyVReg(NewReg);
 
-    DEBUG(dbgs() << " - Replaced register: "; Def->dump());
+    LLVM_DEBUG(dbgs() << " - Replaced register: "; Def->dump());
   }
 
   ImposeStackOrdering(Def);
@@ -480,8 +513,8 @@ static MachineInstr *RematerializeCheapDef(
     MachineBasicBlock::instr_iterator Insert, LiveIntervals &LIS,
     WebAssemblyFunctionInfo &MFI, MachineRegisterInfo &MRI,
     const WebAssemblyInstrInfo *TII, const WebAssemblyRegisterInfo *TRI) {
-  DEBUG(dbgs() << "Rematerializing cheap def: "; Def.dump());
-  DEBUG(dbgs() << " - for use in "; Op.getParent()->dump());
+  LLVM_DEBUG(dbgs() << "Rematerializing cheap def: "; Def.dump());
+  LLVM_DEBUG(dbgs() << " - for use in "; Op.getParent()->dump());
 
   unsigned NewReg = MRI.createVirtualRegister(MRI.getRegClass(Reg));
   TII->reMaterialize(MBB, Insert, NewReg, 0, Def, *TRI);
@@ -492,7 +525,7 @@ static MachineInstr *RematerializeCheapDef(
   MFI.stackifyVReg(NewReg);
   ImposeStackOrdering(Clone);
 
-  DEBUG(dbgs() << " - Cloned to "; Clone->dump());
+  LLVM_DEBUG(dbgs() << " - Cloned to "; Clone->dump());
 
   // Shrink the interval.
   bool IsDead = MRI.use_empty(Reg);
@@ -504,7 +537,7 @@ static MachineInstr *RematerializeCheapDef(
 
   // If that was the last use of the original, delete the original.
   if (IsDead) {
-    DEBUG(dbgs() << " - Deleting original\n");
+    LLVM_DEBUG(dbgs() << " - Deleting original\n");
     SlotIndex Idx = LIS.getInstructionIndex(Def).getRegSlot();
     LIS.removePhysRegDefAt(WebAssembly::ARGUMENTS, Idx);
     LIS.removeInterval(Reg);
@@ -517,8 +550,8 @@ static MachineInstr *RematerializeCheapDef(
 
 /// A multiple-use def in the same block with no intervening memory or register
 /// dependencies; move the def down, nest it with the current instruction, and
-/// insert a tee_local to satisfy the rest of the uses. As an illustration,
-/// rewrite this:
+/// insert a tee to satisfy the rest of the uses. As an illustration, rewrite
+/// this:
 ///
 ///    Reg = INST ...        // Def
 ///    INST ..., Reg, ...    // Insert
@@ -528,7 +561,7 @@ static MachineInstr *RematerializeCheapDef(
 /// to this:
 ///
 ///    DefReg = INST ...     // Def (to become the new Insert)
-///    TeeReg, Reg = TEE_LOCAL_... DefReg
+///    TeeReg, Reg = TEE_... DefReg
 ///    INST ..., TeeReg, ... // Insert
 ///    INST ..., Reg, ...
 ///    INST ..., Reg, ...
@@ -539,7 +572,7 @@ static MachineInstr *MoveAndTeeForMultiUse(
     unsigned Reg, MachineOperand &Op, MachineInstr *Def, MachineBasicBlock &MBB,
     MachineInstr *Insert, LiveIntervals &LIS, WebAssemblyFunctionInfo &MFI,
     MachineRegisterInfo &MRI, const WebAssemblyInstrInfo *TII) {
-  DEBUG(dbgs() << "Move and tee for multi-use:"; Def->dump());
+  LLVM_DEBUG(dbgs() << "Move and tee for multi-use:"; Def->dump());
 
   // Move Def into place.
   MBB.splice(Insert, &MBB, Def);
@@ -551,7 +584,7 @@ static MachineInstr *MoveAndTeeForMultiUse(
   unsigned DefReg = MRI.createVirtualRegister(RegClass);
   MachineOperand &DefMO = Def->getOperand(0);
   MachineInstr *Tee = BuildMI(MBB, Insert, Insert->getDebugLoc(),
-                              TII->get(GetTeeLocalOpcode(RegClass)), TeeReg)
+                              TII->get(GetTeeOpcode(RegClass)), TeeReg)
                           .addReg(Reg, RegState::Define)
                           .addReg(DefReg, getUndefRegState(DefMO.isDead()));
   Op.setReg(TeeReg);
@@ -575,8 +608,8 @@ static MachineInstr *MoveAndTeeForMultiUse(
   ImposeStackOrdering(Def);
   ImposeStackOrdering(Tee);
 
-  DEBUG(dbgs() << " - Replaced register: "; Def->dump());
-  DEBUG(dbgs() << " - Tee instruction: "; Tee->dump());
+  LLVM_DEBUG(dbgs() << " - Replaced register: "; Def->dump());
+  LLVM_DEBUG(dbgs() << " - Tee instruction: "; Tee->dump());
   return Def;
 }
 
@@ -703,9 +736,9 @@ public:
 } // end anonymous namespace
 
 bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG(dbgs() << "********** Register Stackifying **********\n"
-                  "********** Function: "
-               << MF.getName() << '\n');
+  LLVM_DEBUG(dbgs() << "********** Register Stackifying **********\n"
+                       "********** Function: "
+                    << MF.getName() << '\n');
 
   bool Changed = false;
   MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -751,8 +784,7 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
         if (TargetRegisterInfo::isPhysicalRegister(Reg))
           continue;
 
-        // Identify the definition for this register at this point. Most
-        // registers are in SSA form here so we try a quick MRI query first.
+        // Identify the definition for this register at this point.
         MachineInstr *Def = GetVRegDef(Reg, Insert, MRI, LIS);
         if (!Def)
           continue;
@@ -764,24 +796,17 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
 
         // Argument instructions represent live-in registers and not real
         // instructions.
-        if (Def->getOpcode() == WebAssembly::ARGUMENT_I32 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_I64 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_F32 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_F64 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_v16i8 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_v8i16 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_v4i32 ||
-            Def->getOpcode() == WebAssembly::ARGUMENT_v4f32)
+        if (WebAssembly::isArgument(*Def))
           continue;
 
         // Decide which strategy to take. Prefer to move a single-use value
-        // over cloning it, and prefer cloning over introducing a tee_local.
+        // over cloning it, and prefer cloning over introducing a tee.
         // For moving, we require the def to be in the same block as the use;
         // this makes things simpler (LiveIntervals' handleMove function only
         // supports intra-block moves) and it's MachineSink's job to catch all
         // the sinking opportunities anyway.
         bool SameBlock = Def->getParent() == &MBB;
-        bool CanMove = SameBlock && IsSafeToMove(Def, Insert, AA, LIS, MRI) &&
+        bool CanMove = SameBlock && IsSafeToMove(Def, Insert, AA, MRI) &&
                        !TreeWalker.IsOnStack(Reg);
         if (CanMove && HasOneUse(Reg, Def, MRI, MDT, LIS)) {
           Insert = MoveForSingleUse(Reg, Op, Def, MBB, Insert, LIS, MFI, MRI);
@@ -802,6 +827,12 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
           continue;
         }
 
+        // If the instruction we just stackified is an IMPLICIT_DEF, convert it
+        // to a constant 0 so that the def is explicit, and the push/pop
+        // correspondence is maintained.
+        if (Insert->getOpcode() == TargetOpcode::IMPLICIT_DEF)
+          ConvertImplicitDefToConstZero(Insert, MRI, TII, MF);
+
         // We stackified an operand. Add the defining instruction's operands to
         // the worklist stack now to continue to build an ever deeper tree.
         Commuting.Reset();
@@ -812,19 +843,18 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
       // the next instruction we can build a tree on.
       if (Insert != &*MII) {
         ImposeStackOrdering(&*MII);
-        MII = std::prev(
-            llvm::make_reverse_iterator(MachineBasicBlock::iterator(Insert)));
+        MII = MachineBasicBlock::iterator(Insert).getReverse();
         Changed = true;
       }
     }
   }
 
-  // If we used EXPR_STACK anywhere, add it to the live-in sets everywhere so
+  // If we used VALUE_STACK anywhere, add it to the live-in sets everywhere so
   // that it never looks like a use-before-def.
   if (Changed) {
-    MF.getRegInfo().addLiveIn(WebAssembly::EXPR_STACK);
+    MF.getRegInfo().addLiveIn(WebAssembly::VALUE_STACK);
     for (MachineBasicBlock &MBB : MF)
-      MBB.addLiveIn(WebAssembly::EXPR_STACK);
+      MBB.addLiveIn(WebAssembly::VALUE_STACK);
   }
 
 #ifndef NDEBUG
@@ -832,7 +862,7 @@ bool WebAssemblyRegStackify::runOnMachineFunction(MachineFunction &MF) {
   SmallVector<unsigned, 0> Stack;
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
-      if (MI.isDebugValue())
+      if (MI.isDebugInstr())
         continue;
       for (MachineOperand &MO : reverse(MI.explicit_operands())) {
         if (!MO.isReg())

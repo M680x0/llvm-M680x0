@@ -60,6 +60,16 @@ define i32 @test7(i32 %X) {
 	ret i32 %R
 }
 
+; CHECK-LABEL: @test7_no_null_opt(
+; CHECK: %V = getelementptr i32, i32* null
+; CHECK: %R = load i32, i32* %V
+define i32 @test7_no_null_opt(i32 %X) #0 {
+        %V = getelementptr i32, i32* null, i32 %X               ; <i32*> [#uses=1]
+        %R = load i32, i32* %V          ; <i32> [#uses=1]
+        ret i32 %R
+}
+attributes #0 = { "null-pointer-is-valid"="true" }
+
 ; CHECK-LABEL: @test8(
 ; CHECK-NOT: load
 define i32 @test8(i32* %P) {
@@ -199,5 +209,42 @@ entry:
   %x.load = load i8*, i8** %x
   store i8 %y, i8* %x.load
 
+  ret void
+}
+
+; Check that we don't try change the type of the load by inserting a bitcast
+; generating invalid IR.
+; CHECK-LABEL: @test18(
+; CHECK-NOT: bitcast
+; CHECK: ret
+%swift.error = type opaque
+declare void @useSwiftError(%swift.error** swifterror)
+
+define void @test18(%swift.error** swifterror %err) {
+entry:
+  %swifterror = alloca swifterror %swift.error*, align 8
+  store %swift.error* null, %swift.error** %swifterror, align 8
+  call void @useSwiftError(%swift.error** nonnull swifterror %swifterror)
+  %err.res = load %swift.error*, %swift.error** %swifterror, align 8
+  store %swift.error* %err.res, %swift.error** %err, align 8
+  ret void
+}
+
+; Make sure we preseve the type of the store to a swifterror pointer.
+; CHECK-LABEL: @test19(
+; CHECK: [[A:%.*]] = alloca
+; CHECK: call
+; CHECK: [[BC:%.*]] = bitcast i8** [[A]] to
+; CHECK: [[ERRVAL:%.*]] =  load {{.*}}[[BC]]
+; CHECK: store {{.*}}[[ERRVAL]]
+; CHECK: ret
+declare void @initi8(i8**)
+define void @test19(%swift.error** swifterror %err) {
+entry:
+  %tmp = alloca i8*, align 8
+  call void @initi8(i8** %tmp)
+  %swifterror = bitcast i8** %tmp to %swift.error**
+  %err.res = load %swift.error*, %swift.error** %swifterror, align 8
+  store %swift.error* %err.res, %swift.error** %err, align 8
   ret void
 }

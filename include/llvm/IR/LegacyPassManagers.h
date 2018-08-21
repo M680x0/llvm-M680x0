@@ -279,11 +279,11 @@ private:
   // when we have multiple instances of the same pass since they'll usually
   // have the same analysis usage and can share storage.
   FoldingSet<AUFoldingSetNode> UniqueAnalysisUsages;
-  
+
   // Allocator used for allocating UAFoldingSetNodes.  This handles deletion of
   // all allocated nodes in one fell swoop.
   SpecificBumpPtrAllocator<AUFoldingSetNode> AUFoldingSetNodeAllocator;
-  
+
   // Maps from a pass to it's associated entry in UniqueAnalysisUsages.  Does
   // not own the storage associated with either key or value.. 
   DenseMap<Pass *, AnalysisUsage*> AnUsageMap;
@@ -403,6 +403,15 @@ public:
       InheritedAnalysis[Index++] = (*I)->getAvailableAnalysis();
   }
 
+  /// Set the initial size of the module if the user has specified that they
+  /// want remarks for size.
+  /// Returns 0 if the remark was not requested.
+  unsigned initSizeRemarkInfo(Module &M);
+
+  /// Emit a remark signifying that the number of IR instructions in the module
+  /// changed.
+  void emitInstrCountChangedRemark(Pass *P, Module &M, unsigned CountBefore);
+
 protected:
   // Top level manager.
   PMTopLevelManager *TPM;
@@ -486,9 +495,7 @@ public:
   // Print passes managed by this manager
   void dumpPassStructure(unsigned Offset) override;
 
-  const char *getPassName() const override {
-    return "Function Pass Manager";
-  }
+  StringRef getPassName() const override { return "Function Pass Manager"; }
 
   FunctionPass *getContainedPass(unsigned N) {
     assert ( N < PassVector.size() && "Pass number out of range!");

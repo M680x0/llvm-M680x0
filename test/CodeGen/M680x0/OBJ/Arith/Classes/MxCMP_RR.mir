@@ -21,7 +21,7 @@
 name: MxCMP_RR
 body: |
   bb.0:
-    CMP8dd  %bd0, %bd1, implicit-def %ccr
-    CMP8dd  %bd3, %bd2, implicit-def %ccr
-    CMP32dd  %d0,  %d1, implicit-def %ccr
-    CMP32dd  %d7,  %d1, implicit-def %ccr
+    CMP8dd  $bd0, $bd1, implicit-def $ccr
+    CMP8dd  $bd3, $bd2, implicit-def $ccr
+    CMP32dd  $d0,  $d1, implicit-def $ccr
+    CMP32dd  $d7,  $d1, implicit-def $ccr

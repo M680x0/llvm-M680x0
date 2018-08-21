@@ -31,10 +31,10 @@
 name: MxBiArOp_FMR_ARII
 body: |
   bb.0:
-    ADD8fd  0,  %a0, %d1, %bd0, implicit-def %ccr
-    ADD8fd  -1, %a0, %d1, %bd0, implicit-def %ccr
-    ADD32fd 0,  %a1, %d1,  %d0, implicit-def %ccr
-    ADD32fd 0,  %a2, %a2,  %d1, implicit-def %ccr
+    ADD8fd  0,  $a0, $d1, $bd0, implicit-def $ccr
+    ADD8fd  -1, $a0, $d1, $bd0, implicit-def $ccr
+    ADD32fd 0,  $a1, $d1,  $d0, implicit-def $ccr
+    ADD32fd 0,  $a2, $a2,  $d1, implicit-def $ccr
 
 ...
 --- # ARID
@@ -51,8 +51,8 @@ body: |
 name: MxBiArOp_FMR_ARID
 body: |
   bb.0:
-    ADD8pd  0,  %a0, %bd0, implicit-def %ccr
-    ADD32pd -1, %a1,  %d0, implicit-def %ccr
+    ADD8pd  0,  $a0, $bd0, implicit-def $ccr
+    ADD32pd -1, $a1,  $d0, implicit-def $ccr
 
 ...
 --- # ARI
@@ -67,7 +67,7 @@ body: |
 name: MxBiArOp_FMR_ARI
 body: |
   bb.0:
-    ADD8jd  %a0, %bd0, implicit-def %ccr
-    ADD32jd %a1,  %d3, implicit-def %ccr
+    ADD8jd  $a0, $bd0, implicit-def $ccr
+    ADD32jd $a1,  $d3, implicit-def $ccr
 
 ...

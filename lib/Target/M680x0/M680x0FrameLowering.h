@@ -14,7 +14,7 @@
 #define LLVM_LIB_TARGET_M680X0_M680X0FRAMELOWERING_H
 
 #include "M680x0.h"
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
 
 namespace llvm {
 class MachineInstrBuilder;
@@ -114,7 +114,7 @@ public:
   /// Returns false otherwise.
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator MI,
-                                  const std::vector<CalleeSavedInfo> &CSI,
+                                  std::vector<CalleeSavedInfo> &CSI,
                                   const TargetRegisterInfo *TRI) const override;
 
   // hasFP - Return true if the specified function should have a dedicated frame

@@ -11,14 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "M680x0TargetMachine.h"
 #include "M680x0.h"
+#include "M680x0TargetMachine.h"
 
 #include "M680x0Subtarget.h"
 #include "M680x0TargetObjectFile.h"
 
-#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
@@ -29,10 +29,12 @@ extern "C" void LLVMInitializeM680x0Target() {
   RegisterTargetMachine<M680x0TargetMachine> X(TheM680x0Target);
 }
 
+namespace {
+
 // FIXME this layout is true for M68000 original cpu, other variants will
 // affect DL computation
-static std::string computeDataLayout(const Triple &TT, StringRef CPU,
-                                     const TargetOptions &Options) {
+std::string computeDataLayout(const Triple &TT, StringRef CPU,
+                              const TargetOptions &Options) {
   std::string Ret = "";
   // M680x0 is Big Endian
   Ret += "E";
@@ -57,9 +59,9 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   return Ret;
 }
 
-static Reloc::Model getEffectiveRelocModel(const Triple &TT,
-                                           Optional<Reloc::Model> RM) {
-    // If not defined we default to static
+Reloc::Model getEffectiveRelocModel(const Triple &TT,
+                                    Optional<Reloc::Model> RM) {
+  // If not defined we default to static
   if (!RM.hasValue()) {
     return Reloc::Static;
   }
@@ -67,13 +69,29 @@ static Reloc::Model getEffectiveRelocModel(const Triple &TT,
   return *RM;
 }
 
-M680x0TargetMachine::
-M680x0TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                    StringRef FS, const TargetOptions &Options,
-                    Optional<Reloc::Model> RM, CodeModel::Model CM,
-                    CodeGenOpt::Level OL)
+CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
+                                       bool JIT) {
+  if (!CM) {
+    return CodeModel::Small;
+  } else if (CM == CodeModel::Large) {
+    llvm_unreachable("Large code model is not supported");
+  } else if (CM == CodeModel::Kernel) {
+    // FIXME Kernel afaik is small cm plus some weird binding
+    llvm_unreachable("Kernel code model is not supported");
+  }
+  return CM.getValue();
+}
+} // end anonymous namespace
+
+M680x0TargetMachine::M680x0TargetMachine(const Target &T, const Triple &TT,
+                                         StringRef CPU, StringRef FS,
+                                         const TargetOptions &Options,
+                                         Optional<Reloc::Model> RM,
+                                         Optional<CodeModel::Model> CM,
+                                         CodeGenOpt::Level OL, bool JIT)
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options), TT, CPU, FS,
-                        Options, getEffectiveRelocModel(TT, RM), CM, OL),
+                        Options, getEffectiveRelocModel(TT, RM),
+                        getEffectiveCodeModel(CM, JIT), OL),
       TLOF(make_unique<M680x0ELFTargetObjectFile>()),
       Subtarget(TT, CPU, FS, *this) {
   initAsmInfo();
@@ -111,8 +129,8 @@ M680x0TargetMachine::getSubtargetImpl(const Function &F) const {
 namespace {
 class M680x0PassConfig : public TargetPassConfig {
 public:
-  M680x0PassConfig(M680x0TargetMachine *TM, PassManagerBase &PM)
-    : TargetPassConfig(TM, PM) {}
+  M680x0PassConfig(M680x0TargetMachine &TM, PassManagerBase &PM)
+      : TargetPassConfig(TM, PM) {}
 
   M680x0TargetMachine &getM680x0TargetMachine() const {
     return getTM<M680x0TargetMachine>();
@@ -129,7 +147,7 @@ public:
 } // namespace
 
 TargetPassConfig *M680x0TargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new M680x0PassConfig(this, PM);
+  return new M680x0PassConfig(*this, PM);
 }
 
 bool M680x0PassConfig::addInstSelector() {

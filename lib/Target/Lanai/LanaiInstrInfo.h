@@ -15,7 +15,8 @@
 #define LLVM_LIB_TARGET_LANAI_LANAIINSTRINFO_H
 
 #include "LanaiRegisterInfo.h"
-#include "llvm/Target/TargetInstrInfo.h"
+#include "MCTargetDesc/LanaiMCTargetDesc.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 
 #define GET_INSTRINFO_HEADER
 #include "LanaiGenInstrInfo.inc"
@@ -86,7 +87,8 @@ public:
                      SmallVectorImpl<MachineOperand> &Condition,
                      bool AllowModify) const override;
 
-  unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
+  unsigned removeBranch(MachineBasicBlock &MBB,
+                        int *BytesRemoved = nullptr) const override;
 
   // For a comparison instruction, return the source registers in SrcReg and
   // SrcReg2 if having two register operands, and the value it compares against
@@ -129,13 +131,14 @@ public:
                                SmallPtrSetImpl<MachineInstr *> &SeenMIs,
                                bool PreferFalse) const override;
 
-  bool ReverseBranchCondition(
+  bool reverseBranchCondition(
       SmallVectorImpl<MachineOperand> &Condition) const override;
 
-  unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TrueBlock,
+  unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TrueBlock,
                         MachineBasicBlock *FalseBlock,
                         ArrayRef<MachineOperand> Condition,
-                        const DebugLoc &DL) const override;
+                        const DebugLoc &DL,
+                        int *BytesAdded = nullptr) const override;
 };
 
 static inline bool isSPLSOpcode(unsigned Opcode) {

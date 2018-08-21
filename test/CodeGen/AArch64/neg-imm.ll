@@ -7,8 +7,8 @@ declare void @foo(i32)
 define void @test(i32 %px) {
 ; CHECK_LABEL: test:
 ; CHECK_LABEL: %entry
-; CHECK: subs
-; CHECK-NEXT: csel
+; CHECK: subs [[REG0:w[0-9]+]],
+; CHECK: csel {{w[0-9]+}}, wzr, [[REG0]]
 entry:
   %sub = add nsw i32 %px, -1
   %cmp = icmp slt i32 %px, 1
@@ -30,9 +30,9 @@ if.then3:
 
 for.inc:
 ; CHECK_LABEL: %for.inc
-; CHECK:  add
-; CHECK-NEXT:  cmp
-; CHECK:  b.le
+; CHECK:  cmp
+; CHECK-NEXT:  add
+; CHECK-NEXT:  b.le
 ; CHECK_LABEL: %for.cond.cleanup
   %inc = add nsw i32 %x.015, 1
   %cmp1 = icmp sgt i32 %x.015, %px

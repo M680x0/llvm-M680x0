@@ -25,7 +25,7 @@
 name: MxMove_RI
 body: |
   bb.0:
-    %bd0 = MOV8di  -1, implicit-def %ccr
-    %a1  = MOV32ri 42, implicit-def %ccr
-    %a1  = MOV32ri -1, implicit-def %ccr
+    $bd0 = MOV8di  -1, implicit-def $ccr
+    $a1  = MOV32ri 42, implicit-def $ccr
+    $a1  = MOV32ri -1, implicit-def $ccr
 

@@ -27,6 +27,7 @@
 
 #include "AVR.h"
 #include "AVRMachineFunctionInfo.h"
+#include "AVRRegisterInfo.h"
 #include "AVRTargetMachine.h"
 #include "MCTargetDesc/AVRMCTargetDesc.h"
 
@@ -42,22 +43,41 @@ void AVRInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator MI,
                                const DebugLoc &DL, unsigned DestReg,
                                unsigned SrcReg, bool KillSrc) const {
+  const AVRSubtarget &STI = MBB.getParent()->getSubtarget<AVRSubtarget>();
+  const AVRRegisterInfo &TRI = *STI.getRegisterInfo();
   unsigned Opc;
 
-  if (AVR::GPR8RegClass.contains(DestReg, SrcReg)) {
-    Opc = AVR::MOVRdRr;
-  } else if (AVR::DREGSRegClass.contains(DestReg, SrcReg)) {
-    Opc = AVR::MOVWRdRr;
-  } else if (SrcReg == AVR::SP && AVR::DREGSRegClass.contains(DestReg)) {
-    Opc = AVR::SPREAD;
-  } else if (DestReg == AVR::SP && AVR::DREGSRegClass.contains(SrcReg)) {
-    Opc = AVR::SPWRITE;
-  } else {
-    llvm_unreachable("Impossible reg-to-reg copy");
-  }
+  // Not all AVR devices support the 16-bit `MOVW` instruction.
+  if (AVR::DREGSRegClass.contains(DestReg, SrcReg)) {
+    if (STI.hasMOVW()) {
+      BuildMI(MBB, MI, DL, get(AVR::MOVWRdRr), DestReg)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else {
+      unsigned DestLo, DestHi, SrcLo, SrcHi;
 
-  BuildMI(MBB, MI, DL, get(Opc), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc));
+      TRI.splitReg(DestReg, DestLo, DestHi);
+      TRI.splitReg(SrcReg,  SrcLo,  SrcHi);
+
+      // Copy each individual register with the `MOV` instruction.
+      BuildMI(MBB, MI, DL, get(AVR::MOVRdRr), DestLo)
+        .addReg(SrcLo, getKillRegState(KillSrc));
+      BuildMI(MBB, MI, DL, get(AVR::MOVRdRr), DestHi)
+        .addReg(SrcHi, getKillRegState(KillSrc));
+    }
+  } else {
+    if (AVR::GPR8RegClass.contains(DestReg, SrcReg)) {
+      Opc = AVR::MOVRdRr;
+    } else if (SrcReg == AVR::SP && AVR::DREGSRegClass.contains(DestReg)) {
+      Opc = AVR::SPREAD;
+    } else if (DestReg == AVR::SP && AVR::DREGSRegClass.contains(SrcReg)) {
+      Opc = AVR::SPWRITE;
+    } else {
+      llvm_unreachable("Impossible reg-to-reg copy");
+    }
+
+    BuildMI(MBB, MI, DL, get(Opc), DestReg)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  }
 }
 
 unsigned AVRInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
@@ -105,6 +125,9 @@ void AVRInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                        const TargetRegisterClass *RC,
                                        const TargetRegisterInfo *TRI) const {
   MachineFunction &MF = *MBB.getParent();
+  AVRMachineFunctionInfo *AFI = MF.getInfo<AVRMachineFunctionInfo>();
+
+  AFI->setHasSpills(true);
 
   DebugLoc DL;
   if (MI != MBB.end()) {
@@ -119,9 +142,9 @@ void AVRInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
       MFI.getObjectAlignment(FrameIndex));
 
   unsigned Opcode = 0;
-  if (RC->hasType(MVT::i8)) {
+  if (TRI->isTypeLegalForClass(*RC, MVT::i8)) {
     Opcode = AVR::STDPtrQRr;
-  } else if (RC->hasType(MVT::i16)) {
+  } else if (TRI->isTypeLegalForClass(*RC, MVT::i16)) {
     Opcode = AVR::STDWPtrQRr;
   } else {
     llvm_unreachable("Cannot store this register into a stack slot!");
@@ -153,9 +176,9 @@ void AVRInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
       MFI.getObjectAlignment(FrameIndex));
 
   unsigned Opcode = 0;
-  if (RC->hasType(MVT::i8)) {
+  if (TRI->isTypeLegalForClass(*RC, MVT::i8)) {
     Opcode = AVR::LDDRdPtrQ;
-  } else if (RC->hasType(MVT::i16)) {
+  } else if (TRI->isTypeLegalForClass(*RC, MVT::i16)) {
     // Opcode = AVR::LDDWRdPtrQ;
     //:FIXME: remove this once PR13375 gets fixed
     Opcode = AVR::LDDWRdYQ;
@@ -250,7 +273,7 @@ bool AVRInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
   while (I != MBB.begin()) {
     --I;
-    if (I->isDebugValue()) {
+    if (I->isDebugInstr()) {
       continue;
     }
 
@@ -373,44 +396,55 @@ bool AVRInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   return false;
 }
 
-unsigned AVRInstrInfo::InsertBranch(MachineBasicBlock &MBB,
+unsigned AVRInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                     MachineBasicBlock *TBB,
                                     MachineBasicBlock *FBB,
                                     ArrayRef<MachineOperand> Cond,
-                                    const DebugLoc &DL) const {
+                                    const DebugLoc &DL,
+                                    int *BytesAdded) const {
+  if (BytesAdded) *BytesAdded = 0;
+
   // Shouldn't be a fall through.
-  assert(TBB && "InsertBranch must not be told to insert a fallthrough");
+  assert(TBB && "insertBranch must not be told to insert a fallthrough");
   assert((Cond.size() == 1 || Cond.size() == 0) &&
          "AVR branch conditions have one component!");
 
   if (Cond.empty()) {
     assert(!FBB && "Unconditional branch with multiple successors!");
-    BuildMI(&MBB, DL, get(AVR::RJMPk)).addMBB(TBB);
+    auto &MI = *BuildMI(&MBB, DL, get(AVR::RJMPk)).addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(MI);
     return 1;
   }
 
   // Conditional branch.
   unsigned Count = 0;
   AVRCC::CondCodes CC = (AVRCC::CondCodes)Cond[0].getImm();
-  BuildMI(&MBB, DL, getBrCond(CC)).addMBB(TBB);
+  auto &CondMI = *BuildMI(&MBB, DL, getBrCond(CC)).addMBB(TBB);
+
+  if (BytesAdded) *BytesAdded += getInstSizeInBytes(CondMI);
   ++Count;
 
   if (FBB) {
     // Two-way Conditional branch. Insert the second branch.
-    BuildMI(&MBB, DL, get(AVR::RJMPk)).addMBB(FBB);
+    auto &MI = *BuildMI(&MBB, DL, get(AVR::RJMPk)).addMBB(FBB);
+    if (BytesAdded) *BytesAdded += getInstSizeInBytes(MI);
     ++Count;
   }
 
   return Count;
 }
 
-unsigned AVRInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
+unsigned AVRInstrInfo::removeBranch(MachineBasicBlock &MBB,
+                                    int *BytesRemoved) const {
+  if (BytesRemoved) *BytesRemoved = 0;
+
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
 
   while (I != MBB.begin()) {
     --I;
-    if (I->isDebugValue()) {
+    if (I->isDebugInstr()) {
       continue;
     }
     //:TODO: add here the missing jmp instructions once they are implemented
@@ -421,6 +455,7 @@ unsigned AVRInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
     }
 
     // Remove the branch.
+    if (BytesRemoved) *BytesRemoved += getInstSizeInBytes(*I);
     I->eraseFromParent();
     I = MBB.end();
     ++Count;
@@ -429,7 +464,7 @@ unsigned AVRInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   return Count;
 }
 
-bool AVRInstrInfo::ReverseBranchCondition(
+bool AVRInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
   assert(Cond.size() == 1 && "Invalid AVR branch condition!");
 
@@ -454,13 +489,86 @@ unsigned AVRInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   case TargetOpcode::DBG_VALUE:
     return 0;
   case TargetOpcode::INLINEASM: {
-    const MachineFunction *MF = MI.getParent()->getParent();
-    const AVRTargetMachine &TM = static_cast<const AVRTargetMachine&>(MF->getTarget());
-    const TargetInstrInfo &TII = *TM.getSubtargetImpl()->getInstrInfo();
+    const MachineFunction &MF = *MI.getParent()->getParent();
+    const AVRTargetMachine &TM = static_cast<const AVRTargetMachine&>(MF.getTarget());
+    const AVRSubtarget &STI = MF.getSubtarget<AVRSubtarget>();
+    const TargetInstrInfo &TII = *STI.getInstrInfo();
+
     return TII.getInlineAsmLength(MI.getOperand(0).getSymbolName(),
                                   *TM.getMCAsmInfo());
   }
   }
 }
 
+MachineBasicBlock *
+AVRInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  default:
+    llvm_unreachable("unexpected opcode!");
+  case AVR::JMPk:
+  case AVR::CALLk:
+  case AVR::RCALLk:
+  case AVR::RJMPk:
+  case AVR::BREQk:
+  case AVR::BRNEk:
+  case AVR::BRSHk:
+  case AVR::BRLOk:
+  case AVR::BRMIk:
+  case AVR::BRPLk:
+  case AVR::BRGEk:
+  case AVR::BRLTk:
+    return MI.getOperand(0).getMBB();
+  case AVR::BRBSsk:
+  case AVR::BRBCsk:
+    return MI.getOperand(1).getMBB();
+  case AVR::SBRCRrB:
+  case AVR::SBRSRrB:
+  case AVR::SBICAb:
+  case AVR::SBISAb:
+    llvm_unreachable("unimplemented branch instructions");
+  }
+}
+
+bool AVRInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
+                                         int64_t BrOffset) const {
+
+  switch (BranchOp) {
+  default:
+    llvm_unreachable("unexpected opcode!");
+  case AVR::JMPk:
+  case AVR::CALLk:
+    return true;
+  case AVR::RCALLk:
+  case AVR::RJMPk:
+    return isIntN(13, BrOffset);
+  case AVR::BRBSsk:
+  case AVR::BRBCsk:
+  case AVR::BREQk:
+  case AVR::BRNEk:
+  case AVR::BRSHk:
+  case AVR::BRLOk:
+  case AVR::BRMIk:
+  case AVR::BRPLk:
+  case AVR::BRGEk:
+  case AVR::BRLTk:
+    return isIntN(7, BrOffset);
+  }
+}
+
+unsigned AVRInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
+                                            MachineBasicBlock &NewDestBB,
+                                            const DebugLoc &DL,
+                                            int64_t BrOffset,
+                                            RegScavenger *RS) const {
+    // This method inserts a *direct* branch (JMP), despite its name.
+    // LLVM calls this method to fixup unconditional branches; it never calls
+    // insertBranch or some hypothetical "insertDirectBranch".
+    // See lib/CodeGen/RegisterRelaxation.cpp for details.
+    // We end up here when a jump is too long for a RJMP instruction.
+    auto &MI = *BuildMI(&MBB, DL, get(AVR::JMPk)).addMBB(&NewDestBB);
+
+    return getInstSizeInBytes(MI);
+}
+
 } // end of namespace llvm
+

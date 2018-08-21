@@ -1,5 +1,5 @@
-; RUN: llc < %s -stack-symbol-ordering=0 -mcpu=generic -march=x86-64 -mattr=+avx -mtriple=i686-apple-darwin10 | FileCheck %s
-; RUN: llc < %s -stack-symbol-ordering=0 -mcpu=generic -stackrealign -stack-alignment=32 -march=x86-64 -mattr=+avx -mtriple=i686-apple-darwin10 | FileCheck %s -check-prefix=FORCE-ALIGN
+; RUN: llc < %s -stack-symbol-ordering=0 -mcpu=generic -mattr=+avx -mtriple=x86_64-apple-darwin10 | FileCheck %s
+; RUN: llc < %s -stack-symbol-ordering=0 -mcpu=generic -stackrealign -stack-alignment=32 -mattr=+avx -mtriple=x86_64-apple-darwin10 | FileCheck %s -check-prefix=FORCE-ALIGN
 ; rdar://11496434
 
 ; no VLAs or dynamic alignment
@@ -38,7 +38,7 @@ entry:
 ; CHECK: subq ${{[0-9]+}}, %rsp
 ;
 ; CHECK: leaq {{[0-9]*}}(%rsp), %rdi
-; CHECK: leaq {{[0-9]*}}(%rsp), %rsi
+; CHECK: movq %rsp, %rsi
 ; CHECK: callq _t2_helper
 ;
 ; CHECK: movq %rbp, %rsp
@@ -89,7 +89,7 @@ entry:
 ; CHECK: movq %rsp, %rbx
 ;
 ; CHECK: leaq {{[0-9]*}}(%rbx), %rdi
-; CHECK: leaq {{[0-9]*}}(%rbx), %rdx
+; CHECK: movq %rbx, %rdx
 ; CHECK: callq   _t4_helper
 ;
 ; CHECK: leaq -{{[0-9]+}}(%rbp), %rsp

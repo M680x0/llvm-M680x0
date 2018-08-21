@@ -4,7 +4,7 @@
 ; test cases have been minimized as much as possible, but still most of the test
 ; cases could break if instruction scheduling heuristics for cortex-a53 change
 ; RUN: llc < %s -mcpu=cortex-a53 -aarch64-fix-cortex-a53-835769=1 -stats 2>&1 \
-; RUN:  | FileCheck %s --check-prefix CHECK
+; RUN:  | FileCheck %s
 ; RUN: llc < %s -mcpu=cortex-a53 -aarch64-fix-cortex-a53-835769=0 -stats 2>&1 \
 ; RUN:  | FileCheck %s --check-prefix CHECK-NOWORKAROUND
 ; The following run lines are just to verify whether or not this pass runs by
@@ -508,12 +508,12 @@ block1:
 ; CHECK:	ldr
 ; CHECK-NEXT:	nop
 ; CHECK-NEXT:	.Ltmp
-; CHECK-NEXT: 	BB
+; CHECK-NEXT: 	%bb.
 ; CHECK-NEXT: 	madd
 ; CHECK-NOWORKAROUND-LABEL:	fall_through
 ; CHECK-NOWORKAROUND: 	ldr
 ; CHECK-NOWORKAROUND-NEXT:	.Ltmp
-; CHECK-NOWORKAROUND-NEXT:	BB
+; CHECK-NOWORKAROUND-NEXT:	%bb.
 ; CHECK-NOWORKAROUND-NEXT:	madd
 
 ; No checks for this, just check it doesn't crash

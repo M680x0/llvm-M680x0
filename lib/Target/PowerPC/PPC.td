@@ -35,6 +35,8 @@ def Directive970 : SubtargetFeature<"", "DarwinDirective", "PPC::DIR_970", "">;
 def Directive32  : SubtargetFeature<"", "DarwinDirective", "PPC::DIR_32", "">;
 def Directive64  : SubtargetFeature<"", "DarwinDirective", "PPC::DIR_64", "">;
 def DirectiveA2  : SubtargetFeature<"", "DarwinDirective", "PPC::DIR_A2", "">;
+def DirectiveE500   : SubtargetFeature<"", "DarwinDirective",
+                                       "PPC::DIR_E500", "">;
 def DirectiveE500mc : SubtargetFeature<"", "DarwinDirective",
                                        "PPC::DIR_E500mc", "">;
 def DirectiveE5500  : SubtargetFeature<"", "DarwinDirective",
@@ -53,40 +55,55 @@ def DirectivePwr9: SubtargetFeature<"", "DarwinDirective", "PPC::DIR_PWR9", "">;
 
 def Feature64Bit     : SubtargetFeature<"64bit","Has64BitSupport", "true",
                                         "Enable 64-bit instructions">;
-def FeatureSoftFloat : SubtargetFeature<"soft-float", "UseSoftFloat", "true",
-                              "Use software emulation for floating point">;                                        
+def FeatureHardFloat : SubtargetFeature<"hard-float", "HasHardFloat", "true",
+                              "Enable floating-point instructions">;
 def Feature64BitRegs : SubtargetFeature<"64bitregs","Use64BitRegs", "true",
                               "Enable 64-bit registers usage for ppc32 [beta]">;
 def FeatureCRBits    : SubtargetFeature<"crbits", "UseCRBits", "true",
                               "Use condition-register bits individually">;
+def FeatureFPU       : SubtargetFeature<"fpu","HasFPU","true",
+                                        "Enable classic FPU instructions",
+                                        [FeatureHardFloat]>;
 def FeatureAltivec   : SubtargetFeature<"altivec","HasAltivec", "true",
-                                        "Enable Altivec instructions">;
+                                        "Enable Altivec instructions",
+                                        [FeatureFPU]>;
 def FeatureSPE       : SubtargetFeature<"spe","HasSPE", "true",
-                                        "Enable SPE instructions">;
+                                        "Enable SPE instructions",
+                                        [FeatureHardFloat]>;
 def FeatureMFOCRF    : SubtargetFeature<"mfocrf","HasMFOCRF", "true",
                                         "Enable the MFOCRF instruction">;
 def FeatureFSqrt     : SubtargetFeature<"fsqrt","HasFSQRT", "true",
-                                        "Enable the fsqrt instruction">;
+                                        "Enable the fsqrt instruction",
+                                        [FeatureFPU]>;
 def FeatureFCPSGN    : SubtargetFeature<"fcpsgn", "HasFCPSGN", "true",
-                                        "Enable the fcpsgn instruction">;
+                                        "Enable the fcpsgn instruction",
+                                        [FeatureFPU]>;
 def FeatureFRE       : SubtargetFeature<"fre", "HasFRE", "true",
-                                        "Enable the fre instruction">;
+                                        "Enable the fre instruction",
+                                        [FeatureFPU]>;
 def FeatureFRES      : SubtargetFeature<"fres", "HasFRES", "true",
-                                        "Enable the fres instruction">;
+                                        "Enable the fres instruction",
+                                        [FeatureFPU]>;
 def FeatureFRSQRTE   : SubtargetFeature<"frsqrte", "HasFRSQRTE", "true",
-                                        "Enable the frsqrte instruction">;
+                                        "Enable the frsqrte instruction",
+                                        [FeatureFPU]>;
 def FeatureFRSQRTES  : SubtargetFeature<"frsqrtes", "HasFRSQRTES", "true",
-                                        "Enable the frsqrtes instruction">;
+                                        "Enable the frsqrtes instruction",
+                                        [FeatureFPU]>;
 def FeatureRecipPrec : SubtargetFeature<"recipprec", "HasRecipPrec", "true",
                               "Assume higher precision reciprocal estimates">;
 def FeatureSTFIWX    : SubtargetFeature<"stfiwx","HasSTFIWX", "true",
-                                        "Enable the stfiwx instruction">;
+                                        "Enable the stfiwx instruction",
+                                        [FeatureFPU]>;
 def FeatureLFIWAX    : SubtargetFeature<"lfiwax","HasLFIWAX", "true",
-                                        "Enable the lfiwax instruction">;
+                                        "Enable the lfiwax instruction",
+                                        [FeatureFPU]>;
 def FeatureFPRND     : SubtargetFeature<"fprnd", "HasFPRND", "true",
-                                        "Enable the fri[mnpz] instructions">;
+                                        "Enable the fri[mnpz] instructions",
+                                        [FeatureFPU]>;
 def FeatureFPCVT     : SubtargetFeature<"fpcvt", "HasFPCVT", "true",
-  "Enable fc[ft]* (unsigned and single-precision) and lfiwzx instructions">;
+  "Enable fc[ft]* (unsigned and single-precision) and lfiwzx instructions",
+                                        [FeatureFPU]>;
 def FeatureISEL      : SubtargetFeature<"isel","HasISEL", "true",
                                         "Enable the isel instruction">;
 def FeatureBPERMD    : SubtargetFeature<"bpermd", "HasBPERMD", "true",
@@ -107,12 +124,15 @@ def FeatureMSYNC     : SubtargetFeature<"msync", "HasOnlyMSYNC", "true",
                               [FeatureBookE]>;
 def FeatureE500      : SubtargetFeature<"e500", "IsE500", "true",
                                         "Enable E500/E500mc instructions">;
+def FeatureSecurePlt : SubtargetFeature<"secure-plt","SecurePlt", "true",
+                                        "Enable secure plt mode">;
 def FeaturePPC4xx    : SubtargetFeature<"ppc4xx", "IsPPC4xx", "true",
                                         "Enable PPC 4xx instructions">;
 def FeaturePPC6xx    : SubtargetFeature<"ppc6xx", "IsPPC6xx", "true",
                                         "Enable PPC 6xx instructions">;
 def FeatureQPX       : SubtargetFeature<"qpx","HasQPX", "true",
-                                        "Enable QPX instructions">;
+                                        "Enable QPX instructions",
+                                        [FeatureFPU]>;
 def FeatureVSX       : SubtargetFeature<"vsx","HasVSX", "true",
                                         "Enable VSX instructions",
                                         [FeatureAltivec]>;
@@ -203,7 +223,7 @@ def ProcessorFeatures {
   list<SubtargetFeature> Power8FeatureList =
       !listconcat(Power7FeatureList, Power8SpecificFeatures);
   list<SubtargetFeature> Power9SpecificFeatures =
-      [FeatureP9Altivec, FeatureP9Vector, FeatureISA3_0];
+      [DirectivePwr9, FeatureP9Altivec, FeatureP9Vector, FeatureISA3_0];
   list<SubtargetFeature> Power9FeatureList =
       !listconcat(Power8FeatureList, Power9SpecificFeatures);
 }
@@ -276,13 +296,13 @@ def getAltVSXFMAOpcode : InstrMapping {
 
 include "PPCRegisterInfo.td"
 include "PPCSchedule.td"
-include "PPCInstrInfo.td"
 
 //===----------------------------------------------------------------------===//
 // PowerPC processors supported.
 //
 
-def : Processor<"generic", G3Itineraries, [Directive32, FeatureMFTB]>;
+def : Processor<"generic", G3Itineraries, [Directive32, FeatureHardFloat,
+                                           FeatureMFTB]>;
 def : ProcessorModel<"440", PPC440Model, [Directive440, FeatureISEL,
                                           FeatureFRES, FeatureFRSQRTE,
                                           FeatureICBT, FeatureBookE, 
@@ -291,8 +311,8 @@ def : ProcessorModel<"450", PPC440Model, [Directive440, FeatureISEL,
                                           FeatureFRES, FeatureFRSQRTE,
                                           FeatureICBT, FeatureBookE, 
                                           FeatureMSYNC, FeatureMFTB]>;
-def : Processor<"601", G3Itineraries, [Directive601]>;
-def : Processor<"602", G3Itineraries, [Directive602,
+def : Processor<"601", G3Itineraries, [Directive601, FeatureFPU]>;
+def : Processor<"602", G3Itineraries, [Directive602, FeatureFPU,
                                        FeatureMFTB]>;
 def : Processor<"603", G3Itineraries, [Directive603,
                                        FeatureFRES, FeatureFRSQRTE,
@@ -343,6 +363,10 @@ def : ProcessorModel<"g5", G5Model,
                    FeatureFRES, FeatureFRSQRTE,
                    Feature64Bit /*, Feature64BitRegs */,
                    FeatureMFTB, DeprecatedDST]>;
+def : ProcessorModel<"e500", PPCE500Model,
+                  [DirectiveE500,
+                   FeatureICBT, FeatureBookE,
+                   FeatureISEL, FeatureMFTB]>;
 def : ProcessorModel<"e500mc", PPCE500mcModel,
                   [DirectiveE500mc,
                    FeatureSTFIWX, FeatureICBT, FeatureBookE, 
@@ -404,9 +428,11 @@ def : ProcessorModel<"pwr6x", G5Model,
                    FeatureMFTB, DeprecatedDST]>;
 def : ProcessorModel<"pwr7", P7Model, ProcessorFeatures.Power7FeatureList>;
 def : ProcessorModel<"pwr8", P8Model, ProcessorFeatures.Power8FeatureList>;
-// FIXME: Same as P8 until the POWER9 scheduling info is available
-def : ProcessorModel<"pwr9", P8Model, ProcessorFeatures.Power9FeatureList>;
-def : Processor<"ppc", G3Itineraries, [Directive32, FeatureMFTB]>;
+def : ProcessorModel<"pwr9", P9Model, ProcessorFeatures.Power9FeatureList>; 
+def : Processor<"ppc", G3Itineraries, [Directive32, FeatureHardFloat,
+                                       FeatureMFTB]>;
+def : Processor<"ppc32", G3Itineraries, [Directive32, FeatureHardFloat,
+                                         FeatureMFTB]>;
 def : ProcessorModel<"ppc64", G5Model,
                   [Directive64, FeatureAltivec,
                    FeatureMFOCRF, FeatureFSqrt, FeatureFRES,
@@ -450,4 +476,5 @@ def PPC : Target {
 
   let AssemblyParsers = [PPCAsmParser];
   let AssemblyParserVariants = [PPCAsmParserVariant];
+  let AllowRegisterRenaming = 1;
 }

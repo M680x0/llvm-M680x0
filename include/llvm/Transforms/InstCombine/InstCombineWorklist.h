@@ -28,19 +28,11 @@ class InstCombineWorklist {
   SmallVector<Instruction*, 256> Worklist;
   DenseMap<Instruction*, unsigned> WorklistMap;
 
-  void operator=(const InstCombineWorklist&RHS) = delete;
-  InstCombineWorklist(const InstCombineWorklist&) = delete;
 public:
-  InstCombineWorklist() {}
+  InstCombineWorklist() = default;
 
-  InstCombineWorklist(InstCombineWorklist &&Arg)
-      : Worklist(std::move(Arg.Worklist)),
-        WorklistMap(std::move(Arg.WorklistMap)) {}
-  InstCombineWorklist &operator=(InstCombineWorklist &&RHS) {
-    Worklist = std::move(RHS.Worklist);
-    WorklistMap = std::move(RHS.WorklistMap);
-    return *this;
-  }
+  InstCombineWorklist(InstCombineWorklist &&) = default;
+  InstCombineWorklist &operator=(InstCombineWorklist &&) = default;
 
   bool isEmpty() const { return Worklist.empty(); }
 
@@ -48,7 +40,7 @@ public:
   /// in it.
   void Add(Instruction *I) {
     if (WorklistMap.insert(std::make_pair(I, Worklist.size())).second) {
-      DEBUG(dbgs() << "IC: ADD: " << *I << '\n');
+      LLVM_DEBUG(dbgs() << "IC: ADD: " << *I << '\n');
       Worklist.push_back(I);
     }
   }
@@ -65,7 +57,8 @@ public:
     assert(Worklist.empty() && "Worklist must be empty to add initial group");
     Worklist.reserve(List.size()+16);
     WorklistMap.reserve(List.size());
-    DEBUG(dbgs() << "IC: ADDING: " << List.size() << " instrs to worklist\n");
+    LLVM_DEBUG(dbgs() << "IC: ADDING: " << List.size()
+                      << " instrs to worklist\n");
     unsigned Idx = 0;
     for (Instruction *I : reverse(List)) {
       WorklistMap.insert(std::make_pair(I, Idx++));

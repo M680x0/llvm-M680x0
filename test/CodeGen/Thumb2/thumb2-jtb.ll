@@ -1,4 +1,5 @@
 ; RUN: llc -mtriple=thumb-eabi -mcpu=arm1156t2-s -mattr=+thumb2 -arm-adjust-jump-tables=0 %s -o - | FileCheck %s
+; RUN: llc -mtriple=thumbv6-eabi -mcpu=cortex-m0 -arm-adjust-jump-tables=0 %s -o - | FileCheck %s
 
 ; Do not use tbb / tbh if any destination is before the jumptable.
 ; rdar://7102917
@@ -12,9 +13,6 @@ define i16 @main__getopt_internal_2E_exit_2E_ce(i32, i1 %b) nounwind {
 ; CHECK-NOT: data_region
 entry:
   br i1 %b, label %codeRepl127.exitStub, label %newFuncRoot
-
-newFuncRoot:
-	br label %_getopt_internal.exit.ce
 
 codeRepl127.exitStub:		; preds = %_getopt_internal.exit.ce
   ; Add an explicit edge back to before the jump table to ensure this block
@@ -101,6 +99,9 @@ codeRepl57.exitStub:		; preds = %_getopt_internal.exit.ce
 
 codeRepl103.exitStub:		; preds = %_getopt_internal.exit.ce
 	ret i16 26
+
+newFuncRoot:
+	br label %_getopt_internal.exit.ce
 
 _getopt_internal.exit.ce:		; preds = %newFuncRoot
 	switch i32 %0, label %codeRepl127.exitStub [

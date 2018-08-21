@@ -21,11 +21,14 @@
 ; 16:   x += 7;
 ; 17: }
 
+; ASM: .cv_func_id 0
 ; ASM: .cv_loc 0 1 13 0 is_stmt 0      # t.cpp:13:0
 ; ASM: .cv_loc 0 1 14 5                # t.cpp:14:5
 ; ASM: addl    $6, "?x@@3HC"
+; ASM: .cv_inline_site_id 1 within 0 inlined_at 1 15 3
 ; ASM: .cv_loc 1 1 9 5                 # t.cpp:9:5
 ; ASM: addl    $4, "?x@@3HC"
+; ASM: .cv_inline_site_id 2 within 1 inlined_at 1 10 3
 ; ASM: .cv_loc 2 1 3 7                 # t.cpp:3:7
 ; ASM: .cv_loc 2 1 4 5                 # t.cpp:4:5
 ; ASM: addl    {{.*}}, "?x@@3HC"
@@ -46,11 +49,11 @@
 ; ASM: .long   0
 ; ASM: # Inlined function bar starts at t.cpp:8
 ; ASM: .long   4098                    # Type index of inlined function
-; ASM: .long   0                       # Offset into filechecksum table
+; ASM: .cv_filechecksumoffset 1        # Offset into filechecksum table
 ; ASM: .long   8                       # Starting line number
 ; ASM: # Inlined function foo starts at t.cpp:2
 ; ASM: .long   4099
-; ASM: .long   0
+; ASM: .cv_filechecksumoffset 1        # Offset into filechecksum table
 ; ASM: .long   2
 ; ASM: [[inline_end]]:
 
@@ -60,7 +63,7 @@
 ; ASM: .long
 ; ASM: .long
 ; ASM: .long
-; ASM: .cv_inline_linetable 1 1 8 Lfunc_begin0 Lfunc_end0 contains 2
+; ASM: .cv_inline_linetable 1 1 8 Lfunc_begin0 Lfunc_end0
 ; ASM: .short 4429
 ; ASM: .long
 ; ASM: .long
@@ -68,6 +71,8 @@
 ; ASM: .cv_inline_linetable 2 1 2 Lfunc_begin0 Lfunc_end0
 ; ASM: .short  4430
 ; ASM: .short  4430
+
+; ASM: .cv_filechecksums
 
 ; ASM: .section .debug$T,"dr"
 ; ASM: .long 4 # Debug section magic
@@ -163,11 +168,11 @@
 ; OBJ: ]
 ; OBJ: Subsection [
 ; OBJ:   SubSectionType: Symbols (0xF1)
-; OBJ:   ProcStart {
+; OBJ:   {{.*}}Proc{{.*}}Sym {
 ; OBJ:     PtrParent: 0x0
 ; OBJ:     PtrEnd: 0x0
 ; OBJ:     PtrNext: 0x0
-; OBJ:     CodeSize: 0x3D
+; OBJ:     CodeSize: 0x3C
 ; OBJ:     DbgStart: 0x0
 ; OBJ:     DbgEnd: 0x0
 ; OBJ:     FunctionType: baz (0x1004)
@@ -178,24 +183,25 @@
 ; OBJ:     DisplayName: baz
 ; OBJ:     LinkageName: ?baz@@YAXXZ
 ; OBJ:   }
-; OBJ:   InlineSite {
+; OBJ:   InlineSiteSym {
 ; OBJ:     PtrParent: 0x0
 ; OBJ:     PtrEnd: 0x0
 ; OBJ:     Inlinee: bar (0x1002)
 ; OBJ:      BinaryAnnotations [
 ; OBJ-NEXT:   ChangeCodeOffsetAndLineOffset: {CodeOffset: 0x8, LineOffset: 1}
-; OBJ-NEXT:   ChangeLineOffset: 2
-; OBJ-NEXT:   ChangeCodeOffset: 0x25
+; OBJ-NEXT:   ChangeCodeOffsetAndLineOffset: {CodeOffset: 0x7, LineOffset: 1}
+; OBJ-NEXT:   ChangeLineOffset: 1
+; OBJ-NEXT:   ChangeCodeOffset: 0x1D
 ; OBJ-NEXT:   ChangeCodeLength: 0x7
 ; OBJ:      ]
 ; OBJ:   }
-; OBJ:   InlineSite {
+; OBJ:   InlineSiteSym {
 ; OBJ:     PtrParent: 0x0
 ; OBJ:     PtrEnd: 0x0
 ; OBJ:     Inlinee: foo (0x1003)
 ; OBJ:     BinaryAnnotations [
 ; OBJ-NEXT:  ChangeCodeOffsetAndLineOffset: {CodeOffset: 0xF, LineOffset: 1}
-; OBJ-NEXT:  ChangeCodeOffsetAndLineOffset: {CodeOffset: 0xA, LineOffset: 1}
+; OBJ-NEXT:  ChangeCodeOffsetAndLineOffset: {CodeOffset: 0x9, LineOffset: 1}
 ; OBJ-NEXT:  ChangeCodeOffsetAndLineOffset: {CodeOffset: 0x6, LineOffset: 1}
 ; OBJ-NEXT:  ChangeCodeOffsetAndLineOffset: {CodeOffset: 0x7, LineOffset: 1}
 ; OBJ-NEXT:  ChangeCodeLength: 0x7
@@ -265,10 +271,10 @@ attributes #2 = { nounwind }
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "clang version 3.9.0 ", isOptimized: true, runtimeVersion: 0, emissionKind: LineTablesOnly, enums: !2)
 !1 = !DIFile(filename: "t.cpp", directory: "D:\5Csrc\5Cllvm\5Cbuild")
 !2 = !{}
-!4 = distinct !DISubprogram(name: "baz", scope: !1, file: !1, line: 13, type: !5, isLocal: false, isDefinition: true, scopeLine: 13, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
+!4 = distinct !DISubprogram(name: "baz", scope: !1, file: !1, line: 13, type: !5, isLocal: false, isDefinition: true, scopeLine: 13, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
 !5 = !DISubroutineType(types: !2)
-!6 = distinct !DISubprogram(name: "bar", scope: !1, file: !1, line: 8, type: !5, isLocal: true, isDefinition: true, scopeLine: 8, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
-!7 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 2, type: !5, isLocal: true, isDefinition: true, scopeLine: 2, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
+!6 = distinct !DISubprogram(name: "bar", scope: !1, file: !1, line: 8, type: !5, isLocal: true, isDefinition: true, scopeLine: 8, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
+!7 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 2, type: !5, isLocal: true, isDefinition: true, scopeLine: 2, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
 !8 = !{i32 2, !"CodeView", i32 1}
 !9 = !{i32 2, !"Debug Info Version", i32 3}
 !10 = !{i32 1, !"PIC Level", i32 2}

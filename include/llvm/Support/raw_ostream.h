@@ -16,20 +16,28 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/DataTypes.h"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <string>
 #include <system_error>
 
 namespace llvm {
+
+class formatv_object_base;
 class format_object_base;
 class FormattedString;
 class FormattedNumber;
-template <typename T> class SmallVectorImpl;
+class FormattedBytes;
 
 namespace sys {
 namespace fs {
+enum FileAccess : unsigned;
 enum OpenFlags : unsigned;
-}
-}
+enum CreationDisposition : unsigned;
+} // end namespace fs
+} // end namespace sys
 
 /// This class implements an extremely fast bulk output stream that can *only*
 /// output to a stream.  It does not support seeking, reopening, rewinding, line
@@ -37,9 +45,6 @@ enum OpenFlags : unsigned;
 /// a chunk at a time.
 class raw_ostream {
 private:
-  void operator=(const raw_ostream &) = delete;
-  raw_ostream(const raw_ostream &) = delete;
-
   /// The buffer is handled in such a way that the buffer is
   /// uninitialized, unbuffered, or out of space when OutBufCur >=
   /// OutBufEnd. Thus a single comparison suffices to determine if we
@@ -69,7 +74,7 @@ private:
 public:
   // color order matches ANSI escape sequence, don't change
   enum Colors {
-    BLACK=0,
+    BLACK = 0,
     RED,
     GREEN,
     YELLOW,
@@ -85,6 +90,9 @@ public:
     // Start out ready to flush.
     OutBufStart = OutBufEnd = OutBufCur = nullptr;
   }
+
+  raw_ostream(const raw_ostream &) = delete;
+  void operator=(const raw_ostream &) = delete;
 
   virtual ~raw_ostream();
 
@@ -184,7 +192,7 @@ public:
     return write(Str.data(), Str.length());
   }
 
-  raw_ostream &operator<<(const llvm::SmallVectorImpl<char> &Str) {
+  raw_ostream &operator<<(const SmallVectorImpl<char> &Str) {
     return write(Str.data(), Str.size());
   }
 
@@ -193,6 +201,7 @@ public:
   raw_ostream &operator<<(unsigned long long N);
   raw_ostream &operator<<(long long N);
   raw_ostream &operator<<(const void *P);
+
   raw_ostream &operator<<(unsigned int N) {
     return this->operator<<(static_cast<unsigned long>(N));
   }
@@ -205,6 +214,10 @@ public:
 
   /// Output \p N in hexadecimal, without any prefix or padding.
   raw_ostream &write_hex(unsigned long long N);
+
+  /// Output a formatted UUID with dash separators.
+  using uuid_t = uint8_t[16];
+  raw_ostream &write_uuid(const uuid_t UUID);
 
   /// Output \p Str, turning '\\', '\t', '\n', '"', and anything that doesn't
   /// satisfy std::isprint into an escape sequence.
@@ -222,8 +235,17 @@ public:
   // Formatted output, see the formatHex() function in Support/Format.h.
   raw_ostream &operator<<(const FormattedNumber &);
 
+  // Formatted output, see the formatv() function in Support/FormatVariadic.h.
+  raw_ostream &operator<<(const formatv_object_base &);
+
+  // Formatted output, see the format_bytes() function in Support/Format.h.
+  raw_ostream &operator<<(const FormattedBytes &);
+
   /// indent - Insert 'NumSpaces' spaces.
   raw_ostream &indent(unsigned NumSpaces);
+
+  /// write_zeros - Insert 'NumZeros' nulls.
+  raw_ostream &write_zeros(unsigned NumZeros);
 
   /// Changes the foreground color of text that will be output from this point
   /// forward.
@@ -276,9 +298,6 @@ private:
   /// \invariant { Size > 0 }
   virtual void write_impl(const char *Ptr, size_t Size) = 0;
 
-  // An out of line virtual method to provide a home for the class vtable.
-  virtual void handle();
-
   /// Return the current position within the stream, not counting the bytes
   /// currently in the buffer.
   virtual uint64_t current_pos() const = 0;
@@ -312,6 +331,8 @@ private:
   /// Copy data into the buffer. Size must not be greater than the number of
   /// unused bytes in the buffer.
   void copy_to_buffer(const char *Ptr, size_t Size);
+
+  virtual void anchor();
 };
 
 /// An abstract base class for streams implementations that also support a
@@ -319,6 +340,7 @@ private:
 /// but needs to patch in a header that needs to know the output size.
 class raw_pwrite_stream : public raw_ostream {
   virtual void pwrite_impl(const char *Ptr, size_t Size, uint64_t Offset) = 0;
+  void anchor() override;
 
 public:
   explicit raw_pwrite_stream(bool Unbuffered = false)
@@ -345,9 +367,7 @@ class raw_fd_ostream : public raw_pwrite_stream {
   int FD;
   bool ShouldClose;
 
-  /// Error This flag is true if an error of any kind has been detected.
-  ///
-  bool Error;
+  std::error_code EC;
 
   uint64_t pos;
 
@@ -366,7 +386,9 @@ class raw_fd_ostream : public raw_pwrite_stream {
   size_t preferred_buffer_size() const override;
 
   /// Set the flag indicating that an output error has been encountered.
-  void error_detected() { Error = true; }
+  void error_detected(std::error_code EC) { this->EC = EC; }
+
+  void anchor() override;
 
 public:
   /// Open the specified file for writing. If an error occurs, information
@@ -375,15 +397,22 @@ public:
   /// \p Flags allows optional flags to control how the file will be opened.
   ///
   /// As a special case, if Filename is "-", then the stream will use
-  /// STDOUT_FILENO instead of opening a file. Note that it will still consider
-  /// itself to own the file descriptor. In particular, it will close the
-  /// file descriptor when it is done (this is necessary to detect
-  /// output errors).
+  /// STDOUT_FILENO instead of opening a file. This will not close the stdout
+  /// descriptor.
+  raw_fd_ostream(StringRef Filename, std::error_code &EC);
   raw_fd_ostream(StringRef Filename, std::error_code &EC,
+                 sys::fs::CreationDisposition Disp);
+  raw_fd_ostream(StringRef Filename, std::error_code &EC,
+                 sys::fs::FileAccess Access);
+  raw_fd_ostream(StringRef Filename, std::error_code &EC,
+                 sys::fs::OpenFlags Flags);
+  raw_fd_ostream(StringRef Filename, std::error_code &EC,
+                 sys::fs::CreationDisposition Disp, sys::fs::FileAccess Access,
                  sys::fs::OpenFlags Flags);
 
   /// FD is the file descriptor that this writes to.  If ShouldClose is true,
-  /// this closes the file when the stream is destroyed.
+  /// this closes the file when the stream is destroyed. If FD is for stdout or
+  /// stderr, it will not be closed.
   raw_fd_ostream(int fd, bool shouldClose, bool unbuffered=false);
 
   ~raw_fd_ostream() override;
@@ -408,13 +437,13 @@ public:
 
   bool has_colors() const override;
 
+  std::error_code error() const { return EC; }
+
   /// Return the value of the flag in this raw_fd_ostream indicating whether an
   /// output error has been encountered.
   /// This doesn't implicitly flush any pending output.  Also, it doesn't
   /// guarantee to detect all errors unless the stream has been closed.
-  bool has_error() const {
-    return Error;
-  }
+  bool has_error() const { return bool(EC); }
 
   /// Set the flag read by has_error() to false. If the error flag is set at the
   /// time when this raw_ostream's destructor is called, report_fatal_error is
@@ -425,9 +454,7 @@ public:
   ///    Unless explicitly silenced."
   ///      - from The Zen of Python, by Tim Peters
   ///
-  void clear_error() {
-    Error = false;
-  }
+  void clear_error() { EC = std::error_code(); }
 };
 
 /// This returns a reference to a raw_ostream for standard output. Use it like:
@@ -493,7 +520,8 @@ public:
   explicit raw_svector_ostream(SmallVectorImpl<char> &O) : OS(O) {
     SetUnbuffered();
   }
-  ~raw_svector_ostream() override {}
+
+  ~raw_svector_ostream() override = default;
 
   void flush() = delete;
 
@@ -512,7 +540,7 @@ class raw_null_ostream : public raw_pwrite_stream {
   uint64_t current_pos() const override;
 
 public:
-  explicit raw_null_ostream() {}
+  explicit raw_null_ostream() = default;
   ~raw_null_ostream() override;
 };
 
@@ -525,6 +553,6 @@ public:
   ~buffer_ostream() override { OS << str(); }
 };
 
-} // end llvm namespace
+} // end namespace llvm
 
 #endif // LLVM_SUPPORT_RAW_OSTREAM_H

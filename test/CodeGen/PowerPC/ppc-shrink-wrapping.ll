@@ -169,7 +169,7 @@ declare i32 @something(...)
 ; CHECK-NEXT: bne 0, .[[LOOP]]
 ;
 ; Next BB
-; CHECK: %for.end
+; CHECK: %for.exit
 ; CHECK: mtlr {{[0-9]+}}
 ; CHECK-NEXT: blr
 define i32 @freqSaveAndRestoreOutsideLoop2(i32 %cond) {
@@ -210,6 +210,8 @@ for.end:                                          ; preds = %for.body
 ; CHECK: mflr {{[0-9]+}}
 ;
 ; DISABLE: cmplwi 0, 3, 0
+; DISABLE-NEXT: std
+; DISABLE-NEXT: std
 ; DISABLE-NEXT: beq 0, .[[ELSE_LABEL:LBB[0-9_]+]]
 ;
 ; Loop preheader
@@ -290,6 +292,8 @@ declare void @somethingElse(...)
 ; CHECK: mflr {{[0-9]+}}
 ;
 ; DISABLE: cmplwi 0, 3, 0
+; DISABLE-NEXT: std
+; DISABLE-NEXT: std
 ; DISABLE-NEXT: beq 0, .[[ELSE_LABEL:LBB[0-9_]+]]
 ;
 ; CHECK: bl somethingElse
@@ -324,7 +328,7 @@ declare void @somethingElse(...)
 ; Shift second argument by one and store into returned register.
 ; ENABLE: slwi 3, 4, 1
 ; ENABLE-NEXT: blr
-define i32 @loopInfoRestoreOutsideLoop(i32 %cond, i32 %N) #0 {
+define i32 @loopInfoRestoreOutsideLoop(i32 %cond, i32 %N) nounwind {
 entry:
   %tobool = icmp eq i32 %cond, 0
   br i1 %tobool, label %if.else, label %if.then
@@ -377,8 +381,8 @@ entry:
 ; ENABLE-DAG: li [[IV:[0-9]+]], 10
 ; ENABLE-DAG: std 14, -[[STACK_OFFSET:[0-9]+]](1) # 8-byte Folded Spill
 ;
-; DISABLE: std 14, -[[STACK_OFFSET:[0-9]+]](1) # 8-byte Folded Spill
 ; DISABLE: cmplwi 0, 3, 0
+; DISABLE-NEXT: std 14, -[[STACK_OFFSET:[0-9]+]](1) # 8-byte Folded Spill
 ; DISABLE-NEXT: beq 0, .[[ELSE_LABEL:LBB[0-9_]+]]
 ; DISABLE: li [[IV:[0-9]+]], 10
 ;
@@ -399,7 +403,7 @@ entry:
 ; CHECK: [[ELSE_LABEL]]
 ; CHECK-NEXT: slwi 3, 4, 1
 ; DISABLE: ld 14, -[[STACK_OFFSET]](1) # 8-byte Folded Reload
-; CHECK-NEXT blr
+; CHECK-NEXT: blr
 ; 
 define i32 @inlineAsm(i32 %cond, i32 %N) {
 entry:
@@ -587,7 +591,9 @@ if.end:
 
 ; Another infinite loop test this time with two nested infinite loop.
 ; CHECK-LABEL: infiniteloop3
-; CHECK: # %end
+; CHECK: Lfunc_begin[[FUNCNUM:[0-9]+]]
+; CHECK: bclr
+; CHECK: Lfunc_end[[FUNCNUM]]
 define void @infiniteloop3() {
 entry:
   br i1 undef, label %loop2a, label %body

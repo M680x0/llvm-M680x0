@@ -7,7 +7,6 @@ set(LLVM_LINK_COMPONENTS
   Core
   ExecutionEngine
   IRReader
-  Instrumentation
   Interpreter
   MC
   MCJIT
@@ -39,6 +38,8 @@ endif( LLVM_USE_INTEL_JITEVENTS )
 
 add_llvm_tool(lli
   lli.cpp
-  OrcLazyJIT.cpp
+
+  DEPENDS
+  intrinsics_gen
   )
 export_executable_symbols(lli)

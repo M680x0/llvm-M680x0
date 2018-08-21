@@ -1,4 +1,4 @@
-//===-- FunctionLoweringInfo.h - Lower functions from LLVM IR to CodeGen --===//
+//===- FunctionLoweringInfo.h - Lower functions from LLVM IR to CodeGen ---===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -23,29 +23,28 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/IR/InlineAsm.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/KnownBits.h"
+#include <cassert>
+#include <utility>
 #include <vector>
 
 namespace llvm {
 
-class AllocaInst;
+class Argument;
 class BasicBlock;
 class BranchProbabilityInfo;
-class CallInst;
 class Function;
-class GlobalVariable;
 class Instruction;
-class MachineInstr;
-class MachineBasicBlock;
 class MachineFunction;
-class MachineModuleInfo;
+class MachineInstr;
 class MachineRegisterInfo;
-class SelectionDAG;
 class MVT;
+class SelectionDAG;
 class TargetLowering;
-class Value;
 
 //===--------------------------------------------------------------------===//
 /// FunctionLoweringInfo - This contains information that is global to a
@@ -72,41 +71,63 @@ public:
   /// MBBMap - A mapping from LLVM basic blocks to their machine code entry.
   DenseMap<const BasicBlock*, MachineBasicBlock *> MBBMap;
 
-  typedef SmallVector<unsigned, 1> SwiftErrorVRegs;
-  typedef SmallVector<const Value*, 1> SwiftErrorValues;
+  /// A map from swifterror value in a basic block to the virtual register it is
+  /// currently represented by.
+  DenseMap<std::pair<const MachineBasicBlock *, const Value *>, unsigned>
+      SwiftErrorVRegDefMap;
+
+  /// A list of upward exposed vreg uses that need to be satisfied by either a
+  /// copy def or a phi node at the beginning of the basic block representing
+  /// the predecessor(s) swifterror value.
+  DenseMap<std::pair<const MachineBasicBlock *, const Value *>, unsigned>
+      SwiftErrorVRegUpwardsUse;
+
+  /// A map from instructions that define/use a swifterror value to the virtual
+  /// register that represents that def/use.
+  llvm::DenseMap<PointerIntPair<const Instruction *, 1, bool>, unsigned>
+      SwiftErrorVRegDefUses;
+
+  /// The swifterror argument of the current function.
+  const Value *SwiftErrorArg;
+
+  using SwiftErrorValues = SmallVector<const Value*, 1>;
   /// A function can only have a single swifterror argument. And if it does
   /// have a swifterror argument, it must be the first entry in
   /// SwiftErrorVals.
   SwiftErrorValues SwiftErrorVals;
 
-  /// Track the virtual register for each swifterror value in a given basic
-  /// block. Entries in SwiftErrorVRegs have the same ordering as entries
-  /// in SwiftErrorVals.
-  /// Note that another choice that is more straight-forward is to use
-  /// Map<const MachineBasicBlock*, Map<Value*, unsigned/*VReg*/>>. It
-  /// maintains a map from swifterror values to virtual registers for each
-  /// machine basic block. This choice does not require a one-to-one
-  /// correspondence between SwiftErrorValues and SwiftErrorVRegs. But because
-  /// of efficiency concern, we do not choose it.
-  llvm::DenseMap<const MachineBasicBlock*, SwiftErrorVRegs> SwiftErrorMap;
+  /// Get or create the swifterror value virtual register in
+  /// SwiftErrorVRegDefMap for this basic block.
+  unsigned getOrCreateSwiftErrorVReg(const MachineBasicBlock *,
+                                     const Value *);
 
-  /// Track the virtual register for each swifterror value at the end of a basic
-  /// block when we need the assignment of a virtual register before the basic
-  /// block is visited. When we actually visit the basic block, we will make
-  /// sure the swifterror value is in the correct virtual register.
-  llvm::DenseMap<const MachineBasicBlock*, SwiftErrorVRegs>
-      SwiftErrorWorklist;
+  /// Set the swifterror virtual register in the SwiftErrorVRegDefMap for this
+  /// basic block.
+  void setCurrentSwiftErrorVReg(const MachineBasicBlock *MBB, const Value *,
+                                unsigned);
 
-  /// Find the swifterror virtual register in SwiftErrorMap. We will assert
-  /// failure when the value does not exist in swifterror map.
-  unsigned findSwiftErrorVReg(const MachineBasicBlock*, const Value*) const;
-  /// Set the swifterror virtual register in SwiftErrorMap.
-  void setSwiftErrorVReg(const MachineBasicBlock *MBB, const Value*, unsigned);
+  /// Get or create the swifterror value virtual register for a def of a
+  /// swifterror by an instruction.
+  std::pair<unsigned, bool> getOrCreateSwiftErrorVRegDefAt(const Instruction *);
+  std::pair<unsigned, bool>
+  getOrCreateSwiftErrorVRegUseAt(const Instruction *, const MachineBasicBlock *,
+                                 const Value *);
 
   /// ValueMap - Since we emit code for the function a basic block at a time,
   /// we must remember which virtual registers hold the values for
   /// cross-basic-block values.
   DenseMap<const Value *, unsigned> ValueMap;
+
+  /// VirtReg2Value map is needed by the Divergence Analysis driven
+  /// instruction selection. It is reverted ValueMap. It is computed
+  /// in lazy style - on demand. It is used to get the Value corresponding
+  /// to the live in virtual register and is called from the
+  /// TargetLowerinInfo::isSDNodeSourceOfDivergence.
+  DenseMap<unsigned, const Value*> VirtReg2Value;
+
+  /// This method is called from TargetLowerinInfo::isSDNodeSourceOfDivergence
+  /// to get the Value corresponding to the live-in virtual register.
+  const Value * getValueFromVirtualReg(unsigned Vreg);
 
   /// Track virtual registers created for exception pointers.
   DenseMap<const Value *, unsigned> CatchPadExceptionPointers;
@@ -118,7 +139,7 @@ public:
   /// slot), and we track that here.
 
   struct StatepointSpillMap {
-    typedef DenseMap<const Value *, Optional<int>> SlotMapTy;
+    using SlotMapTy = DenseMap<const Value *, Optional<int>>;
 
     /// Maps uniqued llvm IR values to the slots they were spilled in.  If a
     /// value is mapped to None it means we visited the value but didn't spill
@@ -157,6 +178,8 @@ public:
   /// RegFixups - Registers which need to be replaced after isel is done.
   DenseMap<unsigned, unsigned> RegFixups;
 
+  DenseSet<unsigned> RegsWithFixups;
+
   /// StatepointStackSlots - A list of temporary stack slots (frame indices)
   /// used to spill values at a statepoint.  We store them here to enable
   /// reuse of the same stack slots across different statepoints in different
@@ -172,9 +195,9 @@ public:
   struct LiveOutInfo {
     unsigned NumSignBits : 31;
     unsigned IsValid : 1;
-    APInt KnownOne, KnownZero;
-    LiveOutInfo() : NumSignBits(0), IsValid(true), KnownOne(1, 0),
-                    KnownZero(1, 0) {}
+    KnownBits Known = 1;
+
+    LiveOutInfo() : NumSignBits(0), IsValid(true) {}
   };
 
   /// Record the preferred extend type (ISD::SIGN_EXTEND or ISD::ZERO_EXTEND)
@@ -248,16 +271,16 @@ public:
 
   /// AddLiveOutRegInfo - Adds LiveOutInfo for a register.
   void AddLiveOutRegInfo(unsigned Reg, unsigned NumSignBits,
-                         const APInt &KnownZero, const APInt &KnownOne) {
+                         const KnownBits &Known) {
     // Only install this information if it tells us something.
-    if (NumSignBits == 1 && KnownZero == 0 && KnownOne == 0)
+    if (NumSignBits == 1 && Known.isUnknown())
       return;
 
     LiveOutRegInfo.grow(Reg);
     LiveOutInfo &LOI = LiveOutRegInfo[Reg];
     LOI.NumSignBits = NumSignBits;
-    LOI.KnownOne = KnownOne;
-    LOI.KnownZero = KnownZero;
+    LOI.Known.One = Known.One;
+    LOI.Known.Zero = Known.Zero;
   }
 
   /// ComputePHILiveOutRegInfo - Compute LiveOutInfo for a PHI's destination
@@ -297,18 +320,6 @@ private:
   IndexedMap<LiveOutInfo, VirtReg2IndexFunctor> LiveOutRegInfo;
 };
 
-/// ComputeUsesVAFloatArgument - Determine if any floating-point values are
-/// being passed to this variadic function, and set the MachineModuleInfo's
-/// usesVAFloatArgument flag if so. This flag is used to emit an undefined
-/// reference to _fltused on Windows, which will link in MSVCRT's
-/// floating-point support.
-void ComputeUsesVAFloatArgument(const CallInst &I, MachineModuleInfo *MMI);
-
-/// AddLandingPadInfo - Extract the exception handling information from the
-/// landingpad instruction and add them to the specified machine module info.
-void AddLandingPadInfo(const LandingPadInst &I, MachineModuleInfo &MMI,
-                       MachineBasicBlock *MBB);
-
 } // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_FUNCTIONLOWERINGINFO_H

@@ -12,52 +12,105 @@
 //===----------------------------------------------------------------------===//
 
 #include "X86TargetMachine.h"
+#include "MCTargetDesc/X86MCTargetDesc.h"
 #include "X86.h"
+#include "X86CallLowering.h"
+#include "X86LegalizerInfo.h"
+#include "X86MacroFusion.h"
+#include "X86Subtarget.h"
 #include "X86TargetObjectFile.h"
 #include "X86TargetTransformInfo.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/CodeGen/ExecutionDomainFix.h"
+#include "llvm/CodeGen/GlobalISel/CallLowering.h"
+#include "llvm/CodeGen/GlobalISel/IRTranslator.h"
+#include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
+#include "llvm/CodeGen/GlobalISel/Legalizer.h"
+#include "llvm/CodeGen/GlobalISel/RegBankSelect.h"
+#include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/CodeGen.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetOptions.h"
+#include <memory>
+#include <string>
+
 using namespace llvm;
 
 static cl::opt<bool> EnableMachineCombinerPass("x86-machine-combiner",
                                cl::desc("Enable the machine combiner pass"),
                                cl::init(true), cl::Hidden);
 
+static cl::opt<bool> EnableSpeculativeLoadHardening(
+    "x86-speculative-load-hardening",
+    cl::desc("Enable speculative load hardening"), cl::init(false), cl::Hidden);
+
 namespace llvm {
+
 void initializeWinEHStatePassPass(PassRegistry &);
-}
+void initializeFixupLEAPassPass(PassRegistry &);
+void initializeShadowCallStackPass(PassRegistry &);
+void initializeX86CallFrameOptimizationPass(PassRegistry &);
+void initializeX86CmovConverterPassPass(PassRegistry &);
+void initializeX86ExecutionDomainFixPass(PassRegistry &);
+void initializeX86DomainReassignmentPass(PassRegistry &);
+void initializeX86AvoidSFBPassPass(PassRegistry &);
+void initializeX86FlagsCopyLoweringPassPass(PassRegistry &);
+
+} // end namespace llvm
 
 extern "C" void LLVMInitializeX86Target() {
   // Register the target.
-  RegisterTargetMachine<X86TargetMachine> X(TheX86_32Target);
-  RegisterTargetMachine<X86TargetMachine> Y(TheX86_64Target);
+  RegisterTargetMachine<X86TargetMachine> X(getTheX86_32Target());
+  RegisterTargetMachine<X86TargetMachine> Y(getTheX86_64Target());
 
   PassRegistry &PR = *PassRegistry::getPassRegistry();
+  initializeGlobalISel(PR);
   initializeWinEHStatePassPass(PR);
   initializeFixupBWInstPassPass(PR);
+  initializeEvexToVexInstPassPass(PR);
+  initializeFixupLEAPassPass(PR);
+  initializeShadowCallStackPass(PR);
+  initializeX86CallFrameOptimizationPass(PR);
+  initializeX86CmovConverterPassPass(PR);
+  initializeX86ExecutionDomainFixPass(PR);
+  initializeX86DomainReassignmentPass(PR);
+  initializeX86AvoidSFBPassPass(PR);
+  initializeX86FlagsCopyLoweringPassPass(PR);
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
   if (TT.isOSBinFormatMachO()) {
     if (TT.getArch() == Triple::x86_64)
-      return make_unique<X86_64MachoTargetObjectFile>();
-    return make_unique<TargetLoweringObjectFileMachO>();
+      return llvm::make_unique<X86_64MachoTargetObjectFile>();
+    return llvm::make_unique<TargetLoweringObjectFileMachO>();
   }
 
-  if (TT.isOSLinux() || TT.isOSNaCl())
-    return make_unique<X86LinuxNaClTargetObjectFile>();
+  if (TT.isOSFreeBSD())
+    return llvm::make_unique<X86FreeBSDTargetObjectFile>();
+  if (TT.isOSLinux() || TT.isOSNaCl() || TT.isOSIAMCU())
+    return llvm::make_unique<X86LinuxNaClTargetObjectFile>();
+  if (TT.isOSSolaris())
+    return llvm::make_unique<X86SolarisTargetObjectFile>();
+  if (TT.isOSFuchsia())
+    return llvm::make_unique<X86FuchsiaTargetObjectFile>();
   if (TT.isOSBinFormatELF())
-    return make_unique<X86ELFTargetObjectFile>();
-  if (TT.isKnownWindowsMSVCEnvironment() || TT.isWindowsCoreCLREnvironment())
-    return make_unique<X86WindowsTargetObjectFile>();
+    return llvm::make_unique<X86ELFTargetObjectFile>();
   if (TT.isOSBinFormatCOFF())
-    return make_unique<TargetLoweringObjectFileCOFF>();
+    return llvm::make_unique<TargetLoweringObjectFileCOFF>();
   llvm_unreachable("unknown subtarget type");
 }
 
@@ -142,40 +195,51 @@ static Reloc::Model getEffectiveRelocModel(const Triple &TT,
   return *RM;
 }
 
+static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
+                                              bool JIT, bool Is64Bit) {
+  if (CM)
+    return *CM;
+  if (JIT)
+    return Is64Bit ? CodeModel::Large : CodeModel::Small;
+  return CodeModel::Small;
+}
+
 /// Create an X86 target.
 ///
 X86TargetMachine::X86TargetMachine(const Target &T, const Triple &TT,
                                    StringRef CPU, StringRef FS,
                                    const TargetOptions &Options,
                                    Optional<Reloc::Model> RM,
-                                   CodeModel::Model CM, CodeGenOpt::Level OL)
-    : LLVMTargetMachine(T, computeDataLayout(TT), TT, CPU, FS, Options,
-                        getEffectiveRelocModel(TT, RM), CM, OL),
-      TLOF(createTLOF(getTargetTriple())),
-      Subtarget(TT, CPU, FS, *this, Options.StackAlignmentOverride) {
+                                   Optional<CodeModel::Model> CM,
+                                   CodeGenOpt::Level OL, bool JIT)
+    : LLVMTargetMachine(
+          T, computeDataLayout(TT), TT, CPU, FS, Options,
+          getEffectiveRelocModel(TT, RM),
+          getEffectiveCodeModel(CM, JIT, TT.getArch() == Triple::x86_64), OL),
+      TLOF(createTLOF(getTargetTriple())) {
   // Windows stack unwinder gets confused when execution flow "falls through"
   // after a call to 'noreturn' function.
   // To prevent that, we emit a trap for 'unreachable' IR instructions.
   // (which on X86, happens to be the 'ud2' instruction)
   // On PS4, the "return address" of a 'noreturn' call must still be within
   // the calling function, and TrapUnreachable is an easy way to get that.
-  if (Subtarget.isTargetWin64() || Subtarget.isTargetPS4())
+  // The check here for 64-bit windows is a bit icky, but as we're unlikely
+  // to ever want to mix 32 and 64-bit windows code in a single module
+  // this should be fine.
+  if ((TT.isOSWindows() && TT.getArch() == Triple::x86_64) || TT.isPS4() ||
+      TT.isOSBinFormatMachO()) {
     this->Options.TrapUnreachable = true;
+    this->Options.NoTrapAfterNoreturn = TT.isOSBinFormatMachO();
+  }
 
-  // By default (and when -ffast-math is on), enable estimate codegen for
-  // everything except scalar division. By default, use 1 refinement step for
-  // all operations. Defaults may be overridden by using command-line options.
-  // Scalar division estimates are disabled because they break too much
-  // real-world code. These defaults match GCC behavior.
-  this->Options.Reciprocals.setDefaults("sqrtf", true, 1);
-  this->Options.Reciprocals.setDefaults("divf", false, 1);
-  this->Options.Reciprocals.setDefaults("vec-sqrtf", true, 1);
-  this->Options.Reciprocals.setDefaults("vec-divf", true, 1);
+  // Outlining is available for x86-64.
+  if (TT.getArch() == Triple::x86_64)
+    setMachineOutliner(true);
 
   initAsmInfo();
 }
 
-X86TargetMachine::~X86TargetMachine() {}
+X86TargetMachine::~X86TargetMachine() = default;
 
 const X86Subtarget *
 X86TargetMachine::getSubtargetImpl(const Function &F) const {
@@ -206,7 +270,38 @@ X86TargetMachine::getSubtargetImpl(const Function &F) const {
   if (SoftFloat)
     Key += FS.empty() ? "+soft-float" : ",+soft-float";
 
-  FS = Key.substr(CPU.size());
+  // Keep track of the key width after all features are added so we can extract
+  // the feature string out later.
+  unsigned CPUFSWidth = Key.size();
+
+  // Extract prefer-vector-width attribute.
+  unsigned PreferVectorWidthOverride = 0;
+  if (F.hasFnAttribute("prefer-vector-width")) {
+    StringRef Val = F.getFnAttribute("prefer-vector-width").getValueAsString();
+    unsigned Width;
+    if (!Val.getAsInteger(0, Width)) {
+      Key += ",prefer-vector-width=";
+      Key += Val;
+      PreferVectorWidthOverride = Width;
+    }
+  }
+
+  // Extract required-vector-width attribute.
+  unsigned RequiredVectorWidth = UINT32_MAX;
+  if (F.hasFnAttribute("required-vector-width")) {
+    StringRef Val = F.getFnAttribute("required-vector-width").getValueAsString();
+    unsigned Width;
+    if (!Val.getAsInteger(0, Width)) {
+      Key += ",required-vector-width=";
+      Key += Val;
+      RequiredVectorWidth = Width;
+    }
+  }
+
+  // Extracted here so that we make sure there is backing for the StringRef. If
+  // we assigned earlier, its possible the SmallString reallocated leaving a
+  // dangling StringRef.
+  FS = Key.slice(CPU.size(), CPUFSWidth);
 
   auto &I = SubtargetMap[Key];
   if (!I) {
@@ -215,7 +310,9 @@ X86TargetMachine::getSubtargetImpl(const Function &F) const {
     // function that reside in TargetOptions.
     resetTargetOptions(F);
     I = llvm::make_unique<X86Subtarget>(TargetTriple, CPU, FS, *this,
-                                        Options.StackAlignmentOverride);
+                                        Options.StackAlignmentOverride,
+                                        PreferVectorWidthOverride,
+                                        RequiredVectorWidth);
   }
   return I.get();
 }
@@ -232,47 +329,84 @@ UseVZeroUpper("x86-use-vzeroupper", cl::Hidden,
 // X86 TTI query.
 //===----------------------------------------------------------------------===//
 
-TargetIRAnalysis X86TargetMachine::getTargetIRAnalysis() {
-  return TargetIRAnalysis([this](const Function &F) {
-    return TargetTransformInfo(X86TTIImpl(this, F));
-  });
+TargetTransformInfo
+X86TargetMachine::getTargetTransformInfo(const Function &F) {
+  return TargetTransformInfo(X86TTIImpl(this, F));
 }
-
 
 //===----------------------------------------------------------------------===//
 // Pass Pipeline Configuration
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 /// X86 Code Generator Pass Configuration Options.
 class X86PassConfig : public TargetPassConfig {
 public:
-  X86PassConfig(X86TargetMachine *TM, PassManagerBase &PM)
+  X86PassConfig(X86TargetMachine &TM, PassManagerBase &PM)
     : TargetPassConfig(TM, PM) {}
 
   X86TargetMachine &getX86TargetMachine() const {
     return getTM<X86TargetMachine>();
   }
 
+  ScheduleDAGInstrs *
+  createMachineScheduler(MachineSchedContext *C) const override {
+    ScheduleDAGMILive *DAG = createGenericSchedLive(C);
+    DAG->addMutation(createX86MacroFusionDAGMutation());
+    return DAG;
+  }
+
   void addIRPasses() override;
   bool addInstSelector() override;
+  bool addIRTranslator() override;
+  bool addLegalizeMachineIR() override;
+  bool addRegBankSelect() override;
+  bool addGlobalInstructionSelect() override;
   bool addILPOpts() override;
   bool addPreISel() override;
+  void addMachineSSAOptimization() override;
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
   void addPreEmitPass() override;
+  void addPreEmitPass2() override;
   void addPreSched2() override;
 };
-} // namespace
+
+class X86ExecutionDomainFix : public ExecutionDomainFix {
+public:
+  static char ID;
+  X86ExecutionDomainFix() : ExecutionDomainFix(ID, X86::VR128XRegClass) {}
+  StringRef getPassName() const override {
+    return "X86 Execution Dependency Fix";
+  }
+};
+char X86ExecutionDomainFix::ID;
+
+} // end anonymous namespace
+
+INITIALIZE_PASS_BEGIN(X86ExecutionDomainFix, "x86-execution-domain-fix",
+  "X86 Execution Domain Fix", false, false)
+INITIALIZE_PASS_DEPENDENCY(ReachingDefAnalysis)
+INITIALIZE_PASS_END(X86ExecutionDomainFix, "x86-execution-domain-fix",
+  "X86 Execution Domain Fix", false, false)
 
 TargetPassConfig *X86TargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new X86PassConfig(this, PM);
+  return new X86PassConfig(*this, PM);
 }
 
 void X86PassConfig::addIRPasses() {
-  addPass(createAtomicExpandPass(&getX86TargetMachine()));
+  addPass(createAtomicExpandPass());
 
   TargetPassConfig::addIRPasses();
+
+  if (TM->getOptLevel() != CodeGenOpt::None)
+    addPass(createInterleavedAccessPass());
+
+  // Add passes that handle indirect branch removal and insertion of a retpoline
+  // thunk. These will be a no-op unless a function subtarget has the retpoline
+  // feature enabled.
+  addPass(createIndirectBrExpandPass());
 }
 
 bool X86PassConfig::addInstSelector() {
@@ -288,10 +422,31 @@ bool X86PassConfig::addInstSelector() {
   return false;
 }
 
+bool X86PassConfig::addIRTranslator() {
+  addPass(new IRTranslator());
+  return false;
+}
+
+bool X86PassConfig::addLegalizeMachineIR() {
+  addPass(new Legalizer());
+  return false;
+}
+
+bool X86PassConfig::addRegBankSelect() {
+  addPass(new RegBankSelect());
+  return false;
+}
+
+bool X86PassConfig::addGlobalInstructionSelect() {
+  addPass(new InstructionSelect());
+  return false;
+}
+
 bool X86PassConfig::addILPOpts() {
   addPass(&EarlyIfConverterID);
   if (EnableMachineCombinerPass)
     addPass(&MachineCombinerID);
+  addPass(createX86CmovConverterPass());
   return true;
 }
 
@@ -305,12 +460,22 @@ bool X86PassConfig::addPreISel() {
 
 void X86PassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOpt::None) {
+    addPass(&LiveRangeShrinkID);
     addPass(createX86FixupSetCC());
     addPass(createX86OptimizeLEAs());
     addPass(createX86CallFrameOptimization());
+    addPass(createX86AvoidStoreForwardingBlocks());
   }
 
+  if (EnableSpeculativeLoadHardening)
+    addPass(createX86SpeculativeLoadHardeningPass());
+
+  addPass(createX86FlagsCopyLoweringPass());
   addPass(createX86WinAllocaExpander());
+}
+void X86PassConfig::addMachineSSAOptimization() {
+  addPass(createX86DomainReassignmentPass());
+  TargetPassConfig::addMachineSSAOptimization();
 }
 
 void X86PassConfig::addPostRegAlloc() {
@@ -320,8 +485,13 @@ void X86PassConfig::addPostRegAlloc() {
 void X86PassConfig::addPreSched2() { addPass(createX86ExpandPseudoPass()); }
 
 void X86PassConfig::addPreEmitPass() {
-  if (getOptLevel() != CodeGenOpt::None)
-    addPass(createExecutionDependencyFixPass(&X86::VR128XRegClass));
+  if (getOptLevel() != CodeGenOpt::None) {
+    addPass(new X86ExecutionDomainFix());
+    addPass(createBreakFalseDeps());
+  }
+
+  addPass(createShadowCallStackPass());
+  addPass(createX86IndirectBranchTrackingPass());
 
   if (UseVZeroUpper)
     addPass(createX86IssueVZeroUpperPass());
@@ -330,5 +500,16 @@ void X86PassConfig::addPreEmitPass() {
     addPass(createX86FixupBWInsts());
     addPass(createX86PadShortFunctions());
     addPass(createX86FixupLEAs());
+    addPass(createX86EvexToVexInsts());
   }
+}
+
+void X86PassConfig::addPreEmitPass2() {
+  addPass(createX86RetpolineThunksPass());
+  // Verify basic block incoming and outgoing cfa offset and register values and
+  // correct CFA calculation rule where needed by inserting appropriate CFI
+  // instructions.
+  const Triple &TT = TM->getTargetTriple();
+  if (!TT.isOSDarwin() && !TT.isOSWindows())
+    addPass(createCFIInstrInserter());
 }

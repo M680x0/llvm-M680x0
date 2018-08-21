@@ -30,8 +30,6 @@
 ; RUN:    -check-prefixes=ALL,MMR3,MM32
 ; RUN: llc < %s -march=mips -mcpu=mips32r6 -mattr=+micromips -relocation-model=pic | FileCheck %s \
 ; RUN:    -check-prefixes=ALL,MMR6,MM32
-; RUN: llc < %s -march=mips -mcpu=mips64r6 -target-abi n64 -mattr=+micromips -relocation-model=pic | FileCheck %s \
-; RUN:    -check-prefixes=ALL,MMR6,MM64
 
 define signext i1 @srem_i1(i1 signext %a, i1 signext %b) {
 entry:
@@ -40,24 +38,26 @@ entry:
   ; NOT-R6:       div     $zero, $4, $5
   ; NOT-R6:       teq     $5, $zero, 7
   ; NOT-R6:       mfhi    $[[T0:[0-9]+]]
-  ; NOT-R6:       sll     $[[T1:[0-9]+]], $[[T0]], 31
-  ; NOT-R6:       sra     $2, $[[T1]], 31
+  ; NOT-R6:       andi    $[[T0]], $[[T0]], 1
+  ; NOT-R6:       negu    $2, $[[T0]]
 
   ; R6:           mod     $[[T0:[0-9]+]], $4, $5
   ; R6:           teq     $5, $zero, 7
-  ; R6:           sll     $[[T3:[0-9]+]], $[[T0]], 31
-  ; R6:           sra     $2, $[[T3]], 31
+  ; R6:           andi    $[[T0]], $[[T0]], 1
+  ; R6:           negu    $2, $[[T0]]
 
   ; MMR3:         div     $zero, $4, $5
   ; MMR3:         teq     $5, $zero, 7
-  ; MMR3:         mfhi    $[[T0:[0-9]+]]
-  ; MMR3:         sll     $[[T1:[0-9]+]], $[[T0]], 31
-  ; MMR3:         sra     $2, $[[T1]], 31
+  ; MMR3:         mfhi16  $[[T0:[0-9]+]]
+  ; MMR3:         andi16  $[[T0]], $[[T0]], 1
+  ; MMR3:         li16    $[[T1:[0-9]+]], 0
+  ; MMR3:         subu16  $2, $[[T1]], $[[T0]]
 
   ; MMR6:         mod     $[[T0:[0-9]+]], $4, $5
   ; MMR6:         teq     $5, $zero, 7
-  ; MMR6:         sll     $[[T1:[0-9]+]], $[[T0]], 31
-  ; MMR6:         sra     $2, $[[T1]], 31
+  ; MMR6:         andi16  $[[T0]], $[[T0]], 1
+  ; MMR6:         li16    $[[T1:[0-9]+]], 0
+  ; MMR6:         subu16  $2, $[[T1]], $[[T0]]
 
   %r = srem i1 %a, %b
   ret i1 %r
@@ -84,7 +84,7 @@ entry:
 
   ; MMR3:         div     $zero, $4, $5
   ; MMR3:         teq     $5, $zero, 7
-  ; MMR3:         mfhi    $[[T0:[0-9]+]]
+  ; MMR3:         mfhi16  $[[T0:[0-9]+]]
   ; MMR3:         seb     $2, $[[T0]]
 
   ; MMR6:         mod     $[[T0:[0-9]+]], $4, $5
@@ -116,7 +116,7 @@ entry:
 
   ; MMR3:         div     $zero, $4, $5
   ; MMR3:         teq     $5, $zero, 7
-  ; MMR3:         mfhi    $[[T0:[0-9]+]]
+  ; MMR3:         mfhi16  $[[T0:[0-9]+]]
   ; MMR3:         seh     $2, $[[T0]]
 
   ; MMR6:         mod     $[[T0:[0-9]+]], $4, $5
@@ -140,7 +140,7 @@ entry:
 
   ; MMR3:         div     $zero, $4, $5
   ; MMR3:         teq     $5, $zero, 7
-  ; MMR3:         mfhi    $2
+  ; MMR3:         mfhi16  $2
 
   ; MMR6:         mod     $2, $4, $5
   ; MMR6:         teq     $5, $zero, 7
@@ -164,9 +164,6 @@ entry:
 
   ; MM32:         lw      $25, %call16(__moddi3)($2)
 
-  ; MM64:         dmod    $2, $4, $5
-  ; MM64:         teq     $5, $zero, 7
-
   %r = srem i64 %a, %b
   ret i64 %r
 }
@@ -181,8 +178,6 @@ entry:
   ; 64R6:         ld      $25, %call16(__modti3)($gp)
 
   ; MM32:         lw      $25, %call16(__modti3)($16)
-
-  ; MM64:         ld      $25, %call16(__modti3)($2)
 
   %r = srem i128 %a, %b
   ret i128 %r

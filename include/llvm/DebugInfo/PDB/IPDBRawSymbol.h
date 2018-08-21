@@ -21,6 +21,9 @@ class raw_ostream;
 
 namespace pdb {
 
+class PDBSymbolTypeVTable;
+class PDBSymbolTypeVTableShape;
+
 /// IPDBRawSymbol defines an interface used to represent an arbitrary symbol.
 /// It exposes a monolithic interface consisting of accessors for the union of
 /// all properties that are valid for any symbol type.  This interface is then
@@ -39,10 +42,31 @@ public:
   findChildren(PDB_SymType Type, StringRef Name,
                PDB_NameSearchFlags Flags) const = 0;
   virtual std::unique_ptr<IPDBEnumSymbols>
+  findChildrenByAddr(PDB_SymType Type, StringRef Name,
+                     PDB_NameSearchFlags Flags,
+                     uint32_t Section, uint32_t Offset) const = 0;
+  virtual std::unique_ptr<IPDBEnumSymbols>
+  findChildrenByVA(PDB_SymType Type, StringRef Name, PDB_NameSearchFlags Flags,
+                   uint64_t VA) const = 0;
+  virtual std::unique_ptr<IPDBEnumSymbols>
   findChildrenByRVA(PDB_SymType Type, StringRef Name, PDB_NameSearchFlags Flags,
                     uint32_t RVA) const = 0;
+
+  virtual std::unique_ptr<IPDBEnumSymbols>
+  findInlineFramesByAddr(uint32_t Section, uint32_t Offset) const = 0;
   virtual std::unique_ptr<IPDBEnumSymbols>
   findInlineFramesByRVA(uint32_t RVA) const = 0;
+  virtual std::unique_ptr<IPDBEnumSymbols>
+  findInlineFramesByVA(uint64_t VA) const = 0;
+
+  virtual std::unique_ptr<IPDBEnumLineNumbers> findInlineeLines() const = 0;
+  virtual std::unique_ptr<IPDBEnumLineNumbers>
+  findInlineeLinesByAddr(uint32_t Section, uint32_t Offset,
+                         uint32_t Length) const = 0;
+  virtual std::unique_ptr<IPDBEnumLineNumbers>
+  findInlineeLinesByRVA(uint32_t RVA, uint32_t Length) const = 0;
+  virtual std::unique_ptr<IPDBEnumLineNumbers>
+  findInlineeLinesByVA(uint64_t VA, uint32_t Length) const = 0;
 
   virtual void getDataBytes(llvm::SmallVector<uint8_t, 32> &bytes) const = 0;
   virtual void getBackEndVersion(VersionInfo &Version) const = 0;
@@ -91,6 +115,8 @@ public:
   virtual uint32_t getSizeInUdt() const = 0;
   virtual uint32_t getSlot() const = 0;
   virtual std::string getSourceFileName() const = 0;
+  virtual std::unique_ptr<IPDBLineNumber>
+  getSrcLineOnTypeDefn() const = 0;
   virtual uint32_t getStride() const = 0;
   virtual uint32_t getSubTypeId() const = 0;
   virtual std::string getSymbolsFileName() const = 0;
@@ -105,15 +131,18 @@ public:
   virtual uint32_t getTypeId() const = 0;
   virtual uint32_t getUavSlot() const = 0;
   virtual std::string getUndecoratedName() const = 0;
+  virtual std::string getUndecoratedNameEx(PDB_UndnameFlags Flags) const = 0;
   virtual uint32_t getUnmodifiedTypeId() const = 0;
   virtual uint32_t getUpperBoundId() const = 0;
   virtual Variant getValue() const = 0;
   virtual uint32_t getVirtualBaseDispIndex() const = 0;
   virtual uint32_t getVirtualBaseOffset() const = 0;
+  virtual std::unique_ptr<PDBSymbolTypeBuiltin>
+  getVirtualBaseTableType() const = 0;
   virtual uint32_t getVirtualTableShapeId() const = 0;
   virtual PDB_DataKind getDataKind() const = 0;
   virtual PDB_SymType getSymTag() const = 0;
-  virtual PDB_UniqueId getGuid() const = 0;
+  virtual codeview::GUID getGuid() const = 0;
   virtual int32_t getOffset() const = 0;
   virtual int32_t getThisAdjust() const = 0;
   virtual int32_t getVirtualBasePointerOffset() const = 0;

@@ -13,25 +13,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "OrcLazyJIT.h"
 #include "RemoteJITUtils.h"
-#include "llvm/IR/LLVMContext.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/CodeGen/CommandFlags.inc"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/ExecutionEngine/Interpreter.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
+#include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/ExecutionEngine/Orc/OrcRemoteTargetClient.h"
 #include "llvm/ExecutionEngine/OrcMCJITReplacement.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/ExecutionEngine/Orc/OrcRemoteTargetClient.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/TypeBuilder.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ObjectFile.h"
@@ -39,18 +43,18 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Memory.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PluginLoader.h"
-#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
-#include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include <cerrno>
@@ -91,8 +95,7 @@ namespace {
                                            "Orc-based MCJIT replacement"),
                                 clEnumValN(JITKind::OrcLazy,
                                            "orc-lazy",
-                                           "Orc-based lazy JIT."),
-                                clEnumValEnd));
+                                           "Orc-based lazy JIT.")));
 
   // The MCJIT supports building for a target address space separate from
   // the JIT compilation process. Use a forked process and a copying
@@ -123,22 +126,6 @@ namespace {
 
   cl::opt<std::string>
   TargetTriple("mtriple", cl::desc("Override target triple for module"));
-
-  cl::opt<std::string>
-  MArch("march",
-        cl::desc("Architecture to generate assembly for (see --version)"));
-
-  cl::opt<std::string>
-  MCPU("mcpu",
-       cl::desc("Target a specific cpu type (-mcpu=help for details)"),
-       cl::value_desc("cpu-name"),
-       cl::init(""));
-
-  cl::list<std::string>
-  MAttrs("mattr",
-         cl::CommaSeparated,
-         cl::desc("Target specific attributes (-mattr=help for details)"),
-         cl::value_desc("a1,+a2,-a3,..."));
 
   cl::opt<std::string>
   EntryFunc("entry-function",
@@ -187,49 +174,32 @@ namespace {
                   cl::desc("Disable JIT lazy compilation"),
                   cl::init(false));
 
-  cl::opt<Reloc::Model> RelocModel(
-      "relocation-model", cl::desc("Choose relocation model"),
-      cl::values(
-          clEnumValN(Reloc::Static, "static", "Non-relocatable code"),
-          clEnumValN(Reloc::PIC_, "pic",
-                     "Fully relocatable, position independent code"),
-          clEnumValN(Reloc::DynamicNoPIC, "dynamic-no-pic",
-                     "Relocatable external references, non-relocatable code"),
-          clEnumValEnd));
-
-  cl::opt<llvm::CodeModel::Model>
-  CMModel("code-model",
-          cl::desc("Choose code model"),
-          cl::init(CodeModel::JITDefault),
-          cl::values(clEnumValN(CodeModel::JITDefault, "default",
-                                "Target default JIT code model"),
-                     clEnumValN(CodeModel::Small, "small",
-                                "Small code model"),
-                     clEnumValN(CodeModel::Kernel, "kernel",
-                                "Kernel code model"),
-                     clEnumValN(CodeModel::Medium, "medium",
-                                "Medium code model"),
-                     clEnumValN(CodeModel::Large, "large",
-                                "Large code model"),
-                     clEnumValEnd));
-
   cl::opt<bool>
   GenerateSoftFloatCalls("soft-float",
     cl::desc("Generate software floating point library calls"),
     cl::init(false));
 
-  cl::opt<llvm::FloatABI::ABIType>
-  FloatABIForCalls("float-abi",
-                   cl::desc("Choose float ABI type"),
-                   cl::init(FloatABI::Default),
-                   cl::values(
-                     clEnumValN(FloatABI::Default, "default",
-                                "Target default float ABI type"),
-                     clEnumValN(FloatABI::Soft, "soft",
-                                "Soft float ABI (implied by -soft-float)"),
-                     clEnumValN(FloatABI::Hard, "hard",
-                                "Hard float ABI (uses FP registers)"),
-                     clEnumValEnd));
+  enum class DumpKind {
+    NoDump,
+    DumpFuncsToStdOut,
+    DumpModsToStdOut,
+    DumpModsToDisk
+  };
+
+  cl::opt<DumpKind> OrcDumpKind(
+      "orc-lazy-debug", cl::desc("Debug dumping for the orc-lazy JIT."),
+      cl::init(DumpKind::NoDump),
+      cl::values(clEnumValN(DumpKind::NoDump, "no-dump",
+                            "Don't dump anything."),
+                 clEnumValN(DumpKind::DumpFuncsToStdOut, "funcs-to-stdout",
+                            "Dump function names to stdout."),
+                 clEnumValN(DumpKind::DumpModsToStdOut, "mods-to-stdout",
+                            "Dump modules to stdout."),
+                 clEnumValN(DumpKind::DumpModsToDisk, "mods-to-disk",
+                            "Dump modules to the current "
+                            "working directory. (WARNING: "
+                            "will overwrite existing files).")),
+      cl::Hidden);
 
   ExitOnError ExitOnErr;
 }
@@ -275,7 +245,7 @@ public:
       return nullptr;
     // Load the object from the cache filename
     ErrorOr<std::unique_ptr<MemoryBuffer>> IRObjectBuffer =
-        MemoryBuffer::getFile(CacheName.c_str(), -1, false);
+        MemoryBuffer::getFile(CacheName, -1, false);
     // If the file isn't there, that's OK.
     if (!IRObjectBuffer)
       return nullptr;
@@ -310,7 +280,7 @@ private:
 };
 
 // On Mingw and Cygwin, an external symbol named '__main' is called from the
-// generated 'main' function to allow static intialization.  To avoid linking
+// generated 'main' function to allow static initialization.  To avoid linking
 // problems with remote targets (because lli's remote target support does not
 // currently handle external linking) we add a secondary module which defines
 // an empty '__main' function.
@@ -350,7 +320,7 @@ static void addCygMingExtraModule(ExecutionEngine &EE, LLVMContext &Context,
 CodeGenOpt::Level getOptLevel() {
   switch (OptLevel) {
   default:
-    errs() << "lli: Invalid optimization level.\n";
+    WithColor::error(errs(), "lli") << "invalid optimization level.\n";
     exit(1);
   case '0': return CodeGenOpt::None;
   case '1': return CodeGenOpt::Less;
@@ -361,14 +331,20 @@ CodeGenOpt::Level getOptLevel() {
   llvm_unreachable("Unrecognized opt level.");
 }
 
+LLVM_ATTRIBUTE_NORETURN
+static void reportError(SMDiagnostic Err, const char *ProgName) {
+  Err.print(ProgName, errs());
+  exit(1);
+}
+
+int runOrcLazyJIT(LLVMContext &Ctx, std::vector<std::unique_ptr<Module>> Ms,
+                  const std::vector<std::string> &Args);
+
 //===----------------------------------------------------------------------===//
 // main Driver function
 //
 int main(int argc, char **argv, char * const *envp) {
-  sys::PrintStackTraceOnErrorSignal(argv[0]);
-  PrettyStackTraceProgram X(argc, argv);
-
-  atexit(llvm_shutdown); // Call llvm_shutdown() on exit.
+  InitLLVM X(argc, argv);
 
   if (argc > 1)
     ExitOnErr.setBanner(std::string(argv[0]) + ": ");
@@ -392,22 +368,22 @@ int main(int argc, char **argv, char * const *envp) {
   SMDiagnostic Err;
   std::unique_ptr<Module> Owner = parseIRFile(InputFile, Err, Context);
   Module *Mod = Owner.get();
-  if (!Mod) {
-    Err.print(argv[0], errs());
-    return 1;
-  }
+  if (!Mod)
+    reportError(Err, argv[0]);
 
   if (UseJITKind == JITKind::OrcLazy) {
     std::vector<std::unique_ptr<Module>> Ms;
     Ms.push_back(std::move(Owner));
     for (auto &ExtraMod : ExtraModules) {
       Ms.push_back(parseIRFile(ExtraMod, Err, Context));
-      if (!Ms.back()) {
-        Err.print(argv[0], errs());
-        return 1;
-      }
+      if (!Ms.back())
+        reportError(Err, argv[0]);
     }
-    return runOrcLazyJIT(std::move(Ms), argc, argv);
+    std::vector<std::string> Args;
+    Args.push_back(InputFile);
+    for (auto &Arg : InputArgv)
+      Args.push_back(Arg);
+    return runOrcLazyJIT(Context, std::move(Ms), Args);
   }
 
   if (EnableCacheManager) {
@@ -418,21 +394,21 @@ int main(int argc, char **argv, char * const *envp) {
 
   // If not jitting lazily, load the whole bitcode file eagerly too.
   if (NoLazyCompilation) {
-    if (std::error_code EC = Mod->materializeAll()) {
-      errs() << argv[0] << ": bitcode didn't read correctly.\n";
-      errs() << "Reason: " << EC.message() << "\n";
-      exit(1);
-    }
+    // Use *argv instead of argv[0] to work around a wrong GCC warning.
+    ExitOnError ExitOnErr(std::string(*argv) +
+                          ": bitcode didn't read correctly: ");
+    ExitOnErr(Mod->materializeAll());
   }
 
   std::string ErrorMsg;
   EngineBuilder builder(std::move(Owner));
   builder.setMArch(MArch);
-  builder.setMCPU(MCPU);
-  builder.setMAttrs(MAttrs);
+  builder.setMCPU(getCPUStr());
+  builder.setMAttrs(getFeatureList());
   if (RelocModel.getNumOccurrences())
     builder.setRelocationModel(RelocModel);
-  builder.setCodeModel(CMModel);
+  if (CMModel.getNumOccurrences())
+    builder.setCodeModel(CMModel);
   builder.setErrorStr(&ErrorMsg);
   builder.setEngineKind(ForceInterpreter
                         ? EngineKind::Interpreter
@@ -456,14 +432,14 @@ int main(int argc, char **argv, char * const *envp) {
     builder.setMCJITMemoryManager(
       std::unique_ptr<RTDyldMemoryManager>(RTDyldMM));
   } else if (RemoteMCJIT) {
-    errs() << "error: Remote process execution does not work with the "
-              "interpreter.\n";
+    WithColor::error(errs(), argv[0])
+        << "remote process execution does not work with the interpreter.\n";
     exit(1);
   }
 
   builder.setOptLevel(getOptLevel());
 
-  TargetOptions Options;
+  TargetOptions Options = InitTargetOptionsFromCodeGenFlags();
   if (FloatABIForCalls != FloatABI::Default)
     Options.FloatABIType = FloatABIForCalls;
 
@@ -472,9 +448,10 @@ int main(int argc, char **argv, char * const *envp) {
   std::unique_ptr<ExecutionEngine> EE(builder.create());
   if (!EE) {
     if (!ErrorMsg.empty())
-      errs() << argv[0] << ": error creating EE: " << ErrorMsg << "\n";
+      WithColor::error(errs(), argv[0])
+          << "error creating EE: " << ErrorMsg << "\n";
     else
-      errs() << argv[0] << ": unknown error creating EE!\n";
+      WithColor::error(errs(), argv[0]) << "unknown error creating EE!\n";
     exit(1);
   }
 
@@ -487,10 +464,8 @@ int main(int argc, char **argv, char * const *envp) {
   // Load any additional modules specified on the command line.
   for (unsigned i = 0, e = ExtraModules.size(); i != e; ++i) {
     std::unique_ptr<Module> XMod = parseIRFile(ExtraModules[i], Err, Context);
-    if (!XMod) {
-      Err.print(argv[0], errs());
-      return 1;
-    }
+    if (!XMod)
+      reportError(Err, argv[0]);
     if (EnableCacheManager) {
       std::string CacheName("file:");
       CacheName.append(ExtraModules[i]);
@@ -505,8 +480,7 @@ int main(int argc, char **argv, char * const *envp) {
     if (!Obj) {
       // TODO: Actually report errors helpfully.
       consumeError(Obj.takeError());
-      Err.print(argv[0], errs());
-      return 1;
+      reportError(Err, argv[0]);
     }
     object::OwningBinary<object::ObjectFile> &O = Obj.get();
     EE->addObjectFile(std::move(O));
@@ -515,10 +489,8 @@ int main(int argc, char **argv, char * const *envp) {
   for (unsigned i = 0, e = ExtraArchives.size(); i != e; ++i) {
     ErrorOr<std::unique_ptr<MemoryBuffer>> ArBufOrErr =
         MemoryBuffer::getFileOrSTDIN(ExtraArchives[i]);
-    if (!ArBufOrErr) {
-      Err.print(argv[0], errs());
-      return 1;
-    }
+    if (!ArBufOrErr)
+      reportError(Err, argv[0]);
     std::unique_ptr<MemoryBuffer> &ArBuf = ArBufOrErr.get();
 
     Expected<std::unique_ptr<object::Archive>> ArOrErr =
@@ -529,7 +501,7 @@ int main(int argc, char **argv, char * const *envp) {
       logAllUnhandledErrors(ArOrErr.takeError(), OS, "");
       OS.flush();
       errs() << Buf;
-      return 1;
+      exit(1);
     }
     std::unique_ptr<object::Archive> &Ar = ArOrErr.get();
 
@@ -552,7 +524,8 @@ int main(int argc, char **argv, char * const *envp) {
                 JITEventListener::createIntelJITEventListener());
 
   if (!NoLazyCompilation && RemoteMCJIT) {
-    errs() << "warning: remote mcjit does not support lazy compilation\n";
+    WithColor::warning(errs(), argv[0])
+        << "remote mcjit does not support lazy compilation\n";
     NoLazyCompilation = true;
   }
   EE->DisableLazyCompilation(NoLazyCompilation);
@@ -578,7 +551,8 @@ int main(int argc, char **argv, char * const *envp) {
   //
   Function *EntryFn = Mod->getFunction(EntryFunc);
   if (!EntryFn) {
-    errs() << '\'' << EntryFunc << "\' function not found in module.\n";
+    WithColor::error(errs(), argv[0])
+        << '\'' << EntryFunc << "\' function not found in module.\n";
     return -1;
   }
 
@@ -591,16 +565,19 @@ int main(int argc, char **argv, char * const *envp) {
   // remote JIT on Unix platforms.
   if (RemoteMCJIT) {
 #ifndef LLVM_ON_UNIX
-    errs() << "Warning: host does not support external remote targets.\n"
-           << "  Defaulting to local execution\n";
+    WithColor::warning(errs(), argv[0])
+        << "host does not support external remote targets.\n";
+    WithColor::note() << "defaulting to local execution\n";
     return -1;
 #else
     if (ChildExecPath.empty()) {
-      errs() << "-remote-mcjit requires -mcjit-remote-process.\n";
+      WithColor::error(errs(), argv[0])
+          << "-remote-mcjit requires -mcjit-remote-process.\n";
       exit(1);
     } else if (!sys::fs::can_execute(ChildExecPath)) {
-      errs() << "Unable to find usable child executable: '" << ChildExecPath
-             << "'\n";
+      WithColor::error(errs(), argv[0])
+          << "unable to find usable child executable: '" << ChildExecPath
+          << "'\n";
       return -1;
     }
 #endif
@@ -610,8 +587,7 @@ int main(int argc, char **argv, char * const *envp) {
     // If the program doesn't explicitly call exit, we will need the Exit
     // function later on to make an explicit call, so get the function now.
     Constant *Exit = Mod->getOrInsertFunction("exit", Type::getVoidTy(Context),
-                                                      Type::getInt32Ty(Context),
-                                                      nullptr);
+                                                      Type::getInt32Ty(Context));
 
     // Run static constructors.
     if (!ForceInterpreter) {
@@ -641,57 +617,58 @@ int main(int argc, char **argv, char * const *envp) {
       ResultGV.IntVal = APInt(32, Result);
       Args.push_back(ResultGV);
       EE->runFunction(ExitF, Args);
-      errs() << "ERROR: exit(" << Result << ") returned!\n";
+      WithColor::error(errs(), argv[0]) << "exit(" << Result << ") returned!\n";
       abort();
     } else {
-      errs() << "ERROR: exit defined with wrong prototype!\n";
+      WithColor::error(errs(), argv[0])
+          << "exit defined with wrong prototype!\n";
       abort();
     }
   } else {
     // else == "if (RemoteMCJIT)"
 
     // Remote target MCJIT doesn't (yet) support static constructors. No reason
-    // it couldn't. This is a limitation of the LLI implemantation, not the
+    // it couldn't. This is a limitation of the LLI implementation, not the
     // MCJIT itself. FIXME.
 
     // Lanch the remote process and get a channel to it.
-    std::unique_ptr<FDRPCChannel> C = launchRemote();
+    std::unique_ptr<FDRawChannel> C = launchRemote();
     if (!C) {
-      errs() << "Failed to launch remote JIT.\n";
+      WithColor::error(errs(), argv[0]) << "failed to launch remote JIT.\n";
       exit(1);
     }
 
     // Create a remote target client running over the channel.
-    typedef orc::remote::OrcRemoteTargetClient<orc::remote::RPCChannel> MyRemote;
-    MyRemote R = ExitOnErr(MyRemote::Create(*C));
+    llvm::orc::ExecutionSession ES;
+    ES.setErrorReporter([&](Error Err) { ExitOnErr(std::move(Err)); });
+    typedef orc::remote::OrcRemoteTargetClient MyRemote;
+    auto R = ExitOnErr(MyRemote::Create(*C, ES));
 
     // Create a remote memory manager.
-    std::unique_ptr<MyRemote::RCMemoryManager> RemoteMM;
-    ExitOnErr(R.createRemoteMemoryManager(RemoteMM));
+    auto RemoteMM = ExitOnErr(R->createRemoteMemoryManager());
 
     // Forward MCJIT's memory manager calls to the remote memory manager.
     static_cast<ForwardingMemoryManager*>(RTDyldMM)->setMemMgr(
       std::move(RemoteMM));
 
     // Forward MCJIT's symbol resolution calls to the remote.
-    static_cast<ForwardingMemoryManager*>(RTDyldMM)->setResolver(
-      orc::createLambdaResolver(
-        [](const std::string &Name) { return nullptr; },
-        [&](const std::string &Name) {
-          if (auto Addr = ExitOnErr(R.getSymbolAddress(Name)))
-	    return JITSymbol(Addr, JITSymbolFlags::Exported);
-          return JITSymbol(nullptr);
-        }
-      ));
+    static_cast<ForwardingMemoryManager *>(RTDyldMM)->setResolver(
+        orc::createLambdaResolver(
+            [](const std::string &Name) { return nullptr; },
+            [&](const std::string &Name) {
+              if (auto Addr = ExitOnErr(R->getSymbolAddress(Name)))
+                return JITSymbol(Addr, JITSymbolFlags::Exported);
+              return JITSymbol(nullptr);
+            }));
 
     // Grab the target address of the JIT'd main function on the remote and call
     // it.
     // FIXME: argv and envp handling.
     JITTargetAddress Entry = EE->getFunctionAddress(EntryFn->getName().str());
     EE->finalizeObject();
-    DEBUG(dbgs() << "Executing '" << EntryFn->getName() << "' at 0x"
-                 << format("%llx", Entry) << "\n");
-    Result = ExitOnErr(R.callIntVoid(Entry));
+    LLVM_DEBUG(dbgs() << "Executing '" << EntryFn->getName() << "' at 0x"
+                      << format("%llx", Entry) << "\n");
+    Result = ExitOnErr(R->callIntVoid(Entry));
 
     // Like static constructors, the remote target MCJIT support doesn't handle
     // this yet. It could. FIXME.
@@ -702,13 +679,137 @@ int main(int argc, char **argv, char * const *envp) {
     EE.reset();
 
     // Signal the remote target that we're done JITing.
-    ExitOnErr(R.terminateSession());
+    ExitOnErr(R->terminateSession());
   }
 
   return Result;
 }
 
-std::unique_ptr<FDRPCChannel> launchRemote() {
+static orc::IRTransformLayer2::TransformFunction createDebugDumper() {
+  switch (OrcDumpKind) {
+  case DumpKind::NoDump:
+    return [](std::unique_ptr<Module> M) { return M; };
+
+  case DumpKind::DumpFuncsToStdOut:
+    return [](std::unique_ptr<Module> M) {
+      printf("[ ");
+
+      for (const auto &F : *M) {
+        if (F.isDeclaration())
+          continue;
+
+        if (F.hasName()) {
+          std::string Name(F.getName());
+          printf("%s ", Name.c_str());
+        } else
+          printf("<anon> ");
+      }
+
+      printf("]\n");
+      return M;
+    };
+
+  case DumpKind::DumpModsToStdOut:
+    return [](std::unique_ptr<Module> M) {
+      outs() << "----- Module Start -----\n"
+             << *M << "----- Module End -----\n";
+
+      return M;
+    };
+
+  case DumpKind::DumpModsToDisk:
+    return [](std::unique_ptr<Module> M) {
+      std::error_code EC;
+      raw_fd_ostream Out(M->getModuleIdentifier() + ".ll", EC, sys::fs::F_Text);
+      if (EC) {
+        errs() << "Couldn't open " << M->getModuleIdentifier()
+               << " for dumping.\nError:" << EC.message() << "\n";
+        exit(1);
+      }
+      Out << *M;
+      return M;
+    };
+  }
+  llvm_unreachable("Unknown DumpKind");
+}
+
+int runOrcLazyJIT(LLVMContext &Ctx, std::vector<std::unique_ptr<Module>> Ms,
+                  const std::vector<std::string> &Args) {
+  // Bail out early if no modules loaded.
+  if (Ms.empty())
+    return 0;
+
+  // Add lli's symbols into the JIT's search space.
+  std::string ErrMsg;
+  sys::DynamicLibrary LibLLI =
+      sys::DynamicLibrary::getPermanentLibrary(nullptr, &ErrMsg);
+  if (!LibLLI.isValid()) {
+    errs() << "Error loading lli symbols: " << ErrMsg << ".\n";
+    return 1;
+  }
+
+  const auto &TT = Ms.front()->getTargetTriple();
+  orc::JITTargetMachineBuilder TMD =
+      TT.empty() ? ExitOnErr(orc::JITTargetMachineBuilder::detectHost())
+                 : orc::JITTargetMachineBuilder(Triple(TT));
+
+  TMD.setArch(MArch)
+      .setCPU(getCPUStr())
+      .addFeatures(getFeatureList())
+      .setRelocationModel(RelocModel.getNumOccurrences()
+                              ? Optional<Reloc::Model>(RelocModel)
+                              : None)
+      .setCodeModel(CMModel.getNumOccurrences()
+                        ? Optional<CodeModel::Model>(CMModel)
+                        : None);
+  auto TM = ExitOnErr(TMD.createTargetMachine());
+  auto DL = TM->createDataLayout();
+  auto ES = llvm::make_unique<orc::ExecutionSession>();
+  auto J =
+      ExitOnErr(orc::LLLazyJIT::Create(std::move(ES), std::move(TM), DL, Ctx));
+
+  auto Dump = createDebugDumper();
+
+  J->setLazyCompileTransform(
+    [&](std::unique_ptr<Module> M) {
+      if (verifyModule(*M, &dbgs())) {
+        dbgs() << "Bad module: " << *M << "\n";
+        exit(1);
+      }
+      return Dump(std::move(M));
+    });
+  J->getMainVSO().setFallbackDefinitionGenerator(
+      orc::DynamicLibraryFallbackGenerator(
+          std::move(LibLLI), DL, [](orc::SymbolStringPtr) { return true; }));
+
+  orc::MangleAndInterner Mangle(J->getExecutionSession(), DL);
+  orc::LocalCXXRuntimeOverrides2 CXXRuntimeOverrides;
+  ExitOnErr(CXXRuntimeOverrides.enable(J->getMainVSO(), Mangle));
+
+  for (auto &M : Ms) {
+    orc::makeAllSymbolsExternallyAccessible(*M);
+    ExitOnErr(J->addLazyIRModule(std::move(M)));
+  }
+
+  ExitOnErr(J->runConstructors());
+
+  auto MainSym = ExitOnErr(J->lookup("main"));
+  typedef int (*MainFnPtr)(int, const char *[]);
+  std::vector<const char *> ArgV;
+  for (auto &Arg : Args)
+    ArgV.push_back(Arg.c_str());
+  auto Main =
+      reinterpret_cast<MainFnPtr>(static_cast<uintptr_t>(MainSym.getAddress()));
+  auto Result = Main(ArgV.size(), (const char **)ArgV.data());
+
+  ExitOnErr(J->runDestructors());
+
+  CXXRuntimeOverrides.runDestructors();
+
+  return Result;
+}
+
+std::unique_ptr<FDRawChannel> launchRemote() {
 #ifndef LLVM_ON_UNIX
   llvm_unreachable("launchRemote not supported on non-Unix platforms");
 #else
@@ -758,6 +859,6 @@ std::unique_ptr<FDRPCChannel> launchRemote() {
   close(PipeFD[1][1]);
 
   // Return an RPC channel connected to our end of the pipes.
-  return llvm::make_unique<FDRPCChannel>(PipeFD[1][0], PipeFD[0][1]);
+  return llvm::make_unique<FDRawChannel>(PipeFD[1][0], PipeFD[0][1]);
 #endif
 }

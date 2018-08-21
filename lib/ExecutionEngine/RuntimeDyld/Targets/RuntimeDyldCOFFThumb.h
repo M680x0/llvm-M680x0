@@ -14,13 +14,33 @@
 #ifndef LLVM_LIB_EXECUTIONENGINE_RUNTIMEDYLD_TARGETS_RUNTIMEDYLDCOFFTHUMB_H
 #define LLVM_LIB_EXECUTIONENGINE_RUNTIMEDYLD_TARGETS_RUNTIMEDYLDCOFFTHUMB_H
 
-#include "llvm/Object/COFF.h"
-#include "llvm/Support/COFF.h"
 #include "../RuntimeDyldCOFF.h"
+#include "llvm/BinaryFormat/COFF.h"
+#include "llvm/Object/COFF.h"
 
 #define DEBUG_TYPE "dyld"
 
 namespace llvm {
+
+static bool isThumbFunc(symbol_iterator Symbol, const ObjectFile &Obj,
+                        section_iterator Section) {
+  Expected<SymbolRef::Type> SymTypeOrErr = Symbol->getType();
+  if (!SymTypeOrErr) {
+    std::string Buf;
+    raw_string_ostream OS(Buf);
+    logAllUnhandledErrors(SymTypeOrErr.takeError(), OS, "");
+    OS.flush();
+    report_fatal_error(Buf);
+  }
+
+  if (*SymTypeOrErr != SymbolRef::ST_Function)
+    return false;
+
+  // We check the IMAGE_SCN_MEM_16BIT flag in the section of the symbol to tell
+  // if it's thumb or not
+  return cast<COFFObjectFile>(Obj).getCOFFSection(*Section)->Characteristics &
+         COFF::IMAGE_SCN_MEM_16BIT;
+}
 
 class RuntimeDyldCOFFThumb : public RuntimeDyldCOFF {
 public:
@@ -77,9 +97,9 @@ public:
     SmallString<32> RelTypeName;
     RelI->getTypeName(RelTypeName);
 #endif
-    DEBUG(dbgs() << "\t\tIn Section " << SectionID << " Offset " << Offset
-                 << " RelType: " << RelTypeName << " TargetName: " << TargetName
-                 << " Addend " << Addend << "\n");
+    LLVM_DEBUG(dbgs() << "\t\tIn Section " << SectionID << " Offset " << Offset
+                      << " RelType: " << RelTypeName << " TargetName: "
+                      << TargetName << " Addend " << Addend << "\n");
 
     unsigned TargetSectionID = -1;
     if (Section == Obj.section_end()) {
@@ -92,12 +112,22 @@ public:
       else
         return TargetSectionIDOrErr.takeError();
 
+      // We need to find out if the relocation is relative to a thumb function
+      // so that we include the ISA selection bit when resolve the relocation
+      bool IsTargetThumbFunc = isThumbFunc(Symbol, Obj, Section);
+
       switch (RelType) {
       default: llvm_unreachable("unsupported relocation type");
       case COFF::IMAGE_REL_ARM_ABSOLUTE:
         // This relocation is ignored.
         break;
-      case COFF::IMAGE_REL_ARM_ADDR32:
+      case COFF::IMAGE_REL_ARM_ADDR32: {
+        RelocationEntry RE = RelocationEntry(
+            SectionID, Offset, RelType, Addend, TargetSectionID,
+            getSymbolOffset(*Symbol), 0, 0, false, 0, IsTargetThumbFunc);
+        addRelocationForSection(RE, TargetSectionID);
+        break;
+      }
       case COFF::IMAGE_REL_ARM_ADDR32NB: {
         RelocationEntry RE =
             RelocationEntry(SectionID, Offset, RelType, Addend, TargetSectionID,
@@ -118,9 +148,9 @@ public:
         break;
       }
       case COFF::IMAGE_REL_ARM_MOV32T: {
-        RelocationEntry RE =
-            RelocationEntry(SectionID, Offset, RelType, Addend, TargetSectionID,
-                            getSymbolOffset(*Symbol), 0, 0, false, 0);
+        RelocationEntry RE = RelocationEntry(
+            SectionID, Offset, RelType, Addend, TargetSectionID,
+            getSymbolOffset(*Symbol), 0, 0, false, 0, IsTargetThumbFunc);
         addRelocationForSection(RE, TargetSectionID);
         break;
       }
@@ -142,6 +172,7 @@ public:
   void resolveRelocation(const RelocationEntry &RE, uint64_t Value) override {
     const auto Section = Sections[RE.SectionID];
     uint8_t *Target = Section.getAddressWithOffset(RE.Offset);
+    int ISASelectionBit = RE.IsTargetThumbFunc ? 1 : 0;
 
     switch (RE.RelType) {
     default: llvm_unreachable("unsupported relocation type");
@@ -154,14 +185,13 @@ public:
           RE.Sections.SectionA == static_cast<uint32_t>(-1)
               ? Value
               : Sections[RE.Sections.SectionA].getLoadAddressWithOffset(RE.Addend);
-      assert(static_cast<int32_t>(Result) <= INT32_MAX &&
-             "relocation overflow");
-      assert(static_cast<int32_t>(Result) >= INT32_MIN &&
-             "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_ADDR32"
-                   << " TargetSection: " << RE.Sections.SectionA
-                   << " Value: " << format("0x%08" PRIx32, Result) << '\n');
+      Result |= ISASelectionBit;
+      assert(Result <= UINT32_MAX && "relocation overflow");
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_ADDR32"
+                        << " TargetSection: " << RE.Sections.SectionA
+                        << " Value: " << format("0x%08" PRIx32, Result)
+                        << '\n');
       writeBytesUnaligned(Result, Target, 4);
       break;
     }
@@ -170,51 +200,44 @@ public:
       // NOTE: use Section[0].getLoadAddress() as an approximation of ImageBase
       uint64_t Result = Sections[RE.Sections.SectionA].getLoadAddress() -
                         Sections[0].getLoadAddress() + RE.Addend;
-      assert(static_cast<int32_t>(Result) <= INT32_MAX &&
-             "relocation overflow");
-      assert(static_cast<int32_t>(Result) >= INT32_MIN &&
-             "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_ADDR32NB"
-                   << " TargetSection: " << RE.Sections.SectionA
-                   << " Value: " << format("0x%08" PRIx32, Result) << '\n');
+      assert(Result <= UINT32_MAX && "relocation overflow");
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_ADDR32NB"
+                        << " TargetSection: " << RE.Sections.SectionA
+                        << " Value: " << format("0x%08" PRIx32, Result)
+                        << '\n');
+      Result |= ISASelectionBit;
       writeBytesUnaligned(Result, Target, 4);
       break;
     }
     case COFF::IMAGE_REL_ARM_SECTION:
       // 16-bit section index of the section that contains the target.
-      assert(static_cast<int32_t>(RE.SectionID) <= INT16_MAX &&
+      assert(static_cast<uint32_t>(RE.SectionID) <= UINT16_MAX &&
              "relocation overflow");
-      assert(static_cast<int32_t>(RE.SectionID) >= INT16_MIN &&
-             "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_SECTION Value: " << RE.SectionID
-                   << '\n');
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_SECTION Value: "
+                        << RE.SectionID << '\n');
       writeBytesUnaligned(RE.SectionID, Target, 2);
       break;
     case COFF::IMAGE_REL_ARM_SECREL:
       // 32-bit offset of the target from the beginning of its section.
-      assert(static_cast<int32_t>(RE.Addend) <= INT32_MAX &&
+      assert(static_cast<uint64_t>(RE.Addend) <= UINT32_MAX &&
              "relocation overflow");
-      assert(static_cast<int32_t>(RE.Addend) >= INT32_MIN &&
-             "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_SECREL Value: " << RE.Addend
-                   << '\n');
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_SECREL Value: " << RE.Addend
+                        << '\n');
       writeBytesUnaligned(RE.Addend, Target, 2);
       break;
     case COFF::IMAGE_REL_ARM_MOV32T: {
       // 32-bit VA of the target applied to a contiguous MOVW+MOVT pair.
       uint64_t Result =
           Sections[RE.Sections.SectionA].getLoadAddressWithOffset(RE.Addend);
-      assert(static_cast<int32_t>(Result) <= INT32_MAX &&
-             "relocation overflow");
-      assert(static_cast<int32_t>(Result) >= INT32_MIN &&
-             "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_MOV32T"
-                   << " TargetSection: " << RE.Sections.SectionA
-                   << " Value: " << format("0x%08" PRIx32, Result) << '\n');
+      assert(Result <= UINT32_MAX && "relocation overflow");
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_MOV32T"
+                        << " TargetSection: " << RE.Sections.SectionA
+                        << " Value: " << format("0x%08" PRIx32, Result)
+                        << '\n');
 
       // MOVW(T3): |11110|i|10|0|1|0|0|imm4|0|imm3|Rd|imm8|
       //            imm32 = zext imm4:i:imm3:imm8
@@ -228,7 +251,8 @@ public:
         Bytes[3] |= (((Immediate & 0x0700) >>  8) << 4);
       };
 
-      EncodeImmediate(&Target[0], static_cast<uint32_t>(Result) >> 00);
+      EncodeImmediate(&Target[0],
+                      (static_cast<uint32_t>(Result) >> 00) | ISASelectionBit);
       EncodeImmediate(&Target[4], static_cast<uint32_t>(Result) >> 16);
 
       break;
@@ -237,13 +261,13 @@ public:
       // The most significant 20-bits of the signed 21-bit relative displacement
       uint64_t Value =
           RE.Addend - (Sections[RE.SectionID].getLoadAddress() + RE.Offset) - 4;
-      assert(static_cast<int32_t>(RE.Addend) <= INT32_MAX &&
+      assert(static_cast<int64_t>(RE.Addend) <= INT32_MAX &&
              "relocation overflow");
-      assert(static_cast<int32_t>(RE.Addend) >= INT32_MIN &&
+      assert(static_cast<int64_t>(RE.Addend) >= INT32_MIN &&
              "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_BRANCH20T"
-                   << " Value: " << static_cast<int32_t>(Value) << '\n');
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_BRANCH20T"
+                        << " Value: " << static_cast<int32_t>(Value) << '\n');
       static_cast<void>(Value);
       llvm_unreachable("unimplemented relocation");
       break;
@@ -252,13 +276,13 @@ public:
       // The most significant 24-bits of the signed 25-bit relative displacement
       uint64_t Value =
           RE.Addend - (Sections[RE.SectionID].getLoadAddress() + RE.Offset) - 4;
-      assert(static_cast<int32_t>(RE.Addend) <= INT32_MAX &&
+      assert(static_cast<int64_t>(RE.Addend) <= INT32_MAX &&
              "relocation overflow");
-      assert(static_cast<int32_t>(RE.Addend) >= INT32_MIN &&
+      assert(static_cast<int64_t>(RE.Addend) >= INT32_MIN &&
              "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_BRANCH24T"
-                   << " Value: " << static_cast<int32_t>(Value) << '\n');
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_BRANCH24T"
+                        << " Value: " << static_cast<int32_t>(Value) << '\n');
       static_cast<void>(Value);
       llvm_unreachable("unimplemented relocation");
       break;
@@ -267,13 +291,13 @@ public:
       // The most significant 24-bits of the signed 25-bit relative displacement
       uint64_t Value =
           RE.Addend - (Sections[RE.SectionID].getLoadAddress() + RE.Offset) - 4;
-      assert(static_cast<int32_t>(RE.Addend) <= INT32_MAX &&
+      assert(static_cast<int64_t>(RE.Addend) <= INT32_MAX &&
              "relocation overflow");
-      assert(static_cast<int32_t>(RE.Addend) >= INT32_MIN &&
+      assert(static_cast<int64_t>(RE.Addend) >= INT32_MIN &&
              "relocation underflow");
-      DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
-                   << " RelType: IMAGE_REL_ARM_BLX23T"
-                   << " Value: " << static_cast<int32_t>(Value) << '\n');
+      LLVM_DEBUG(dbgs() << "\t\tOffset: " << RE.Offset
+                        << " RelType: IMAGE_REL_ARM_BLX23T"
+                        << " Value: " << static_cast<int32_t>(Value) << '\n');
       static_cast<void>(Value);
       llvm_unreachable("unimplemented relocation");
       break;
@@ -282,10 +306,8 @@ public:
   }
 
   void registerEHFrames() override {}
-  void deregisterEHFrames() override {}
 };
 
 }
 
 #endif
-

@@ -13,7 +13,7 @@
 
 ; CHECK-LABEL: f1:
 define void @f1(i32 %a1, i32 %a2) #0 {
-; CHECK-NEXT: adrp x8, [[SET1:l__MergedGlobals.[0-9]*]]@PAGE
+; CHECK-NEXT: adrp x8, [[SET1:__MergedGlobals.[0-9]*]]@PAGE
 ; CHECK-NEXT: add x8, x8, [[SET1]]@PAGEOFF
 ; CHECK-NEXT: stp w0, w1, [x8]
 ; CHECK-NEXT: ret
@@ -28,7 +28,7 @@ define void @f1(i32 %a1, i32 %a2) #0 {
 
 ; CHECK-LABEL: f2:
 define void @f2(i32 %a1, i32 %a2, i32 %a3) #0 {
-; CHECK-NEXT: adrp x8, [[SET2:l__MergedGlobals.[0-9]*]]@PAGE
+; CHECK-NEXT: adrp x8, [[SET2:__MergedGlobals.[0-9]*]]@PAGE
 ; CHECK-NEXT: add x8, x8, [[SET2]]@PAGEOFF
 ; CHECK-NEXT: stp w0, w1, [x8]
 ; CHECK-NEXT: str w2, [x8, #8]
@@ -49,7 +49,7 @@ define void @f2(i32 %a1, i32 %a2, i32 %a3) #0 {
 ; CHECK-LABEL: f3:
 define void @f3(i32 %a1, i32 %a2) #0 {
 ; CHECK-NEXT: adrp x8, _m3@PAGE
-; CHECK-NEXT: adrp x9, [[SET3:l__MergedGlobals[0-9]*]]@PAGE
+; CHECK-NEXT: adrp x9, [[SET3:__MergedGlobals[0-9]*]]@PAGE
 ; CHECK-NEXT: str w0, [x8, _m3@PAGEOFF]
 ; CHECK-NEXT: str w1, [x9, [[SET3]]@PAGEOFF]
 ; CHECK-NEXT: ret
@@ -88,8 +88,8 @@ define void @f5(i32 %a1) #0 {
 
 ; CHECK-DAG: .zerofill __DATA,__bss,_o5,4,2
 
-; CHECK-DAG: .zerofill __DATA,__bss,[[SET1]],8,3
-; CHECK-DAG: .zerofill __DATA,__bss,[[SET2]],12,3
-; CHECK-DAG: .zerofill __DATA,__bss,[[SET3]],12,3
+; CHECK-DAG: .zerofill __DATA,__bss,[[SET1]],8,2
+; CHECK-DAG: .zerofill __DATA,__bss,[[SET2]],12,2
+; CHECK-DAG: .zerofill __DATA,__bss,[[SET3]],12,2
 
 attributes #0 = { nounwind }

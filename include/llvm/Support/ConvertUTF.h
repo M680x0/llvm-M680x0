@@ -90,6 +90,15 @@
 #ifndef LLVM_SUPPORT_CONVERTUTF_H
 #define LLVM_SUPPORT_CONVERTUTF_H
 
+#include <cstddef>
+#include <string>
+#include <system_error>
+
+// Wrap everything in namespace llvm so that programs can link with llvm and
+// their own version of the unicode libraries.
+
+namespace llvm {
+
 /* ---------------------------------------------------------------------
     The following 4 definitions are compiler-specific.
     The C standard does not guarantee that wchar_t has at least
@@ -126,11 +135,6 @@ typedef enum {
   strictConversion = 0,
   lenientConversion
 } ConversionFlags;
-
-/* This is for C++ and does no harm in C */
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 ConversionResult ConvertUTF8toUTF16 (
   const UTF8** sourceStart, const UTF8* sourceEnd,
@@ -174,16 +178,9 @@ Boolean isLegalUTF8String(const UTF8 **source, const UTF8 *sourceEnd);
 
 unsigned getNumBytesForUTF8(UTF8 firstByte);
 
-#ifdef __cplusplus
-}
-
 /*************************************************************************/
 /* Below are LLVM-specific wrappers of the functions above. */
 
-#include <string>
-#include <cstddef>
-
-namespace llvm {
 template <typename T> class ArrayRef;
 template <typename T> class SmallVectorImpl;
 class StringRef;
@@ -246,10 +243,10 @@ bool ConvertCodePointToUTF8(unsigned Source, char *&ResultPtr);
  *
  * \sa ConvertUTF8toUTF32
  */
-static inline ConversionResult convertUTF8Sequence(const UTF8 **source,
-                                                   const UTF8 *sourceEnd,
-                                                   UTF32 *target,
-                                                   ConversionFlags flags) {
+inline ConversionResult convertUTF8Sequence(const UTF8 **source,
+                                            const UTF8 *sourceEnd,
+                                            UTF32 *target,
+                                            ConversionFlags flags) {
   if (*source == sourceEnd)
     return sourceExhausted;
   unsigned size = getNumBytesForUTF8(**source);
@@ -290,10 +287,21 @@ bool convertUTF16ToUTF8String(ArrayRef<UTF16> Src, std::string &Out);
 bool convertUTF8ToUTF16String(StringRef SrcUTF8,
                               SmallVectorImpl<UTF16> &DstUTF16);
 
-} /* end namespace llvm */
-
+#if defined(_WIN32)
+namespace sys {
+namespace windows {
+std::error_code UTF8ToUTF16(StringRef utf8, SmallVectorImpl<wchar_t> &utf16);
+/// Convert to UTF16 from the current code page used in the system
+std::error_code CurCPToUTF16(StringRef utf8, SmallVectorImpl<wchar_t> &utf16);
+std::error_code UTF16ToUTF8(const wchar_t *utf16, size_t utf16_len,
+                            SmallVectorImpl<char> &utf8);
+/// Convert from UTF16 to the current code page used in the system
+std::error_code UTF16ToCurCP(const wchar_t *utf16, size_t utf16_len,
+                             SmallVectorImpl<char> &utf8);
+} // namespace windows
+} // namespace sys
 #endif
 
-/* --------------------------------------------------------------------- */
+} /* end namespace llvm */
 
 #endif

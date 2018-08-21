@@ -1,4 +1,5 @@
-//===-- M680x0FrameLowering.cpp - M680x0 Frame Information --------------------===//
+//===-- M680x0FrameLowering.cpp - M680x0 Frame Information
+//--------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,11 +14,12 @@
 
 #include "M680x0FrameLowering.h"
 
+#include "M680x0InstrBuilder.h"
 #include "M680x0InstrInfo.h"
 #include "M680x0MachineFunction.h"
 #include "M680x0Subtarget.h"
-#include "M680x0InstrBuilder.h"
 
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -30,40 +32,39 @@
 
 using namespace llvm;
 
-M680x0FrameLowering::
-M680x0FrameLowering(const M680x0Subtarget &STI, unsigned Alignment)
-  : TargetFrameLowering(StackGrowsDown, Alignment, -4),
-      STI(STI), TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()) {
+M680x0FrameLowering::M680x0FrameLowering(const M680x0Subtarget &STI,
+                                         unsigned Alignment)
+    : TargetFrameLowering(StackGrowsDown, Alignment, -4), STI(STI),
+      TII(*STI.getInstrInfo()), TRI(STI.getRegisterInfo()) {
   SlotSize = STI.getSlotSize();
   StackPtr = TRI->getStackRegister();
 }
 
-bool M680x0FrameLowering::
-hasFP(const MachineFunction &MF) const {
+bool M680x0FrameLowering::hasFP(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetRegisterInfo *TRI = STI.getRegisterInfo();
 
   return MF.getTarget().Options.DisableFramePointerElim(MF) ||
-      MFI.hasVarSizedObjects() || MFI.isFrameAddressTaken() ||
-      TRI->needsStackRealignment(MF);
+         MFI.hasVarSizedObjects() || MFI.isFrameAddressTaken() ||
+         TRI->needsStackRealignment(MF);
 }
 
 // FIXME not only pushes....
-bool M680x0FrameLowering::
-hasReservedCallFrame(const MachineFunction &MF) const {
+bool M680x0FrameLowering::hasReservedCallFrame(
+    const MachineFunction &MF) const {
   return !MF.getFrameInfo().hasVarSizedObjects() &&
          !MF.getInfo<M680x0MachineFunctionInfo>()->getHasPushSequences();
 }
 
-bool M680x0FrameLowering::
-canSimplifyCallFramePseudos(const MachineFunction &MF) const {
+bool M680x0FrameLowering::canSimplifyCallFramePseudos(
+    const MachineFunction &MF) const {
   return hasReservedCallFrame(MF) ||
          (hasFP(MF) && !TRI->needsStackRealignment(MF)) ||
          TRI->hasBasePointer(MF);
 }
 
-bool M680x0FrameLowering::
-needsFrameIndexResolution(const MachineFunction &MF) const {
+bool M680x0FrameLowering::needsFrameIndexResolution(
+    const MachineFunction &MF) const {
   return MF.getFrameInfo().hasStackObjects() ||
          MF.getInfo<M680x0MachineFunctionInfo>()->getHasPushSequences();
 }
@@ -72,9 +73,9 @@ needsFrameIndexResolution(const MachineFunction &MF) const {
 // particular, the FI < 0 and AfterFPPop logic is handled in
 // M680x0RegisterInfo::eliminateFrameIndex, but not here. Possibly
 // (probably?) it should be moved into here.
-int M680x0FrameLowering::
-getFrameIndexReference(const MachineFunction &MF, int FI,
-                       unsigned &FrameReg) const {
+int M680x0FrameLowering::getFrameIndexReference(const MachineFunction &MF,
+                                                int FI,
+                                                unsigned &FrameReg) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
 
   // We can't calculate offset from frame pointer if the stack is realigned,
@@ -92,7 +93,8 @@ getFrameIndexReference(const MachineFunction &MF, int FI,
   // We need to factor in additional offsets applied during the prologue to the
   // frame, base, and stack pointer depending on which is used.
   int Offset = MFI.getObjectOffset(FI) - getOffsetOfLocalArea();
-  const M680x0MachineFunctionInfo *MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
+  const M680x0MachineFunctionInfo *MMFI =
+      MF.getInfo<M680x0MachineFunctionInfo>();
   uint64_t StackSize = MFI.getStackSize();
   bool HasFP = hasFP(MF);
 
@@ -130,33 +132,19 @@ getFrameIndexReference(const MachineFunction &MF, int FI,
   return Offset;
 }
 
-static unsigned getSUBriOpcode(int64_t Imm) {
-  return M680x0::SUB32ri;
-}
+static unsigned getSUBriOpcode(int64_t Imm) { return M680x0::SUB32ri; }
 
-static unsigned getADDriOpcode(int64_t Imm) {
-  return M680x0::ADD32ri;
-}
+static unsigned getADDriOpcode(int64_t Imm) { return M680x0::ADD32ri; }
 
-static unsigned getSUBrrOpcode() {
-  return M680x0::SUB32rr;
-}
+static unsigned getSUBrrOpcode() { return M680x0::SUB32rr; }
 
-static unsigned getADDrrOpcode() {
-  return M680x0::ADD32rr;
-}
+static unsigned getADDrrOpcode() { return M680x0::ADD32rr; }
 
-static unsigned getANDriOpcode(int64_t Imm) {
-  return M680x0::AND32di;
-}
+static unsigned getANDriOpcode(int64_t Imm) { return M680x0::AND32di; }
 
-static unsigned getLEArOpcode() {
-  return M680x0::LEA32p;
-}
+static unsigned getLEArOpcode() { return M680x0::LEA32p; }
 
-static unsigned getMOVrrOpcode() {
-  return M680x0::MOV32rr;
-}
+static unsigned getMOVrrOpcode() { return M680x0::MOV32rr; }
 
 /// findDeadCallerSavedReg - Return a caller-saved register that isn't live
 /// when it reaches the "return" instruction. We can then pop a stack object
@@ -165,8 +153,7 @@ static unsigned findDeadCallerSavedReg(MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator &MBBI,
                                        const M680x0RegisterInfo *TRI) {
   const MachineFunction *MF = MBB.getParent();
-  const Function *F = MF->getFunction();
-  if (!F || MF->getMMI().callsEHReturn())
+  if (MF->callsEHReturn())
     return 0;
 
   const TargetRegisterClass &AvailableRegs = *TRI->getRegsForTailCall(*MF);
@@ -175,10 +162,12 @@ static unsigned findDeadCallerSavedReg(MachineBasicBlock &MBB,
     return 0;
 
   switch (MBBI->getOpcode()) {
-  default: return 0;
+  default:
+    return 0;
   case TargetOpcode::PATCHABLE_RET:
   case M680x0::RET: {
     SmallSet<uint16_t, 8> Uses;
+
     for (unsigned i = 0, e = MBBI->getNumOperands(); i != e; ++i) {
       MachineOperand &MO = MBBI->getOperand(i);
       if (!MO.isReg() || MO.isDef())
@@ -208,12 +197,12 @@ static bool isRegLiveIn(MachineBasicBlock &MBB, unsigned Reg) {
   return false;
 }
 
-uint64_t M680x0FrameLowering::
-calculateMaxStackAlign(const MachineFunction &MF) const {
+uint64_t
+M680x0FrameLowering::calculateMaxStackAlign(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   uint64_t MaxAlign = MFI.getMaxAlignment(); // Desired stack alignment.
   unsigned StackAlign = getStackAlignment(); // ABI alignment
-  if (MF.getFunction()->hasFnAttribute("stackrealign")) {
+  if (MF.getFunction().hasFnAttribute("stackrealign")) {
     if (MFI.hasCalls())
       MaxAlign = (StackAlign > MaxAlign) ? StackAlign : MaxAlign;
     else if (MaxAlign < SlotSize)
@@ -222,9 +211,10 @@ calculateMaxStackAlign(const MachineFunction &MF) const {
   return MaxAlign;
 }
 
-void M680x0FrameLowering::
-BuildStackAlignAND(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
-                   const DebugLoc &DL, unsigned Reg, uint64_t MaxAlign) const {
+void M680x0FrameLowering::BuildStackAlignAND(MachineBasicBlock &MBB,
+                                             MachineBasicBlock::iterator MBBI,
+                                             const DebugLoc &DL, unsigned Reg,
+                                             uint64_t MaxAlign) const {
   uint64_t Val = -MaxAlign;
   unsigned AndOp = getANDriOpcode(Val);
   unsigned MovOp = getMOVrrOpcode();
@@ -235,25 +225,25 @@ BuildStackAlignAND(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
   unsigned Tmp = M680x0::D0;
 
   BuildMI(MBB, MBBI, DL, TII.get(MovOp), Tmp)
-    .addReg(Reg)
-    .setMIFlag(MachineInstr::FrameSetup);
+      .addReg(Reg)
+      .setMIFlag(MachineInstr::FrameSetup);
 
   MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(AndOp), Tmp)
-    .addReg(Tmp)
-    .addImm(Val)
-    .setMIFlag(MachineInstr::FrameSetup);
+                         .addReg(Tmp)
+                         .addImm(Val)
+                         .setMIFlag(MachineInstr::FrameSetup);
 
   // The CCR implicit def is dead.
   MI->getOperand(3).setIsDead();
 
   BuildMI(MBB, MBBI, DL, TII.get(MovOp), Reg)
-    .addReg(Tmp)
-    .setMIFlag(MachineInstr::FrameSetup);
+      .addReg(Tmp)
+      .setMIFlag(MachineInstr::FrameSetup);
 }
 
-MachineBasicBlock::iterator M680x0FrameLowering::
-eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
-                              MachineBasicBlock::iterator I) const {
+MachineBasicBlock::iterator M680x0FrameLowering::eliminateCallFramePseudoInstr(
+    MachineFunction &MF, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator I) const {
   bool reserveCallFrame = hasReservedCallFrame(MF);
   unsigned Opcode = I->getOpcode();
   bool isDestroy = Opcode == TII.getCallFrameDestroyOpcode();
@@ -274,8 +264,8 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     Amount = alignTo(Amount, StackAlign);
 
     MachineModuleInfo &MMI = MF.getMMI();
-    const Function *Fn = MF.getFunction();
-    bool DwarfCFI = MMI.hasDebugInfo() || Fn->needsUnwindTableEntry();
+    const auto &Fn = MF.getFunction();
+    bool DwarfCFI = MMI.hasDebugInfo() || Fn.needsUnwindTableEntry();
 
     // If we have any exception handlers in this function, and we adjust
     // the SP before calls, we may need to indicate this to the unwinder
@@ -284,11 +274,12 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     // GNU_ARGS_SIZE.
     // TODO: We don't need to reset this between subsequent functions,
     // if it didn't change.
-    bool HasDwarfEHHandlers = !MF.getMMI().getLandingPads().empty();
+    bool HasDwarfEHHandlers = !MF.getLandingPads().empty();
 
     if (HasDwarfEHHandlers && !isDestroy &&
         MF.getInfo<M680x0MachineFunctionInfo>()->getHasPushSequences()) {
-      BuildCFI(MBB, I, DL, MCCFIInstruction::createGnuArgsSize(nullptr, Amount));
+      BuildCFI(MBB, I, DL,
+               MCCFIInstruction::createGnuArgsSize(nullptr, Amount));
     }
 
     if (Amount == 0)
@@ -317,7 +308,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
       StackAdjustment += mergeSPUpdates(MBB, I, false);
 
       if (StackAdjustment) {
-          BuildStackAdjustment(MBB, I, DL, StackAdjustment, false);
+        BuildStackAdjustment(MBB, I, DL, StackAdjustment, false);
       }
     }
 
@@ -332,7 +323,8 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
       // TODO: When not using precise CFA, we also need to adjust for the
       // InternalAmt here.
       if (CfaAdjustment) {
-        BuildCFI(MBB, I, DL,
+        BuildCFI(
+            MBB, I, DL,
             MCCFIInstruction::createAdjustCfaOffset(nullptr, CfaAdjustment));
       }
     }
@@ -359,9 +351,10 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
 
 /// emitSPUpdate - Emit a series of instructions to increment / decrement the
 /// stack pointer by a constant value.
-void M680x0FrameLowering::
-emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-             int64_t NumBytes, bool InEpilogue) const {
+void M680x0FrameLowering::emitSPUpdate(MachineBasicBlock &MBB,
+                                       MachineBasicBlock::iterator &MBBI,
+                                       int64_t NumBytes,
+                                       bool InEpilogue) const {
   bool isSub = NumBytes < 0;
   uint64_t Offset = isSub ? -NumBytes : NumBytes;
 
@@ -381,14 +374,11 @@ emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
 
       if (Reg) {
         unsigned Opc = M680x0::MOV32ri;
-        BuildMI(MBB, MBBI, DL, TII.get(Opc), Reg)
-          .addImm(Offset);
-        Opc = isSub
-          ? getSUBrrOpcode()
-          : getADDrrOpcode();
+        BuildMI(MBB, MBBI, DL, TII.get(Opc), Reg).addImm(Offset);
+        Opc = isSub ? getSUBrrOpcode() : getADDrrOpcode();
         MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(Opc), StackPtr)
-          .addReg(StackPtr)
-          .addReg(Reg);
+                               .addReg(StackPtr)
+                               .addReg(Reg);
         // ??? still no CCR
         MI->getOperand(3).setIsDead(); // The CCR implicit def is dead.
         Offset = 0;
@@ -409,16 +399,16 @@ emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
   }
 }
 
-int M680x0FrameLowering::
-mergeSPUpdates(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-               bool doMergeWithPrevious) const {
+int M680x0FrameLowering::mergeSPUpdates(MachineBasicBlock &MBB,
+                                        MachineBasicBlock::iterator &MBBI,
+                                        bool doMergeWithPrevious) const {
   if ((doMergeWithPrevious && MBBI == MBB.begin()) ||
       (!doMergeWithPrevious && MBBI == MBB.end()))
     return 0;
 
   MachineBasicBlock::iterator PI = doMergeWithPrevious ? std::prev(MBBI) : MBBI;
-  MachineBasicBlock::iterator NI = doMergeWithPrevious ? nullptr
-                                                       : std::next(MBBI);
+  MachineBasicBlock::iterator NI =
+      doMergeWithPrevious ? nullptr : std::next(MBBI);
   unsigned Opc = PI->getOpcode();
   int Offset = 0;
 
@@ -432,29 +422,29 @@ mergeSPUpdates(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
     assert(PI->getOperand(1).getReg() == StackPtr);
     Offset += PI->getOperand(2).getImm();
     MBB.erase(PI);
-    if (!doMergeWithPrevious) MBBI = NI;
-  // TODO check this
-  // } else if (Opc == M680x0::LEA32p &&
-  //            PI->getOperand(0).getReg() == StackPtr &&
-  //            PI->getOperand(2).getReg() == StackPtr) {
-  //   Offset += PI->getOperand(1).getImm();
-  //   MBB.erase(PI);
-  //   if (!doMergeWithPrevious) MBBI = NI;
+    if (!doMergeWithPrevious)
+      MBBI = NI;
+    // TODO check this
+    // } else if (Opc == M680x0::LEA32p &&
+    //            PI->getOperand(0).getReg() == StackPtr &&
+    //            PI->getOperand(2).getReg() == StackPtr) {
+    //   Offset += PI->getOperand(1).getImm();
+    //   MBB.erase(PI);
+    //   if (!doMergeWithPrevious) MBBI = NI;
   } else if (Opc == M680x0::SUB32ri && PI->getOperand(0).getReg() == StackPtr) {
     assert(PI->getOperand(1).getReg() == StackPtr);
     Offset -= PI->getOperand(2).getImm();
     MBB.erase(PI);
-    if (!doMergeWithPrevious) MBBI = NI;
+    if (!doMergeWithPrevious)
+      MBBI = NI;
   }
 
   return Offset;
 }
 
-MachineInstrBuilder M680x0FrameLowering::
-BuildStackAdjustment(MachineBasicBlock &MBB,
-                     MachineBasicBlock::iterator MBBI,
-                     const DebugLoc &DL, int64_t Offset,
-                     bool InEpilogue) const {
+MachineInstrBuilder M680x0FrameLowering::BuildStackAdjustment(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
+    const DebugLoc &DL, int64_t Offset, bool InEpilogue) const {
   assert(Offset != 0 && "zero offset stack adjustment requested");
 
   // ??? in the original code for M680x0 Atom uses lea to adjust stack as an
@@ -462,30 +452,29 @@ BuildStackAdjustment(MachineBasicBlock &MBB,
 
   bool IsSub = Offset < 0;
   uint64_t AbsOffset = IsSub ? -Offset : Offset;
-  unsigned Opc = IsSub ? getSUBriOpcode(AbsOffset)
-                       : getADDriOpcode(AbsOffset);
+  unsigned Opc = IsSub ? getSUBriOpcode(AbsOffset) : getADDriOpcode(AbsOffset);
 
   MachineInstrBuilder MI = BuildMI(MBB, MBBI, DL, TII.get(Opc), StackPtr)
-    .addReg(StackPtr)
-    .addImm(AbsOffset);
+                               .addReg(StackPtr)
+                               .addImm(AbsOffset);
   // FIXME ATM there is no CCR in these inst
   MI->getOperand(3).setIsDead(); // The CCR implicit def is dead.
   return MI;
 }
 
-void M680x0FrameLowering::
-BuildCFI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
-         const DebugLoc &DL, const MCCFIInstruction &CFIInst) const {
+void M680x0FrameLowering::BuildCFI(MachineBasicBlock &MBB,
+                                   MachineBasicBlock::iterator MBBI,
+                                   const DebugLoc &DL,
+                                   const MCCFIInstruction &CFIInst) const {
   MachineFunction &MF = *MBB.getParent();
-  unsigned CFIIndex = MF.getMMI().addFrameInst(CFIInst);
+  unsigned CFIIndex = MF.addFrameInst(CFIInst);
   BuildMI(MBB, MBBI, DL, TII.get(TargetOpcode::CFI_INSTRUCTION))
       .addCFIIndex(CFIIndex);
 }
 
-void M680x0FrameLowering::
-emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator MBBI,
-                          const DebugLoc &DL) const {
+void M680x0FrameLowering::emitCalleeSavedFrameMoves(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
+    const DebugLoc &DL) const {
   MachineFunction &MF = *MBB.getParent();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   MachineModuleInfo &MMI = MF.getMMI();
@@ -493,11 +482,13 @@ emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
 
   // Add callee saved registers to move list.
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
-  if (CSI.empty()) return;
+  if (CSI.empty())
+    return;
 
   // Calculate offsets.
-  for (std::vector<CalleeSavedInfo>::const_iterator
-         I = CSI.begin(), E = CSI.end(); I != E; ++I) {
+  for (std::vector<CalleeSavedInfo>::const_iterator I = CSI.begin(),
+                                                    E = CSI.end();
+       I != E; ++I) {
     int64_t Offset = MFI.getObjectOffset(I->getFrameIdx());
     unsigned Reg = I->getReg();
 
@@ -507,23 +498,23 @@ emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
   }
 }
 
-void M680x0FrameLowering::
-emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
+void M680x0FrameLowering::emitPrologue(MachineFunction &MF,
+                                       MachineBasicBlock &MBB) const {
   assert(&STI == &MF.getSubtarget<M680x0Subtarget>() &&
          "MF used frame lowering for wrong subtarget");
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  const Function *Fn = MF.getFunction();
+  const auto &Fn = MF.getFunction();
   MachineModuleInfo &MMI = MF.getMMI();
   M680x0MachineFunctionInfo *MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
-  uint64_t MaxAlign = calculateMaxStackAlign(MF);// Desired stack alignment.
-  uint64_t StackSize = MFI.getStackSize();       // Number of bytes to allocate.
+  uint64_t MaxAlign = calculateMaxStackAlign(MF); // Desired stack alignment.
+  uint64_t StackSize = MFI.getStackSize(); // Number of bytes to allocate.
   EHPersonality Personality = EHPersonality::Unknown;
-  if (Fn->hasPersonalityFn())
-    Personality = classifyEHPersonality(Fn->getPersonalityFn());
+  if (Fn.hasPersonalityFn())
+    Personality = classifyEHPersonality(Fn.getPersonalityFn());
   bool HasFP = hasFP(MF);
-  bool NeedsDwarfCFI = MMI.hasDebugInfo() || Fn->needsUnwindTableEntry();
+  bool NeedsDwarfCFI = MMI.hasDebugInfo() || Fn.needsUnwindTableEntry();
   unsigned FramePtr = TRI->getFrameRegister(MF);
   const unsigned MachineFramePtr = FramePtr;
   unsigned BasePtr = TRI->getBaseRegister();
@@ -536,8 +527,8 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   int TailCallReturnAddrDelta = MMFI->getTCReturnAddrDelta();
 
   if (TailCallReturnAddrDelta < 0) {
-    MMFI->setCalleeSavedFrameSize(
-      MMFI->getCalleeSavedFrameSize() - TailCallReturnAddrDelta);
+    MMFI->setCalleeSavedFrameSize(MMFI->getCalleeSavedFrameSize() -
+                                  TailCallReturnAddrDelta);
   }
 
   // Insert stack pointer adjustment for later moving of return addr.  Only
@@ -569,7 +560,8 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   if (HasFP) {
     // Calculate required stack adjustment.
     uint64_t FrameSize = StackSize - SlotSize;
-    // If required, include space for extra hidden slot for stashing base pointer.
+    // If required, include space for extra hidden slot for stashing base
+    // pointer.
     if (MMFI->getRestoreBasePointer())
       FrameSize += SlotSize;
 
@@ -586,8 +578,8 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
 
     // Save FP into the appropriate stack slot.
     BuildMI(MBB, MBBI, DL, TII.get(M680x0::PUSH32r))
-      .addReg(MachineFramePtr, RegState::Kill)
-      .setMIFlag(MachineInstr::FrameSetup);
+        .addReg(MachineFramePtr, RegState::Kill)
+        .setMIFlag(MachineInstr::FrameSetup);
 
     if (NeedsDwarfCFI) {
       // Mark the place where FP was saved.
@@ -599,8 +591,9 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
       // Change the rule for the FramePtr to be an "offset" rule.
       int DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
       assert(DwarfFramePtr > 0);
-      BuildCFI(MBB, MBBI, DL, MCCFIInstruction::createOffset(
-                                  nullptr, DwarfFramePtr, 2 * stackGrowth));
+      BuildCFI(MBB, MBBI, DL,
+               MCCFIInstruction::createOffset(nullptr, DwarfFramePtr,
+                                              2 * stackGrowth));
     }
 
     // Update FP with the new base value.
@@ -612,8 +605,8 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
       // Mark effective beginning of when frame pointer becomes valid.
       // Define the current CFA to use the FP register.
       unsigned DwarfFramePtr = TRI->getDwarfRegNum(MachineFramePtr, true);
-      BuildCFI(MBB, MBBI, DL, MCCFIInstruction::createDefCfaRegister(
-                                  nullptr, DwarfFramePtr));
+      BuildCFI(MBB, MBBI, DL,
+               MCCFIInstruction::createDefCfaRegister(nullptr, DwarfFramePtr));
     }
 
     // Mark the FramePtr as live-in in every block. Don't do this again for
@@ -628,8 +621,7 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   bool PushedRegs = false;
   int StackOffset = 2 * stackGrowth;
 
-  while (MBBI != MBB.end() &&
-         MBBI->getFlag(MachineInstr::FrameSetup) &&
+  while (MBBI != MBB.end() && MBBI->getFlag(MachineInstr::FrameSetup) &&
          MBBI->getOpcode() == M680x0::PUSH32r) {
     PushedRegs = true;
     ++MBBI;
@@ -668,16 +660,16 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   if (TRI->hasBasePointer(MF)) {
     // Update the base pointer with the current stack pointer.
     BuildMI(MBB, MBBI, DL, TII.get(M680x0::MOV32aa), BasePtr)
-      .addReg(SPOrEstablisher)
-      .setMIFlag(MachineInstr::FrameSetup);
+        .addReg(SPOrEstablisher)
+        .setMIFlag(MachineInstr::FrameSetup);
     if (MMFI->getRestoreBasePointer()) {
       // Stash value of base pointer.  Saving SP instead of FP shortens
       // dependence chain. Used by SjLj EH.
-      unsigned Opm =  M680x0::MOV32ja;
-      addRegIndirectWithDisp(BuildMI(MBB, MBBI, DL, TII.get(Opm)),
-                   FramePtr, true, MMFI->getRestoreBasePointerOffset())
-        .addReg(SPOrEstablisher)
-        .setMIFlag(MachineInstr::FrameSetup);
+      unsigned Opm = M680x0::MOV32ja;
+      addRegIndirectWithDisp(BuildMI(MBB, MBBI, DL, TII.get(Opm)), FramePtr,
+                             true, MMFI->getRestoreBasePointerOffset())
+          .addReg(SPOrEstablisher)
+          .setMIFlag(MachineInstr::FrameSetup);
     }
   }
 
@@ -686,8 +678,9 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
     if (!HasFP && NumBytes) {
       // Define the current CFA rule to use the provided offset.
       assert(StackSize);
-      BuildCFI(MBB, MBBI, DL, MCCFIInstruction::createDefCfaOffset(
-                                  nullptr, -StackSize + stackGrowth));
+      BuildCFI(MBB, MBBI, DL,
+               MCCFIInstruction::createDefCfaOffset(nullptr,
+                                                    -StackSize + stackGrowth));
     }
 
     // Emit DWARF info specifying the offsets of the callee-saved registers.
@@ -696,25 +689,25 @@ emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   }
 
   // TODO interrupts...
-  // M680x0 Interrupt handling function cannot assume anything about the direction
-  // flag (DF in CCR register). Clear this flag by creating "cld" instruction
-  // in each prologue of interrupt handler function.
+  // M680x0 Interrupt handling function cannot assume anything about the
+  // direction flag (DF in CCR register). Clear this flag by creating "cld"
+  // instruction in each prologue of interrupt handler function.
   //
   // FIXME: Create "cld" instruction only in these cases:
   // 1. The interrupt handling function uses any of the "rep" instructions.
   // 2. Interrupt handling function calls another function.
   //
-  // if (Fn->getCallingConv() == CallingConv::M680x0_INTR)
+  // if (Fn.getCallingConv() == CallingConv::M680x0_INTR)
   //   BuildMI(MBB, MBBI, DL, TII.get(M680x0::CLD))
   //       .setMIFlag(MachineInstr::FrameSetup);
 }
 
 static bool isTailCallOpcode(unsigned Opc) {
-    return Opc == M680x0::TCRETURNj || Opc == M680x0::TCRETURNq;
+  return Opc == M680x0::TCRETURNj || Opc == M680x0::TCRETURNq;
 }
 
-void M680x0FrameLowering::
-emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const {
+void M680x0FrameLowering::emitEpilogue(MachineFunction &MF,
+                                       MachineBasicBlock &MBB) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   M680x0MachineFunctionInfo *MMFI = MF.getInfo<M680x0MachineFunctionInfo>();
   MachineBasicBlock::iterator MBBI = MBB.getFirstTerminator();
@@ -790,8 +783,7 @@ emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const {
       --MBBI;
     } else {
       unsigned Opc = (M680x0::MOV32rr);
-      BuildMI(MBB, MBBI, DL, TII.get(Opc), StackPtr)
-        .addReg(FramePtr);
+      BuildMI(MBB, MBBI, DL, TII.get(Opc), StackPtr).addReg(FramePtr);
       --MBBI;
     }
   } else if (NumBytes) {
@@ -814,9 +806,9 @@ emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   }
 }
 
-void M680x0FrameLowering::
-determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
-                     RegScavenger *RS) const {
+void M680x0FrameLowering::determineCalleeSaves(MachineFunction &MF,
+                                               BitVector &SavedRegs,
+                                               RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
 
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -835,7 +827,7 @@ determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
     //   }
     //   [FP]
     MFI.CreateFixedObject(-TailCallReturnAddrDelta,
-                           TailCallReturnAddrDelta - SlotSize, true);
+                          TailCallReturnAddrDelta - SlotSize, true);
   }
 
   // Spill the BasePtr if it's used.
@@ -844,13 +836,14 @@ determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
   }
 }
 
-bool M680x0FrameLowering::
-assignCalleeSavedSpillSlots(MachineFunction &MF, const TargetRegisterInfo *TRI,
-                            std::vector<CalleeSavedInfo> &CSI) const {
+bool M680x0FrameLowering::assignCalleeSavedSpillSlots(
+    MachineFunction &MF, const TargetRegisterInfo *TRI,
+    std::vector<CalleeSavedInfo> &CSI) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
   M680x0MachineFunctionInfo *M680x0FI = MF.getInfo<M680x0MachineFunctionInfo>();
 
-  int SpillSlotOffset = getOffsetOfLocalArea() + M680x0FI->getTCReturnAddrDelta();
+  int SpillSlotOffset =
+      getOffsetOfLocalArea() + M680x0FI->getTCReturnAddrDelta();
 
   if (hasFP(MF)) {
     // emitPrologue always spills frame register the first thing.
@@ -862,7 +855,7 @@ assignCalleeSavedSpillSlots(MachineFunction &MF, const TargetRegisterInfo *TRI,
     // about avoiding it later.
     unsigned FPReg = TRI->getFrameRegister(MF);
     for (unsigned i = 0; i < CSI.size(); ++i) {
-      if (TRI->regsOverlap(CSI[i].getReg(),FPReg)) {
+      if (TRI->regsOverlap(CSI[i].getReg(), FPReg)) {
         CSI.erase(CSI.begin() + i);
         break;
       }
@@ -873,12 +866,11 @@ assignCalleeSavedSpillSlots(MachineFunction &MF, const TargetRegisterInfo *TRI,
   return false;
 }
 
-bool M680x0FrameLowering::
-spillCalleeSavedRegisters(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator MI,
-                          const std::vector<CalleeSavedInfo> &CSI,
-                          const TargetRegisterInfo *TRI) const {
-  auto &MRI = *static_cast<const M680x0RegisterInfo*>(TRI);
+bool M680x0FrameLowering::spillCalleeSavedRegisters(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+    const std::vector<CalleeSavedInfo> &CSI,
+    const TargetRegisterInfo *TRI) const {
+  auto &MRI = *static_cast<const M680x0RegisterInfo *>(TRI);
   auto DL = MBB.findDebugLoc(MI);
 
   int FI = 0;
@@ -890,9 +882,10 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
     Mask |= 1 << Shift;
   }
 
-  auto I = addFrameReference(BuildMI(MBB, MI, DL, TII.get(M680x0::MOVM32pm)), FI)
-            .addImm(Mask)
-            .setMIFlag(MachineInstr::FrameSetup);
+  auto I =
+      addFrameReference(BuildMI(MBB, MI, DL, TII.get(M680x0::MOVM32pm)), FI)
+          .addImm(Mask)
+          .setMIFlag(MachineInstr::FrameSetup);
 
   // Append implicit registers and mem locations
   const MachineFunction &MF = *MBB.getParent();
@@ -909,12 +902,10 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   return true;
 }
 
-bool M680x0FrameLowering::
-restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-                            MachineBasicBlock::iterator MI,
-                            const std::vector<CalleeSavedInfo> &CSI,
-                            const TargetRegisterInfo *TRI) const {
-  auto &MRI = *static_cast<const M680x0RegisterInfo*>(TRI);
+bool M680x0FrameLowering::restoreCalleeSavedRegisters(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+    std::vector<CalleeSavedInfo> &CSI, const TargetRegisterInfo *TRI) const {
+  auto &MRI = *static_cast<const M680x0RegisterInfo *>(TRI);
   auto DL = MBB.findDebugLoc(MI);
 
   int FI = 0;
@@ -926,9 +917,9 @@ restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
     Mask |= 1 << Shift;
   }
 
-  auto I = addFrameReference(BuildMI(MBB, MI, DL, TII.get(M680x0::MOVM32mp))
-             .addImm(Mask), FI)
-             .setMIFlag(MachineInstr::FrameDestroy);
+  auto I = addFrameReference(
+               BuildMI(MBB, MI, DL, TII.get(M680x0::MOVM32mp)).addImm(Mask), FI)
+               .setMIFlag(MachineInstr::FrameDestroy);
 
   // Append implicit registers and mem locations
   for (size_t i = 0; i < CSI.size(); ++i) {

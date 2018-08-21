@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief Print MCInst instructions to wasm format.
+/// Print MCInst instructions to wasm format.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -18,6 +18,7 @@
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -25,7 +26,6 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -46,7 +46,7 @@ void WebAssemblyInstPrinter::printRegName(raw_ostream &OS,
 
 void WebAssemblyInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
                                        StringRef Annot,
-                                       const MCSubtargetInfo & /*STI*/) {
+                                       const MCSubtargetInfo &STI) {
   // Print the instruction (this uses the AsmStrings from the .td files).
   printInstruction(MI, OS);
 
@@ -54,7 +54,12 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
   const MCInstrDesc &Desc = MII.get(MI->getOpcode());
   if (Desc.isVariadic())
     for (auto i = Desc.getNumOperands(), e = MI->getNumOperands(); i < e; ++i) {
-      if (i != 0)
+      // FIXME: For CALL_INDIRECT_VOID, don't print a leading comma, because
+      // we have an extra flags operand which is not currently printed, for
+      // compatiblity reasons.
+      if (i != 0 &&
+          (MI->getOpcode() != WebAssembly::CALL_INDIRECT_VOID ||
+           i != Desc.getNumOperands()))
         OS << ", ";
       printOperand(MI, i, OS);
     }
@@ -69,23 +74,20 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
     default:
       break;
     case WebAssembly::LOOP: {
-      // Grab the TopLabel value first so that labels print in numeric order.
-      uint64_t TopLabel = ControlFlowCounter++;
-      ControlFlowStack.push_back(std::make_pair(ControlFlowCounter++, false));
-      printAnnotation(OS, "label" + utostr(TopLabel) + ':');
-      ControlFlowStack.push_back(std::make_pair(TopLabel, true));
+      printAnnotation(OS, "label" + utostr(ControlFlowCounter) + ':');
+      ControlFlowStack.push_back(std::make_pair(ControlFlowCounter++, true));
       break;
     }
     case WebAssembly::BLOCK:
       ControlFlowStack.push_back(std::make_pair(ControlFlowCounter++, false));
       break;
     case WebAssembly::END_LOOP:
-      ControlFlowStack.pop_back();
-      printAnnotation(
-          OS, "label" + utostr(ControlFlowStack.pop_back_val().first) + ':');
+      // Have to guard against an empty stack, in case of mismatched pairs
+      // in assembly parsing.
+      if (!ControlFlowStack.empty()) ControlFlowStack.pop_back();
       break;
     case WebAssembly::END_BLOCK:
-      printAnnotation(
+      if (!ControlFlowStack.empty()) printAnnotation(
           OS, "label" + utostr(ControlFlowStack.pop_back_val().first) + ':');
       break;
     }
@@ -94,9 +96,9 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
     unsigned NumFixedOperands = Desc.NumOperands;
     SmallSet<uint64_t, 8> Printed;
     for (unsigned i = 0, e = MI->getNumOperands(); i < e; ++i) {
-      const MCOperandInfo &Info = Desc.OpInfo[i];
       if (!(i < NumFixedOperands
-                ? (Info.OperandType == WebAssembly::OPERAND_BASIC_BLOCK)
+                ? (Desc.OpInfo[i].OperandType ==
+                   WebAssembly::OPERAND_BASIC_BLOCK)
                 : (Desc.TSFlags & WebAssemblyII::VariableOpImmediateIsLabel)))
         continue;
       uint64_t Depth = MI->getOperand(i).getImm();
@@ -113,7 +115,8 @@ static std::string toString(const APFloat &FP) {
   // Print NaNs with custom payloads specially.
   if (FP.isNaN() &&
       !FP.bitwiseIsEqual(APFloat::getQNaN(FP.getSemantics())) &&
-      !FP.bitwiseIsEqual(APFloat::getQNaN(FP.getSemantics(), /*Negative=*/true))) {
+      !FP.bitwiseIsEqual(
+          APFloat::getQNaN(FP.getSemantics(), /*Negative=*/true))) {
     APInt AI = FP.bitcastToAPInt();
     return
         std::string(AI.isNegative() ? "-" : "") + "nan:0x" +
@@ -154,11 +157,12 @@ void WebAssemblyInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
     if (OpNo < MII.get(MI->getOpcode()).getNumDefs())
       O << '=';
   } else if (Op.isImm()) {
-    assert((OpNo < MII.get(MI->getOpcode()).getNumOperands() ||
-            (MII.get(MI->getOpcode()).TSFlags &
-             WebAssemblyII::VariableOpIsImmediate)) &&
+    const MCInstrDesc &Desc = MII.get(MI->getOpcode());
+    assert((OpNo < Desc.getNumOperands() ||
+            (Desc.TSFlags & WebAssemblyII::VariableOpIsImmediate)) &&
            "WebAssemblyII::VariableOpIsImmediate should be set for "
            "variable_ops immediate ops");
+    (void)Desc;
     // TODO: (MII.get(MI->getOpcode()).TSFlags &
     //        WebAssemblyII::VariableOpImmediateIsLabel)
     // can tell us whether this is an immediate referencing a label in the
@@ -171,13 +175,13 @@ void WebAssemblyInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
     assert(Desc.TSFlags == 0 &&
            "WebAssembly variable_ops floating point ops don't use TSFlags");
     const MCOperandInfo &Info = Desc.OpInfo[OpNo];
-    if (Info.OperandType == WebAssembly::OPERAND_FP32IMM) {
+    if (Info.OperandType == WebAssembly::OPERAND_F32IMM) {
       // TODO: MC converts all floating point immediate operands to double.
       // This is fine for numeric values, but may cause NaNs to change bits.
-      O << toString(APFloat(float(Op.getFPImm())));
+      O << ::toString(APFloat(float(Op.getFPImm())));
     } else {
-      assert(Info.OperandType == WebAssembly::OPERAND_FP64IMM);
-      O << toString(APFloat(Op.getFPImm()));
+      assert(Info.OperandType == WebAssembly::OPERAND_F64IMM);
+      O << ::toString(APFloat(Op.getFPImm()));
     }
   } else {
     assert((OpNo < MII.get(MI->getOpcode()).getNumOperands() ||
@@ -190,14 +194,32 @@ void WebAssemblyInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
   }
 }
 
-void
-WebAssemblyInstPrinter::printWebAssemblyP2AlignOperand(const MCInst *MI,
-                                                       unsigned OpNo,
-                                                       raw_ostream &O) {
+void WebAssemblyInstPrinter::printWebAssemblyP2AlignOperand(
+    const MCInst *MI, unsigned OpNo, raw_ostream &O) {
   int64_t Imm = MI->getOperand(OpNo).getImm();
   if (Imm == WebAssembly::GetDefaultP2Align(MI->getOpcode()))
     return;
   O << ":p2align=" << Imm;
+}
+
+void WebAssemblyInstPrinter::printWebAssemblySignatureOperand(
+    const MCInst *MI, unsigned OpNo, raw_ostream &O) {
+  int64_t Imm = MI->getOperand(OpNo).getImm();
+  switch (WebAssembly::ExprType(Imm)) {
+  case WebAssembly::ExprType::Void: break;
+  case WebAssembly::ExprType::I32: O << "i32"; break;
+  case WebAssembly::ExprType::I64: O << "i64"; break;
+  case WebAssembly::ExprType::F32: O << "f32"; break;
+  case WebAssembly::ExprType::F64: O << "f64"; break;
+  case WebAssembly::ExprType::I8x16: O << "i8x16"; break;
+  case WebAssembly::ExprType::I16x8: O << "i16x8"; break;
+  case WebAssembly::ExprType::I32x4: O << "i32x4"; break;
+  case WebAssembly::ExprType::F32x4: O << "f32x4"; break;
+  case WebAssembly::ExprType::B8x16: O << "b8x16"; break;
+  case WebAssembly::ExprType::B16x8: O << "b16x8"; break;
+  case WebAssembly::ExprType::B32x4: O << "b32x4"; break;
+  case WebAssembly::ExprType::ExceptRef: O << "except_ref"; break;
+  }
 }
 
 const char *llvm::WebAssembly::TypeToString(MVT Ty) {
@@ -215,7 +237,25 @@ const char *llvm::WebAssembly::TypeToString(MVT Ty) {
   case MVT::v4i32:
   case MVT::v4f32:
     return "v128";
+  case MVT::ExceptRef:
+    return "except_ref";
   default:
     llvm_unreachable("unsupported type");
   }
+}
+
+const char *llvm::WebAssembly::TypeToString(wasm::ValType Type) {
+  switch (Type) {
+  case wasm::ValType::I32:
+    return "i32";
+  case wasm::ValType::I64:
+    return "i64";
+  case wasm::ValType::F32:
+    return "f32";
+  case wasm::ValType::F64:
+    return "f64";
+  case wasm::ValType::EXCEPT_REF:
+    return "except_ref";
+  }
+  llvm_unreachable("unsupported type");
 }

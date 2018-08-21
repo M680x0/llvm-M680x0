@@ -10,7 +10,8 @@
 ; RUN:     -pass-remarks-with-hotness < %s 2>&1 | \
 ; RUN:     FileCheck -check-prefix=HOTNESS -check-prefix=BOTH %s
 
-; RUN: opt -S -passes=loop-vectorize -pass-remarks-missed=loop-vectorize < %s 2>&1 | \
+; RUN: opt -S -passes=loop-vectorize \
+; RUN:     -pass-remarks-missed=loop-vectorize < %s 2>&1 | \
 ; RUN:     FileCheck -check-prefix=NO_HOTNESS -check-prefix=BOTH %s
 
 
@@ -35,16 +36,15 @@
 ;  19	  }
 ;  20	}
 
-; HOTNESS: remark: /tmp/s.c:2:3: loop not vectorized: use -Rpass-analysis=loop-vectorize for more info (hotness: 300)
-; NO_HOTNESS: remark: /tmp/s.c:2:3: loop not vectorized: use -Rpass-analysis=loop-vectorize for more info{{$}}
-; HOTNESS: remark: /tmp/s.c:9:3: loop not vectorized: use -Rpass-analysis=loop-vectorize for more info (hotness: 5000)
-; NO_HOTNESS: remark: /tmp/s.c:9:3: loop not vectorized: use -Rpass-analysis=loop-vectorize for more info{{$}}
-; BOTH: remark: /tmp/s.c:16:3: loop not vectorized: use -Rpass-analysis=loop-vectorize for more info{{$}}
+; HOTNESS: remark: /tmp/s.c:2:3: loop not vectorized (hotness: 300)
+; NO_HOTNESS: remark: /tmp/s.c:2:3: loop not vectorized{{$}}
+; HOTNESS: remark: /tmp/s.c:9:3: loop not vectorized (hotness: 5000)
+; NO_HOTNESS: remark: /tmp/s.c:9:3: loop not vectorized{{$}}
+; BOTH: remark: /tmp/s.c:16:3: loop not vectorized{{$}}
 
 ; ModuleID = '/tmp/s.c'
 source_filename = "/tmp/s.c"
 target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-apple-macosx10.11.0"
 
 ; Function Attrs: norecurse nounwind ssp uwtable
 define void @cold(i8* nocapture %A, i8* nocapture readonly %B, i8* nocapture %C, i8* nocapture readonly %D, i8* nocapture readonly %E, i32 %N) local_unnamed_addr #0 !dbg !7 !prof !56 {
@@ -158,7 +158,7 @@ attributes #0 = { norecurse nounwind ssp uwtable "disable-tail-calls"="false" "l
 !4 = !{i32 2, !"Debug Info Version", i32 3}
 !5 = !{i32 1, !"PIC Level", i32 2}
 !6 = !{!"clang version 3.9.0 (trunk 273572) (llvm/trunk 273585)"}
-!7 = distinct !DISubprogram(name: "cold", scope: !1, file: !1, line: 1, type: !8, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
+!7 = distinct !DISubprogram(name: "cold", scope: !1, file: !1, line: 1, type: !8, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
 !8 = !DISubroutineType(types: !2)
 !9 = !DILocation(line: 2, column: 20, scope: !7)
 !10 = !DILocation(line: 2, column: 3, scope: !7)
@@ -177,7 +177,7 @@ attributes #0 = { norecurse nounwind ssp uwtable "disable-tail-calls"="false" "l
 !23 = !DILocation(line: 4, column: 5, scope: !7)
 !24 = !DILocation(line: 4, column: 10, scope: !7)
 !25 = distinct !{!25, !10}
-!26 = distinct !DISubprogram(name: "hot", scope: !1, file: !1, line: 8, type: !8, isLocal: false, isDefinition: true, scopeLine: 8, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
+!26 = distinct !DISubprogram(name: "hot", scope: !1, file: !1, line: 8, type: !8, isLocal: false, isDefinition: true, scopeLine: 8, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
 !27 = !DILocation(line: 9, column: 20, scope: !26)
 !28 = !DILocation(line: 9, column: 3, scope: !26)
 !29 = !DILocation(line: 13, column: 1, scope: !26)
@@ -192,7 +192,7 @@ attributes #0 = { norecurse nounwind ssp uwtable "disable-tail-calls"="false" "l
 !38 = !DILocation(line: 11, column: 5, scope: !26)
 !39 = !DILocation(line: 11, column: 10, scope: !26)
 !40 = distinct !{!40, !28}
-!41 = distinct !DISubprogram(name: "unknown", scope: !1, file: !1, line: 15, type: !8, isLocal: false, isDefinition: true, scopeLine: 15, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
+!41 = distinct !DISubprogram(name: "unknown", scope: !1, file: !1, line: 15, type: !8, isLocal: false, isDefinition: true, scopeLine: 15, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
 !42 = !DILocation(line: 16, column: 20, scope: !41)
 !43 = !DILocation(line: 16, column: 3, scope: !41)
 !44 = !DILocation(line: 20, column: 1, scope: !41)

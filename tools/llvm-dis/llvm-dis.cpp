@@ -16,25 +16,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/AssemblyAnnotationWriter.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/DataStream.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/Signals.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/WithColor.h"
 #include <system_error>
 using namespace llvm;
 
@@ -52,8 +50,13 @@ static cl::opt<bool>
 DontPrint("disable-output", cl::desc("Don't output the .ll file"), cl::Hidden);
 
 static cl::opt<bool>
-ShowAnnotations("show-annotations",
-                cl::desc("Add informational comments to the .ll file"));
+    SetImporting("set-importing",
+                 cl::desc("Set lazy loading to pretend to import a module"),
+                 cl::Hidden);
+
+static cl::opt<bool>
+    ShowAnnotations("show-annotations",
+                    cl::desc("Add informational comments to the .ll file"));
 
 static cl::opt<bool> PreserveAssemblyUseListOrder(
     "preserve-ll-uselistorder",
@@ -118,79 +121,55 @@ public:
   }
 };
 
+struct LLVMDisDiagnosticHandler : public DiagnosticHandler {
+  char *Prefix;
+  LLVMDisDiagnosticHandler(char *PrefixPtr) : Prefix(PrefixPtr) {}
+  bool handleDiagnostics(const DiagnosticInfo &DI) override {
+    raw_ostream &OS = errs();
+    OS << Prefix << ": ";
+    switch (DI.getSeverity()) {
+      case DS_Error: WithColor::error(OS); break;
+      case DS_Warning: WithColor::warning(OS); break;
+      case DS_Remark: OS << "remark: "; break;
+      case DS_Note: WithColor::note(OS); break;
+    }
+
+    DiagnosticPrinterRawOStream DP(OS);
+    DI.print(DP);
+    OS << '\n';
+
+    if (DI.getSeverity() == DS_Error)
+      exit(1);
+    return true;
+  }
+};
 } // end anon namespace
 
-static void diagnosticHandler(const DiagnosticInfo &DI, void *Context) {
-  raw_ostream &OS = errs();
-  OS << (char *)Context << ": ";
-  switch (DI.getSeverity()) {
-  case DS_Error: OS << "error: "; break;
-  case DS_Warning: OS << "warning: "; break;
-  case DS_Remark: OS << "remark: "; break;
-  case DS_Note: OS << "note: "; break;
-  }
-
-  DiagnosticPrinterRawOStream DP(OS);
-  DI.print(DP);
-  OS << '\n';
-
-  if (DI.getSeverity() == DS_Error)
-    exit(1);
-}
-
-static Expected<std::unique_ptr<Module>> openInputFile(LLVMContext &Context) {
-  if (MaterializeMetadata) {
-    ErrorOr<std::unique_ptr<MemoryBuffer>> MBOrErr =
-        MemoryBuffer::getFileOrSTDIN(InputFilename);
-    if (!MBOrErr)
-      return errorCodeToError(MBOrErr.getError());
-    ErrorOr<std::unique_ptr<Module>> MOrErr =
-        getLazyBitcodeModule(std::move(*MBOrErr), Context,
-                             /*ShouldLazyLoadMetadata=*/true);
-    if (!MOrErr)
-      return errorCodeToError(MOrErr.getError());
-    (*MOrErr)->materializeMetadata();
-    return std::move(*MOrErr);
-  } else {
-    std::string ErrorMessage;
-    std::unique_ptr<DataStreamer> Streamer =
-        getDataFileStreamer(InputFilename, &ErrorMessage);
-    if (!Streamer)
-      return make_error<StringError>(ErrorMessage, inconvertibleErrorCode());
-    std::string DisplayFilename;
-    if (InputFilename == "-")
-      DisplayFilename = "<stdin>";
-    else
-      DisplayFilename = InputFilename;
-    ErrorOr<std::unique_ptr<Module>> MOrErr =
-        getStreamedBitcodeModule(DisplayFilename, std::move(Streamer), Context);
-    (*MOrErr)->materializeAll();
-    return std::move(*MOrErr);
-  }
-}
+static ExitOnError ExitOnErr;
 
 int main(int argc, char **argv) {
-  // Print a stack trace if we signal out.
-  sys::PrintStackTraceOnErrorSignal(argv[0]);
-  PrettyStackTraceProgram X(argc, argv);
+  InitLLVM X(argc, argv);
+
+  ExitOnErr.setBanner(std::string(argv[0]) + ": error: ");
 
   LLVMContext Context;
-  llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
-
-  Context.setDiagnosticHandler(diagnosticHandler, argv[0]);
-
+  Context.setDiagnosticHandler(
+      llvm::make_unique<LLVMDisDiagnosticHandler>(argv[0]));
   cl::ParseCommandLineOptions(argc, argv, "llvm .bc -> .ll disassembler\n");
 
-  Expected<std::unique_ptr<Module>> MOrErr = openInputFile(Context);
-  if (!MOrErr) {
-    handleAllErrors(MOrErr.takeError(), [&](ErrorInfoBase &EIB) {
-      errs() << argv[0] << ": ";
-      EIB.log(errs());
-      errs() << '\n';
-    });
-    return 1;
-  }
-  std::unique_ptr<Module> M = std::move(*MOrErr);
+  std::unique_ptr<MemoryBuffer> MB =
+      ExitOnErr(errorOrToExpected(MemoryBuffer::getFileOrSTDIN(InputFilename)));
+  std::unique_ptr<Module> M = ExitOnErr(getLazyBitcodeModule(
+      *MB, Context, /*ShouldLazyLoadMetadata=*/true, SetImporting));
+  if (MaterializeMetadata)
+    ExitOnErr(M->materializeMetadata());
+  else
+    ExitOnErr(M->materializeAll());
+
+  BitcodeLTOInfo LTOInfo = ExitOnErr(getBitcodeLTOInfo(*MB));
+  std::unique_ptr<ModuleSummaryIndex> Index;
+  if (LTOInfo.HasSummary)
+    Index = ExitOnErr(getModuleSummaryIndex(*MB));
 
   // Just use stdout.  We won't actually print anything on it.
   if (DontPrint)
@@ -207,8 +186,8 @@ int main(int argc, char **argv) {
   }
 
   std::error_code EC;
-  std::unique_ptr<tool_output_file> Out(
-      new tool_output_file(OutputFilename, EC, sys::fs::F_None));
+  std::unique_ptr<ToolOutputFile> Out(
+      new ToolOutputFile(OutputFilename, EC, sys::fs::F_None));
   if (EC) {
     errs() << EC.message() << '\n';
     return 1;
@@ -219,8 +198,11 @@ int main(int argc, char **argv) {
     Annotator.reset(new CommentWriter());
 
   // All that llvm-dis does is write the assembly to a file.
-  if (!DontPrint)
+  if (!DontPrint) {
     M->print(Out->os(), Annotator.get(), PreserveAssemblyUseListOrder);
+    if (Index)
+      Index->print(Out->os());
+  }
 
   // Declare success.
   Out->keep();

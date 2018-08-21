@@ -22,7 +22,7 @@
 
 namespace llvm {
 namespace bitc {
-// The only top-level block type defined is for a module.
+// The only top-level block types are MODULE, IDENTIFICATION, STRTAB and SYMTAB.
 enum BlockIDs {
   // Blocks
   MODULE_BLOCK_ID = FIRST_APPLICATION_BLOCKID,
@@ -52,7 +52,15 @@ enum BlockIDs {
 
   OPERAND_BUNDLE_TAGS_BLOCK_ID,
 
-  METADATA_KIND_BLOCK_ID
+  METADATA_KIND_BLOCK_ID,
+
+  STRTAB_BLOCK_ID,
+
+  FULL_LTO_GLOBALVAL_SUMMARY_BLOCK_ID,
+
+  SYMTAB_BLOCK_ID,
+
+  SYNC_SCOPE_NAMES_BLOCK_ID,
 };
 
 /// Identification block contains a string that describes the producer details,
@@ -92,9 +100,6 @@ enum ModuleCodes {
   // ALIAS: [alias type, aliasee val#, linkage, visibility]
   MODULE_CODE_ALIAS_OLD = 9,
 
-  // MODULE_CODE_PURGEVALS: [numvals]
-  MODULE_CODE_PURGEVALS = 10,
-
   MODULE_CODE_GCNAME = 11, // GCNAME: [strchr x N]
   MODULE_CODE_COMDAT = 12, // COMDAT: [selection_kind, name]
 
@@ -120,9 +125,8 @@ enum AttributeCodes {
   // FIXME: Remove `PARAMATTR_CODE_ENTRY_OLD' in 4.0
   PARAMATTR_CODE_ENTRY_OLD = 1, // ENTRY: [paramidx0, attr0,
                                 //         paramidx1, attr1...]
-  PARAMATTR_CODE_ENTRY = 2,     // ENTRY: [paramidx0, attrgrp0,
-                                //         paramidx1, attrgrp1, ...]
-  PARAMATTR_GRP_CODE_ENTRY = 3  // ENTRY: [id, attr0, att1, ...]
+  PARAMATTR_CODE_ENTRY = 2,     // ENTRY: [attrgrp0, attrgrp1, ...]
+  PARAMATTR_GRP_CODE_ENTRY = 3  // ENTRY: [grpid, idx, attr0, attr1, ...]
 };
 
 /// TYPE blocks have codes for each type primitive they use.
@@ -170,9 +174,8 @@ enum OperandBundleTagCode {
   OPERAND_BUNDLE_TAG = 1, // TAG: [strchr x N]
 };
 
-// The type symbol table only has one code (TST_ENTRY_CODE).
-enum TypeSymtabCodes {
-  TST_CODE_ENTRY = 1 // TST_ENTRY: [typeid, namechar x N]
+enum SyncScopeNameCode {
+  SYNC_SCOPE_NAME = 1,
 };
 
 // Value symbol table codes.
@@ -194,20 +197,20 @@ enum ModulePathSymtabCodes {
 // and combined index cases.
 enum GlobalValueSummarySymtabCodes {
   // PERMODULE: [valueid, flags, instcount, numrefs, numrefs x valueid,
-  //             n x (valueid, callsitecount)]
+  //             n x (valueid)]
   FS_PERMODULE = 1,
   // PERMODULE_PROFILE: [valueid, flags, instcount, numrefs,
   //                     numrefs x valueid,
-  //                     n x (valueid, callsitecount, profilecount)]
+  //                     n x (valueid, hotness)]
   FS_PERMODULE_PROFILE = 2,
   // PERMODULE_GLOBALVAR_INIT_REFS: [valueid, flags, n x valueid]
   FS_PERMODULE_GLOBALVAR_INIT_REFS = 3,
   // COMBINED: [valueid, modid, flags, instcount, numrefs, numrefs x valueid,
-  //            n x (valueid, callsitecount)]
+  //            n x (valueid)]
   FS_COMBINED = 4,
   // COMBINED_PROFILE: [valueid, modid, flags, instcount, numrefs,
   //                    numrefs x valueid,
-  //                    n x (valueid, callsitecount, profilecount)]
+  //                    n x (valueid, hotness)]
   FS_COMBINED_PROFILE = 5,
   // COMBINED_GLOBALVAR_INIT_REFS: [valueid, modid, flags, n x valueid]
   FS_COMBINED_GLOBALVAR_INIT_REFS = 6,
@@ -219,45 +222,95 @@ enum GlobalValueSummarySymtabCodes {
   FS_COMBINED_ORIGINAL_NAME = 9,
   // VERSION of the summary, bumped when adding flags for instance.
   FS_VERSION = 10,
+  // The list of llvm.type.test type identifiers used by the following function
+  // that are used other than by an llvm.assume.
+  // [n x typeid]
+  FS_TYPE_TESTS = 11,
+  // The list of virtual calls made by this function using
+  // llvm.assume(llvm.type.test) intrinsics that do not have all constant
+  // integer arguments.
+  // [n x (typeid, offset)]
+  FS_TYPE_TEST_ASSUME_VCALLS = 12,
+  // The list of virtual calls made by this function using
+  // llvm.type.checked.load intrinsics that do not have all constant integer
+  // arguments.
+  // [n x (typeid, offset)]
+  FS_TYPE_CHECKED_LOAD_VCALLS = 13,
+  // Identifies a virtual call made by this function using an
+  // llvm.assume(llvm.type.test) intrinsic with all constant integer arguments.
+  // [typeid, offset, n x arg]
+  FS_TYPE_TEST_ASSUME_CONST_VCALL = 14,
+  // Identifies a virtual call made by this function using an
+  // llvm.type.checked.load intrinsic with all constant integer arguments.
+  // [typeid, offset, n x arg]
+  FS_TYPE_CHECKED_LOAD_CONST_VCALL = 15,
+  // Assigns a GUID to a value ID. This normally appears only in combined
+  // summaries, but it can also appear in per-module summaries for PGO data.
+  // [valueid, guid]
+  FS_VALUE_GUID = 16,
+  // The list of local functions with CFI jump tables. Function names are
+  // strings in strtab.
+  // [n * name]
+  FS_CFI_FUNCTION_DEFS = 17,
+  // The list of external functions with CFI jump tables. Function names are
+  // strings in strtab.
+  // [n * name]
+  FS_CFI_FUNCTION_DECLS = 18,
+  // Per-module summary that also adds relative block frequency to callee info.
+  // PERMODULE_RELBF: [valueid, flags, instcount, numrefs,
+  //                   numrefs x valueid,
+  //                   n x (valueid, relblockfreq)]
+  FS_PERMODULE_RELBF = 19,
+  // Index-wide flags
+  FS_FLAGS = 20,
+  // Maps type identifier to summary information for that type identifier.
+  // TYPE_ID: [typeid, kind, bitwidth, align, size, bitmask, inlinebits,
+  //           n x (typeid, kind, name, numrba,
+  //                numrba x (numarg, numarg x arg, kind, info, byte, bit))]
+  FS_TYPE_ID = 21,
 };
 
 enum MetadataCodes {
-  METADATA_STRING_OLD = 1,       // MDSTRING:      [values]
-  METADATA_VALUE = 2,            // VALUE:         [type num, value num]
-  METADATA_NODE = 3,             // NODE:          [n x md num]
-  METADATA_NAME = 4,             // STRING:        [values]
-  METADATA_DISTINCT_NODE = 5,    // DISTINCT_NODE: [n x md num]
-  METADATA_KIND = 6,             // [n x [id, name]]
-  METADATA_LOCATION = 7,         // [distinct, line, col, scope, inlined-at?]
-  METADATA_OLD_NODE = 8,         // OLD_NODE:      [n x (type num, value num)]
-  METADATA_OLD_FN_NODE = 9,      // OLD_FN_NODE:   [n x (type num, value num)]
-  METADATA_NAMED_NODE = 10,      // NAMED_NODE:    [n x mdnodes]
-  METADATA_ATTACHMENT = 11,      // [m x [value, [n x [id, mdnode]]]
-  METADATA_GENERIC_DEBUG = 12,   // [distinct, tag, vers, header, n x md num]
-  METADATA_SUBRANGE = 13,        // [distinct, count, lo]
-  METADATA_ENUMERATOR = 14,      // [distinct, value, name]
-  METADATA_BASIC_TYPE = 15,      // [distinct, tag, name, size, align, enc]
-  METADATA_FILE = 16,            // [distinct, filename, directory]
-  METADATA_DERIVED_TYPE = 17,    // [distinct, ...]
-  METADATA_COMPOSITE_TYPE = 18,  // [distinct, ...]
-  METADATA_SUBROUTINE_TYPE = 19, // [distinct, flags, types, cc]
-  METADATA_COMPILE_UNIT = 20,    // [distinct, ...]
-  METADATA_SUBPROGRAM = 21,      // [distinct, ...]
-  METADATA_LEXICAL_BLOCK = 22,   // [distinct, scope, file, line, column]
+  METADATA_STRING_OLD = 1,     // MDSTRING:      [values]
+  METADATA_VALUE = 2,          // VALUE:         [type num, value num]
+  METADATA_NODE = 3,           // NODE:          [n x md num]
+  METADATA_NAME = 4,           // STRING:        [values]
+  METADATA_DISTINCT_NODE = 5,  // DISTINCT_NODE: [n x md num]
+  METADATA_KIND = 6,           // [n x [id, name]]
+  METADATA_LOCATION = 7,       // [distinct, line, col, scope, inlined-at?]
+  METADATA_OLD_NODE = 8,       // OLD_NODE:      [n x (type num, value num)]
+  METADATA_OLD_FN_NODE = 9,    // OLD_FN_NODE:   [n x (type num, value num)]
+  METADATA_NAMED_NODE = 10,    // NAMED_NODE:    [n x mdnodes]
+  METADATA_ATTACHMENT = 11,    // [m x [value, [n x [id, mdnode]]]
+  METADATA_GENERIC_DEBUG = 12, // [distinct, tag, vers, header, n x md num]
+  METADATA_SUBRANGE = 13,      // [distinct, count, lo]
+  METADATA_ENUMERATOR = 14,    // [isUnsigned|distinct, value, name]
+  METADATA_BASIC_TYPE = 15,    // [distinct, tag, name, size, align, enc]
+  METADATA_FILE = 16, // [distinct, filename, directory, checksumkind, checksum]
+  METADATA_DERIVED_TYPE = 17,       // [distinct, ...]
+  METADATA_COMPOSITE_TYPE = 18,     // [distinct, ...]
+  METADATA_SUBROUTINE_TYPE = 19,    // [distinct, flags, types, cc]
+  METADATA_COMPILE_UNIT = 20,       // [distinct, ...]
+  METADATA_SUBPROGRAM = 21,         // [distinct, ...]
+  METADATA_LEXICAL_BLOCK = 22,      // [distinct, scope, file, line, column]
   METADATA_LEXICAL_BLOCK_FILE = 23, //[distinct, scope, file, discriminator]
-  METADATA_NAMESPACE = 24,          // [distinct, scope, file, name, line]
-  METADATA_TEMPLATE_TYPE = 25,      // [distinct, scope, name, type, ...]
-  METADATA_TEMPLATE_VALUE = 26,     // [distinct, scope, name, type, value, ...]
-  METADATA_GLOBAL_VAR = 27,         // [distinct, ...]
-  METADATA_LOCAL_VAR = 28,          // [distinct, ...]
-  METADATA_EXPRESSION = 29,         // [distinct, n x element]
-  METADATA_OBJC_PROPERTY = 30,      // [distinct, name, file, line, ...]
+  METADATA_NAMESPACE = 24, // [distinct, scope, file, name, line, exportSymbols]
+  METADATA_TEMPLATE_TYPE = 25,   // [distinct, scope, name, type, ...]
+  METADATA_TEMPLATE_VALUE = 26,  // [distinct, scope, name, type, value, ...]
+  METADATA_GLOBAL_VAR = 27,      // [distinct, ...]
+  METADATA_LOCAL_VAR = 28,       // [distinct, ...]
+  METADATA_EXPRESSION = 29,      // [distinct, n x element]
+  METADATA_OBJC_PROPERTY = 30,   // [distinct, name, file, line, ...]
   METADATA_IMPORTED_ENTITY = 31, // [distinct, tag, scope, entity, line, name]
   METADATA_MODULE = 32,          // [distinct, scope, name, ...]
   METADATA_MACRO = 33,           // [distinct, macinfo, line, name, value]
   METADATA_MACRO_FILE = 34,      // [distinct, macinfo, line, file, ...]
   METADATA_STRINGS = 35,         // [count, offset] blob([lengths][chars])
   METADATA_GLOBAL_DECL_ATTACHMENT = 36, // [valueid, n x [id, mdnode]]
+  METADATA_GLOBAL_VAR_EXPR = 37,        // [distinct, var, expr]
+  METADATA_INDEX_OFFSET = 38,           // [offset]
+  METADATA_INDEX = 39,                  // [bitpos]
+  METADATA_LABEL = 40,                  // [distinct, scope, name, file, line]
 };
 
 // The constants block (CONSTANTS_BLOCK_ID) describes emission for each
@@ -286,8 +339,9 @@ enum ConstantsCodes {
   CST_CODE_CE_INBOUNDS_GEP = 20, // INBOUNDS_GEP:  [n x operands]
   CST_CODE_BLOCKADDRESS = 21,    // CST_CODE_BLOCKADDRESS [fnty, fnval, bb#]
   CST_CODE_DATA = 22,            // DATA:          [n x elements]
-  CST_CODE_INLINEASM = 23        // INLINEASM:     [sideeffect|alignstack|
+  CST_CODE_INLINEASM = 23,       // INLINEASM:     [sideeffect|alignstack|
                                  //                 asmdialect,asmstr,conststr]
+  CST_CODE_CE_GEP_WITH_INRANGE_INDEX = 24, //      [opty, flags, n x operands]
 };
 
 /// CastOpcodes - These are values used in the bitcode files to encode which
@@ -354,6 +408,20 @@ enum OverflowingBinaryOperatorOptionalFlags {
   OBO_NO_SIGNED_WRAP = 1
 };
 
+/// FastMath Flags
+/// This is a fixed layout derived from the bitcode emitted by LLVM 5.0
+/// intended to decouple the in-memory representation from the serialization.
+enum FastMathMap {
+  UnsafeAlgebra   = (1 << 0), // Legacy
+  NoNaNs          = (1 << 1),
+  NoInfs          = (1 << 2),
+  NoSignedZeros   = (1 << 3),
+  AllowReciprocal = (1 << 4),
+  AllowContract   = (1 << 5),
+  ApproxFunc      = (1 << 6),
+  AllowReassoc    = (1 << 7)
+};
+
 /// PossiblyExactOperatorOptionalFlags - Flags for serializing
 /// PossiblyExactOperator's SubclassOptionalData contents.
 enum PossiblyExactOperatorOptionalFlags { PEO_EXACT = 0 };
@@ -367,12 +435,6 @@ enum AtomicOrderingCodes {
   ORDERING_RELEASE = 4,
   ORDERING_ACQREL = 5,
   ORDERING_SEQCST = 6
-};
-
-/// Encoded SynchronizationScope values.
-enum AtomicSynchScopeCodes {
-  SYNCHSCOPE_SINGLETHREAD = 0,
-  SYNCHSCOPE_CROSSTHREAD = 1
 };
 
 /// Markers and flags for call instruction.
@@ -522,7 +584,13 @@ enum AttributeKindCodes {
   ATTR_KIND_INACCESSIBLEMEM_ONLY = 49,
   ATTR_KIND_INACCESSIBLEMEM_OR_ARGMEMONLY = 50,
   ATTR_KIND_ALLOC_SIZE = 51,
-  ATTR_KIND_WRITEONLY = 52
+  ATTR_KIND_WRITEONLY = 52,
+  ATTR_KIND_SPECULATABLE = 53,
+  ATTR_KIND_STRICT_FP = 54,
+  ATTR_KIND_SANITIZE_HWADDRESS = 55,
+  ATTR_KIND_NOCF_CHECK = 56,
+  ATTR_KIND_OPT_FOR_FUZZING = 57,
+  ATTR_KIND_SHADOWCALLSTACK = 58,
 };
 
 enum ComdatSelectionKindCodes {
@@ -531,6 +599,14 @@ enum ComdatSelectionKindCodes {
   COMDAT_SELECTION_KIND_LARGEST = 3,
   COMDAT_SELECTION_KIND_NO_DUPLICATES = 4,
   COMDAT_SELECTION_KIND_SAME_SIZE = 5,
+};
+
+enum StrtabCodes {
+  STRTAB_BLOB = 1,
+};
+
+enum SymtabCodes {
+  SYMTAB_BLOB = 1,
 };
 
 } // End bitc namespace

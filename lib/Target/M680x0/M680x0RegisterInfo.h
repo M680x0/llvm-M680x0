@@ -15,7 +15,7 @@
 #define LLVM_LIB_TARGET_M680X0_M680X0REGISTERINFO_H
 
 #include "M680x0.h"
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "M680x0GenRegisterInfo.inc"

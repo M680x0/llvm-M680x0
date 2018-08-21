@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This class implements WebAssembly-specific bits of
+/// This class implements WebAssembly-specific bits of
 /// TargetFrameLowering class.
 ///
 //===----------------------------------------------------------------------===//
@@ -16,7 +16,7 @@
 #ifndef LLVM_LIB_TARGET_WEBASSEMBLY_WEBASSEMBLYFRAMELOWERING_H
 #define LLVM_LIB_TARGET_WEBASSEMBLY_WEBASSEMBLYFRAMELOWERING_H
 
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
 
 namespace llvm {
 class MachineFrameInfo;
@@ -46,6 +46,7 @@ class WebAssemblyFrameLowering final : public TargetFrameLowering {
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
 
  private:
+  bool hasBP(const MachineFunction &MF) const;
   bool needsSP(const MachineFunction &MF, const MachineFrameInfo &MFI) const;
   bool needsSPWriteback(const MachineFunction &MF,
                         const MachineFrameInfo &MFI) const;

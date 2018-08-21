@@ -35,6 +35,9 @@ extern "C" {
 /** See llvm::createAggressiveDCEPass function. */
 void LLVMAddAggressiveDCEPass(LLVMPassManagerRef PM);
 
+/** See llvm::createAggressiveInstCombinerPass function. */
+void LLVMAddAggressiveInstCombinerPass(LLVMPassManagerRef PM);
+
 /** See llvm::createBitTrackingDCEPass function. */
 void LLVMAddBitTrackingDCEPass(LLVMPassManagerRef PM);
 
@@ -55,6 +58,9 @@ void LLVMAddMergedLoadStoreMotionPass(LLVMPassManagerRef PM);
 
 /** See llvm::createGVNPass function. */
 void LLVMAddGVNPass(LLVMPassManagerRef PM);
+
+/** See llvm::createGVNPass function. */
+void LLVMAddNewGVNPass(LLVMPassManagerRef PM);
 
 /** See llvm::createIndVarSimplifyPass function. */
 void LLVMAddIndVarSimplifyPass(LLVMPassManagerRef PM);
@@ -83,6 +89,9 @@ void LLVMAddLoopRerollPass(LLVMPassManagerRef PM);
 /** See llvm::createLoopUnrollPass function. */
 void LLVMAddLoopUnrollPass(LLVMPassManagerRef PM);
 
+/** See llvm::createLoopUnrollAndJamPass function. */
+void LLVMAddLoopUnrollAndJamPass(LLVMPassManagerRef PM);
+
 /** See llvm::createLoopUnswitchPass function. */
 void LLVMAddLoopUnswitchPass(LLVMPassManagerRef PM);
 
@@ -91,12 +100,6 @@ void LLVMAddMemCpyOptPass(LLVMPassManagerRef PM);
 
 /** See llvm::createPartiallyInlineLibCallsPass function. */
 void LLVMAddPartiallyInlineLibCallsPass(LLVMPassManagerRef PM);
-
-/** See llvm::createLowerSwitchPass function. */
-void LLVMAddLowerSwitchPass(LLVMPassManagerRef PM);
-
-/** See llvm::createPromoteMemoryToRegisterPass function. */
-void LLVMAddPromoteMemoryToRegisterPass(LLVMPassManagerRef PM);
 
 /** See llvm::createReassociatePass function. */
 void LLVMAddReassociatePass(LLVMPassManagerRef PM);
@@ -134,6 +137,9 @@ void LLVMAddCorrelatedValuePropagationPass(LLVMPassManagerRef PM);
 
 /** See llvm::createEarlyCSEPass function */
 void LLVMAddEarlyCSEPass(LLVMPassManagerRef PM);
+
+/** See llvm::createEarlyCSEPass function */
+void LLVMAddEarlyCSEMemSSAPass(LLVMPassManagerRef PM);
 
 /** See llvm::createLowerExpectIntrinsicPass function */
 void LLVMAddLowerExpectIntrinsicPass(LLVMPassManagerRef PM);

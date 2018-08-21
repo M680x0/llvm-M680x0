@@ -14,13 +14,15 @@
 #ifndef LLVM_ANALYSIS_INLINECOST_H
 #define LLVM_ANALYSIS_INLINECOST_H
 
-#include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/CallGraphSCCPass.h"
+#include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include <cassert>
 #include <climits>
 
 namespace llvm {
 class AssumptionCacheTracker;
+class BlockFrequencyInfo;
 class CallSite;
 class DataLayout;
 class Function;
@@ -29,14 +31,14 @@ class TargetTransformInfo;
 
 namespace InlineConstants {
 // Various thresholds used by inline cost analysis.
-// Use when optsize (-Os) is specified.
-const int OptSizeThreshold = 75;
+/// Use when optsize (-Os) is specified.
+const int OptSizeThreshold = 50;
 
-// Use when minsize (-Oz) is specified.
-const int OptMinSizeThreshold = 25;
+/// Use when minsize (-Oz) is specified.
+const int OptMinSizeThreshold = 5;
 
-// Use when -O3 is specified.
-const int OptAggressiveThreshold = 275;
+/// Use when -O3 is specified.
+const int OptAggressiveThreshold = 250;
 
 // Various magic constants used to adjust heuristics.
 const int InstrCost = 5;
@@ -50,7 +52,7 @@ const int NoreturnPenalty = 10000;
 const unsigned TotalAllocaSizeRecursiveCaller = 1024;
 }
 
-/// \brief Represents the cost of inlining a function.
+/// Represents the cost of inlining a function.
 ///
 /// This supports special values for functions which should "always" or
 /// "never" be inlined. Otherwise, the cost represents a unitless amount;
@@ -66,10 +68,10 @@ class InlineCost {
     NeverInlineCost = INT_MAX
   };
 
-  /// \brief The estimated cost of inlining this callsite.
+  /// The estimated cost of inlining this callsite.
   const int Cost;
 
-  /// \brief The adjusted threshold against which this cost was computed.
+  /// The adjusted threshold against which this cost was computed.
   const int Threshold;
 
   // Trivial constructor, interesting logic in the factory functions below.
@@ -88,7 +90,7 @@ public:
     return InlineCost(NeverInlineCost, 0);
   }
 
-  /// \brief Test whether the inline cost is low enough for inlining.
+  /// Test whether the inline cost is low enough for inlining.
   explicit operator bool() const {
     return Cost < Threshold;
   }
@@ -97,14 +99,20 @@ public:
   bool isNever() const { return Cost == NeverInlineCost; }
   bool isVariable() const { return !isAlways() && !isNever(); }
 
-  /// \brief Get the inline cost estimate.
+  /// Get the inline cost estimate.
   /// It is an error to call this on an "always" or "never" InlineCost.
   int getCost() const {
     assert(isVariable() && "Invalid access of InlineCost");
     return Cost;
   }
 
-  /// \brief Get the cost delta from the threshold for inlining.
+  /// Get the threshold against which the cost was computed
+  int getThreshold() const {
+    assert(isVariable() && "Invalid access of InlineCost");
+    return Threshold;
+  }
+
+  /// Get the cost delta from the threshold for inlining.
   /// Only valid if the cost is of the variable kind. Returns a negative
   /// value if the cost is too high to inline.
   int getCostDelta() const { return Threshold - getCost(); }
@@ -137,6 +145,16 @@ struct InlineParams {
 
   /// Threshold to use when the callsite is considered hot.
   Optional<int> HotCallSiteThreshold;
+
+  /// Threshold to use when the callsite is considered hot relative to function
+  /// entry.
+  Optional<int> LocallyHotCallSiteThreshold;
+
+  /// Threshold to use when the callsite is considered cold.
+  Optional<int> ColdCallSiteThreshold;
+
+  /// Compute inline cost even when the cost has exceeded the threshold.
+  Optional<bool> ComputeFullInlineCost;
 };
 
 /// Generate the parameters to tune the inline cost analysis based only on the
@@ -152,11 +170,15 @@ InlineParams getInlineParams(int Threshold);
 /// line options. If -inline-threshold option is not explicitly passed,
 /// the default threshold is computed from \p OptLevel and \p SizeOptLevel.
 /// An \p OptLevel value above 3 is considered an aggressive optimization mode.
-/// \p SizeOptLevel of 1 corresponds to the the -Os flag and 2 corresponds to
+/// \p SizeOptLevel of 1 corresponds to the -Os flag and 2 corresponds to
 /// the -Oz flag.
 InlineParams getInlineParams(unsigned OptLevel, unsigned SizeOptLevel);
 
-/// \brief Get an InlineCost object representing the cost of inlining this
+/// Return the cost associated with a callsite, including parameter passing
+/// and the call/return instruction.
+int getCallsiteCost(CallSite CS, const DataLayout &DL);
+
+/// Get an InlineCost object representing the cost of inlining this
 /// callsite.
 ///
 /// Note that a default threshold is passed into this function. This threshold
@@ -167,13 +189,13 @@ InlineParams getInlineParams(unsigned OptLevel, unsigned SizeOptLevel);
 ///
 /// Also note that calling this function *dynamically* computes the cost of
 /// inlining the callsite. It is an expensive, heavyweight call.
-InlineCost
-getInlineCost(CallSite CS, const InlineParams &Params,
-              TargetTransformInfo &CalleeTTI,
-              std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
-              ProfileSummaryInfo *PSI);
+InlineCost getInlineCost(
+    CallSite CS, const InlineParams &Params, TargetTransformInfo &CalleeTTI,
+    std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
+    Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+    ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE = nullptr);
 
-/// \brief Get an InlineCost with the callee explicitly specified.
+/// Get an InlineCost with the callee explicitly specified.
 /// This allows you to calculate the cost of inlining a function via a
 /// pointer. This behaves exactly as the version with no explicit callee
 /// parameter in all other respects.
@@ -182,9 +204,10 @@ InlineCost
 getInlineCost(CallSite CS, Function *Callee, const InlineParams &Params,
               TargetTransformInfo &CalleeTTI,
               std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
-              ProfileSummaryInfo *PSI);
+              Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+              ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE);
 
-/// \brief Minimal filter to detect invalid constructs for inlining.
+/// Minimal filter to detect invalid constructs for inlining.
 bool isInlineViable(Function &Callee);
 }
 

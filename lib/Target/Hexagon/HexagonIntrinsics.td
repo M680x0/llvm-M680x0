@@ -735,6 +735,28 @@ def : Pat <(int_hexagon_A2_not I32:$Rs),
 def : Pat <(int_hexagon_A2_neg I32:$Rs),
            (A2_subri 0, I32:$Rs)>;
 
+// Make sure the patterns with zero immediate value has higher complexity
+// otherwise, we need to updated the predicates for immediates to exclude zero
+let AddedComplexity = 200 in {
+def : Pat <(int_hexagon_S2_asr_i_r_rnd_goodsyntax I32:$Rs, (i32 0)),
+           (A2_tfr I32:$Rs)>;
+def : Pat <(int_hexagon_S2_asr_i_p_rnd_goodsyntax I64:$Rs, (i32 0)),
+           (A2_combinew (HiReg I64:$Rs), (LoReg I64:$Rs))>;
+def : Pat <(int_hexagon_S5_vasrhrnd_goodsyntax I64:$Rs, (i32 0)),
+           (A2_combinew (HiReg I64:$Rs), (LoReg I64:$Rs))>;
+def : Pat <(int_hexagon_S5_asrhub_rnd_sat_goodsyntax I64:$Rs, (i32 0)),
+           (S2_vsathub I64:$Rs)>;
+}
+
+def : Pat <(int_hexagon_S2_asr_i_r_rnd_goodsyntax I32:$Rs, u5_0ImmPred:$imm),
+           (S2_asr_i_r_rnd I32:$Rs, (UDEC1 u5_0ImmPred:$imm))>;
+def : Pat <(int_hexagon_S2_asr_i_p_rnd_goodsyntax I64:$Rs, u6_0ImmPred:$imm),
+           (S2_asr_i_p_rnd I64:$Rs, (UDEC1 u6_0ImmPred:$imm))>;
+def : Pat <(int_hexagon_S5_vasrhrnd_goodsyntax I64:$Rs, u4_0ImmPred:$imm),
+           (S5_vasrhrnd I64:$Rs, (UDEC1 u4_0ImmPred:$imm))>;
+def : Pat <(int_hexagon_S5_asrhub_rnd_sat_goodsyntax I64:$Rs, u4_0ImmPred:$imm),
+           (S5_asrhub_rnd_sat I64:$Rs, (UDEC1 u4_0ImmPred:$imm))>;
+
 // Transfer immediate
 def  : Pat <(int_hexagon_A2_tfril I32:$Rs, u16_0ImmPred:$Is),
             (A2_tfril I32:$Rs, u16_0ImmPred:$Is)>;
@@ -774,18 +796,17 @@ def: T_RR_pat<A2_combine_hl, int_hexagon_A2_combine_hl>;
 def: T_RR_pat<A2_combine_lh, int_hexagon_A2_combine_lh>;
 def: T_RR_pat<A2_combine_ll, int_hexagon_A2_combine_ll>;
 
-def: T_II_pat<A2_combineii, int_hexagon_A2_combineii, s32ImmPred, s8ImmPred>;
+def: T_II_pat<A2_combineii, int_hexagon_A2_combineii, s32_0ImmPred, s8_0ImmPred>;
 
 // Mux
 def : T_QRR_pat<C2_mux,   int_hexagon_C2_mux>;
-def : T_QRI_pat<C2_muxir, int_hexagon_C2_muxir, s32ImmPred>;
-def : T_QIR_pat<C2_muxri, int_hexagon_C2_muxri, s32ImmPred>;
-def : T_QII_pat<C2_muxii, int_hexagon_C2_muxii, s32ImmPred, s8ImmPred>;
+def : T_QRI_pat<C2_muxir, int_hexagon_C2_muxir, s32_0ImmPred>;
+def : T_QIR_pat<C2_muxri, int_hexagon_C2_muxri, s32_0ImmPred>;
+def : T_QII_pat<C2_muxii, int_hexagon_C2_muxii, s32_0ImmPred, s8_0ImmPred>;
 
 // Shift halfword
 def : T_R_pat<A2_aslh, int_hexagon_A2_aslh>;
 def : T_R_pat<A2_asrh, int_hexagon_A2_asrh>;
-def : T_R_pat<A2_asrh, int_hexagon_SI_to_SXTHI_asrh>;
 
 // Sign/zero extend
 def : T_R_pat<A2_sxth, int_hexagon_A2_sxth>;
@@ -801,17 +822,15 @@ def : T_Q_RR_pat<C2_cmpeq,  int_hexagon_C2_cmpeq>;
 def : T_Q_RR_pat<C2_cmpgt,  int_hexagon_C2_cmpgt>;
 def : T_Q_RR_pat<C2_cmpgtu, int_hexagon_C2_cmpgtu>;
 
-def : T_Q_RI_pat<C2_cmpeqi,  int_hexagon_C2_cmpeqi, s32ImmPred>;
-def : T_Q_RI_pat<C2_cmpgti,  int_hexagon_C2_cmpgti, s32ImmPred>;
-def : T_Q_RI_pat<C2_cmpgtui, int_hexagon_C2_cmpgtui, u32ImmPred>;
+def : T_Q_RI_pat<C2_cmpeqi,  int_hexagon_C2_cmpeqi, s32_0ImmPred>;
+def : T_Q_RI_pat<C2_cmpgti,  int_hexagon_C2_cmpgti, s32_0ImmPred>;
+def : T_Q_RI_pat<C2_cmpgtui, int_hexagon_C2_cmpgtui, u32_0ImmPred>;
 
-def : Pat <(int_hexagon_C2_cmpgei I32:$src1, s32ImmPred:$src2),
-           (C2_tfrpr (C2_cmpgti I32:$src1,
-                                (DEC_CONST_SIGNED s32ImmPred:$src2)))>;
+def : Pat <(int_hexagon_C2_cmpgei I32:$src1, s32_0ImmPred:$src2),
+           (C2_tfrpr (C2_cmpgti I32:$src1, (SDEC1 s32_0ImmPred:$src2)))>;
 
-def : Pat <(int_hexagon_C2_cmpgeui I32:$src1, u32ImmPred:$src2),
-           (C2_tfrpr (C2_cmpgtui I32:$src1,
-                                 (DEC_CONST_UNSIGNED u32ImmPred:$src2)))>;
+def : Pat <(int_hexagon_C2_cmpgeui I32:$src1, u32_0ImmPred:$src2),
+           (C2_tfrpr (C2_cmpgtui I32:$src1, (UDEC1 u32_0ImmPred:$src2)))>;
 
 def : Pat <(int_hexagon_C2_cmpgeui I32:$src, 0),
            (C2_tfrpr (C2_cmpeq I32:$src, I32:$src))>;
@@ -1104,14 +1123,14 @@ def : Pat<(i64 (int_hexagon_S2_insertp_rp I64:$src1, I64:$src2, I64:$src3)),
           (i64 (S2_insertp_rp I64:$src1, I64:$src2, I64:$src3))>;
 
 def : Pat<(int_hexagon_S2_insert I32:$src1, I32:$src2,
-                                 u5ImmPred:$src3, u5ImmPred:$src4),
+                                 u5_0ImmPred:$src3, u5_0ImmPred:$src4),
           (S2_insert I32:$src1, I32:$src2,
-                     u5ImmPred:$src3, u5ImmPred:$src4)>;
+                     u5_0ImmPred:$src3, u5_0ImmPred:$src4)>;
 
 def : Pat<(i64 (int_hexagon_S2_insertp I64:$src1, I64:$src2,
-                                       u6ImmPred:$src3, u6ImmPred:$src4)),
+                                       u6_0ImmPred:$src3, u6_0ImmPred:$src4)),
           (i64 (S2_insertp I64:$src1, I64:$src2,
-                           u6ImmPred:$src3, u6ImmPred:$src4))>;
+                           u6_0ImmPred:$src3, u6_0ImmPred:$src4))>;
 
 // Innterleave/deinterleave
 def : T_P_pat <S2_interleave, int_hexagon_S2_interleave>;
@@ -1239,10 +1258,19 @@ def : T_RI_pat <S2_asl_i_r_sat, int_hexagon_S2_asl_i_r_sat>;
 //===----------------------------------------------------------------------===//
 class S2op_tableidx_pat <Intrinsic IntID, InstHexagon OutputInst,
                          SDNodeXForm XformImm>
-  : Pat <(IntID I32:$src1, I32:$src2, u4ImmPred:$src3, u5ImmPred:$src4),
-         (OutputInst I32:$src1, I32:$src2, u4ImmPred:$src3,
-                     (XformImm u5ImmPred:$src4))>;
+  : Pat <(IntID I32:$src1, I32:$src2, u4_0ImmPred:$src3, u5_0ImmPred:$src4),
+         (OutputInst I32:$src1, I32:$src2, u4_0ImmPred:$src3,
+                     (XformImm u5_0ImmPred:$src4))>;
 
+def SDEC2 : SDNodeXForm<imm, [{
+  int32_t V = N->getSExtValue();
+  return CurDAG->getTargetConstant(V-2, SDLoc(N), MVT::i32);
+}]>;
+
+def SDEC3 : SDNodeXForm<imm, [{
+  int32_t V = N->getSExtValue();
+  return CurDAG->getTargetConstant(V-3, SDLoc(N), MVT::i32);
+}]>;
 
 // Table Index : Extract and insert bits.
 // Map to the real hardware instructions after subtracting appropriate
@@ -1250,16 +1278,16 @@ class S2op_tableidx_pat <Intrinsic IntID, InstHexagon OutputInst,
 // needed for int_hexagon_S2_tableidxb_goodsyntax.
 
 def : Pat <(int_hexagon_S2_tableidxb_goodsyntax I32:$src1, I32:$src2,
-                                              u4ImmPred:$src3, u5ImmPred:$src4),
+                                              u4_0ImmPred:$src3, u5_0ImmPred:$src4),
            (S2_tableidxb I32:$src1, I32:$src2,
-                         u4ImmPred:$src3, u5ImmPred:$src4)>;
+                         u4_0ImmPred:$src3, u5_0ImmPred:$src4)>;
 
 def : S2op_tableidx_pat <int_hexagon_S2_tableidxh_goodsyntax, S2_tableidxh,
-                         DEC_CONST_SIGNED>;
+                         SDEC1>;
 def : S2op_tableidx_pat <int_hexagon_S2_tableidxw_goodsyntax, S2_tableidxw,
-                         DEC2_CONST_SIGNED>;
+                         SDEC2>;
 def : S2op_tableidx_pat <int_hexagon_S2_tableidxd_goodsyntax, S2_tableidxd,
-                         DEC3_CONST_SIGNED>;
+                         SDEC3>;
 
 //*******************************************************************
 //           STYPE/VH
@@ -1324,11 +1352,11 @@ class T_stb_pat <InstHexagon MI, Intrinsic IntID, PatLeaf Val>
   : Pat<(IntID I32:$Rs, Val:$Rt, I32:$Ru),
         (MI I32:$Rs, I32:$Ru, Val:$Rt)>;
 
-def : T_stb_pat <S2_storerh_pbr, int_hexagon_brev_sth,   I32>;
-def : T_stb_pat <S2_storerb_pbr, int_hexagon_brev_stb,   I32>;
-def : T_stb_pat <S2_storeri_pbr, int_hexagon_brev_stw,   I32>;
-def : T_stb_pat <S2_storerf_pbr, int_hexagon_brev_sthhi, I32>;
-def : T_stb_pat <S2_storerd_pbr, int_hexagon_brev_std,   I64>;
+def : T_stb_pat <S2_storerh_pbr, int_hexagon_S2_storerh_pbr, I32>;
+def : T_stb_pat <S2_storerb_pbr, int_hexagon_S2_storerb_pbr, I32>;
+def : T_stb_pat <S2_storeri_pbr, int_hexagon_S2_storeri_pbr, I32>;
+def : T_stb_pat <S2_storerf_pbr, int_hexagon_S2_storerf_pbr, I32>;
+def : T_stb_pat <S2_storerd_pbr, int_hexagon_S2_storerd_pbr, I64>;
 
 class T_stc_pat <InstHexagon MI, Intrinsic IntID, PatLeaf Imm, PatLeaf Val>
   : Pat<(IntID I32:$Rs, Val:$Rt, I32:$Ru, Imm:$s),
@@ -1339,6 +1367,36 @@ def: T_stc_pat<S2_storerh_pci, int_hexagon_circ_sth,   s4_1ImmPred, I32>;
 def: T_stc_pat<S2_storeri_pci, int_hexagon_circ_stw,   s4_2ImmPred, I32>;
 def: T_stc_pat<S2_storerd_pci, int_hexagon_circ_std,   s4_3ImmPred, I64>;
 def: T_stc_pat<S2_storerf_pci, int_hexagon_circ_sthhi, s4_1ImmPred, I32>;
+
+multiclass MaskedStore <InstHexagon MI, Intrinsic IntID> {
+  def : Pat<(IntID HvxQR:$src1, IntRegs:$src2, HvxVR:$src3),
+            (MI HvxQR:$src1, IntRegs:$src2, #0, HvxVR:$src3)>;
+  def : Pat<(!cast<Intrinsic>(IntID#"_128B") HvxQR:$src1, IntRegs:$src2,
+                                             HvxVR:$src3),
+            (MI HvxQR:$src1, IntRegs:$src2, #0, HvxVR:$src3)>;
+}
+
+defm : MaskedStore <V6_vS32b_qpred_ai, int_hexagon_V6_vmaskedstoreq>;
+defm : MaskedStore <V6_vS32b_nqpred_ai, int_hexagon_V6_vmaskedstorenq>;
+defm : MaskedStore <V6_vS32b_nt_qpred_ai, int_hexagon_V6_vmaskedstorentq>;
+defm : MaskedStore <V6_vS32b_nt_nqpred_ai, int_hexagon_V6_vmaskedstorentnq>;
+
+defm : MaskedStore <V6_vS32b_qpred_ai, int_hexagon_V6_vS32b_qpred_ai>;
+defm : MaskedStore <V6_vS32b_nqpred_ai, int_hexagon_V6_vS32b_nqpred_ai>;
+defm : MaskedStore <V6_vS32b_nt_qpred_ai, int_hexagon_V6_vS32b_nt_qpred_ai>;
+defm : MaskedStore <V6_vS32b_nt_nqpred_ai, int_hexagon_V6_vS32b_nt_nqpred_ai>;
+
+//*******************************************************************
+//           SYSTEM
+//*******************************************************************
+
+def: T_R_pat<Y2_dccleana,    int_hexagon_Y2_dccleana>;
+def: T_R_pat<Y2_dccleaninva, int_hexagon_Y2_dccleaninva>;
+def: T_R_pat<Y2_dcinva,      int_hexagon_Y2_dcinva>;
+def: T_R_pat<Y2_dczeroa,     int_hexagon_Y2_dczeroa>;
+
+def: T_RR_pat<Y4_l2fetch,    int_hexagon_Y4_l2fetch>;
+def: T_RP_pat<Y5_l2fetch,    int_hexagon_Y5_l2fetch>;
 
 include "HexagonIntrinsicsV3.td"
 include "HexagonIntrinsicsV4.td"

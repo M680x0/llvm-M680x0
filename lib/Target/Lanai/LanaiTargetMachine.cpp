@@ -32,7 +32,8 @@ void initializeLanaiMemAluCombinerPass(PassRegistry &);
 
 extern "C" void LLVMInitializeLanaiTarget() {
   // Register the target.
-  RegisterTargetMachine<LanaiTargetMachine> registered_target(TheLanaiTarget);
+  RegisterTargetMachine<LanaiTargetMachine> registered_target(
+      getTheLanaiTarget());
 }
 
 static std::string computeDataLayout() {
@@ -52,30 +53,37 @@ static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM) {
   return *RM;
 }
 
+static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM) {
+  if (CM)
+    return *CM;
+  return CodeModel::Medium;
+}
+
 LanaiTargetMachine::LanaiTargetMachine(const Target &T, const Triple &TT,
                                        StringRef Cpu, StringRef FeatureString,
                                        const TargetOptions &Options,
                                        Optional<Reloc::Model> RM,
-                                       CodeModel::Model CodeModel,
-                                       CodeGenOpt::Level OptLevel)
+                                       Optional<CodeModel::Model> CodeModel,
+                                       CodeGenOpt::Level OptLevel, bool JIT)
     : LLVMTargetMachine(T, computeDataLayout(), TT, Cpu, FeatureString, Options,
-                        getEffectiveRelocModel(RM), CodeModel, OptLevel),
-      Subtarget(TT, Cpu, FeatureString, *this, Options, CodeModel, OptLevel),
+                        getEffectiveRelocModel(RM),
+                        getEffectiveCodeModel(CodeModel), OptLevel),
+      Subtarget(TT, Cpu, FeatureString, *this, Options, getCodeModel(),
+                OptLevel),
       TLOF(new LanaiTargetObjectFile()) {
   initAsmInfo();
 }
 
-TargetIRAnalysis LanaiTargetMachine::getTargetIRAnalysis() {
-  return TargetIRAnalysis([this](const Function &F) {
-    return TargetTransformInfo(LanaiTTIImpl(this, F));
-  });
+TargetTransformInfo
+LanaiTargetMachine::getTargetTransformInfo(const Function &F) {
+  return TargetTransformInfo(LanaiTTIImpl(this, F));
 }
 
 namespace {
 // Lanai Code Generator Pass Configuration Options.
 class LanaiPassConfig : public TargetPassConfig {
 public:
-  LanaiPassConfig(LanaiTargetMachine *TM, PassManagerBase *PassManager)
+  LanaiPassConfig(LanaiTargetMachine &TM, PassManagerBase *PassManager)
       : TargetPassConfig(TM, *PassManager) {}
 
   LanaiTargetMachine &getLanaiTargetMachine() const {
@@ -90,7 +98,7 @@ public:
 
 TargetPassConfig *
 LanaiTargetMachine::createPassConfig(PassManagerBase &PassManager) {
-  return new LanaiPassConfig(this, &PassManager);
+  return new LanaiPassConfig(*this, &PassManager);
 }
 
 // Install an instruction selector pass.

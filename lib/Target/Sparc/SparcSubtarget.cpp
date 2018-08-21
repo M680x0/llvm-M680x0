@@ -28,21 +28,25 @@ void SparcSubtarget::anchor() { }
 
 SparcSubtarget &SparcSubtarget::initializeSubtargetDependencies(StringRef CPU,
                                                                 StringRef FS) {
+  UseSoftMulDiv = false;
   IsV9 = false;
   IsLeon = false;
   V8DeprecatedInsts = false;
   IsVIS = false;
+  IsVIS2 = false;
+  IsVIS3 = false;
   HasHardQuad = false;
   UsePopc = false;
   UseSoftFloat = false;
+  HasNoFSMULD = false;
+  HasNoFMULS = false;
 
   // Leon features
   HasLeonCasa = false;
   HasUmacSmac = false;
   InsertNOPLoad = false;
-  FixFSMULD = false;
-  ReplaceFMULS = false;
   FixAllFDIVSQRT = false;
+  DetectRoundChange = false;
 
   // Determine default and user specified characteristics
   std::string CPUName = CPU;

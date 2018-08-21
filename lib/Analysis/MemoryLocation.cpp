@@ -65,6 +65,14 @@ MemoryLocation MemoryLocation::get(const AtomicRMWInst *RMWI) {
 }
 
 MemoryLocation MemoryLocation::getForSource(const MemTransferInst *MTI) {
+  return getForSource(cast<AnyMemTransferInst>(MTI));
+}
+
+MemoryLocation MemoryLocation::getForSource(const AtomicMemTransferInst *MTI) {
+  return getForSource(cast<AnyMemTransferInst>(MTI));
+}
+
+MemoryLocation MemoryLocation::getForSource(const AnyMemTransferInst *MTI) {
   uint64_t Size = UnknownSize;
   if (ConstantInt *C = dyn_cast<ConstantInt>(MTI->getLength()))
     Size = C->getValue().getZExtValue();
@@ -77,17 +85,25 @@ MemoryLocation MemoryLocation::getForSource(const MemTransferInst *MTI) {
   return MemoryLocation(MTI->getRawSource(), Size, AATags);
 }
 
-MemoryLocation MemoryLocation::getForDest(const MemIntrinsic *MTI) {
+MemoryLocation MemoryLocation::getForDest(const MemIntrinsic *MI) {
+  return getForDest(cast<AnyMemIntrinsic>(MI));
+}
+
+MemoryLocation MemoryLocation::getForDest(const AtomicMemIntrinsic *MI) {
+  return getForDest(cast<AnyMemIntrinsic>(MI));
+}
+
+MemoryLocation MemoryLocation::getForDest(const AnyMemIntrinsic *MI) {
   uint64_t Size = UnknownSize;
-  if (ConstantInt *C = dyn_cast<ConstantInt>(MTI->getLength()))
+  if (ConstantInt *C = dyn_cast<ConstantInt>(MI->getLength()))
     Size = C->getValue().getZExtValue();
 
   // memcpy/memmove can have AA tags. For memcpy, they apply
   // to both the source and the destination.
   AAMDNodes AATags;
-  MTI->getAAMetadata(AATags);
+  MI->getAAMetadata(AATags);
 
-  return MemoryLocation(MTI->getRawDest(), Size, AATags);
+  return MemoryLocation(MI->getRawDest(), Size, AATags);
 }
 
 MemoryLocation MemoryLocation::getForArgument(ImmutableCallSite CS,
@@ -142,9 +158,9 @@ MemoryLocation MemoryLocation::getForArgument(ImmutableCallSite CS,
   // for memcpy/memset.  This is particularly important because the
   // LoopIdiomRecognizer likes to turn loops into calls to memset_pattern16
   // whenever possible.
-  LibFunc::Func F;
+  LibFunc F;
   if (CS.getCalledFunction() && TLI.getLibFunc(*CS.getCalledFunction(), F) &&
-      F == LibFunc::memset_pattern16 && TLI.has(F)) {
+      F == LibFunc_memset_pattern16 && TLI.has(F)) {
     assert((ArgIdx == 0 || ArgIdx == 1) &&
            "Invalid argument index for memset_pattern16");
     if (ArgIdx == 1)

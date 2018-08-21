@@ -39,12 +39,15 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Config/config.h" // Get build system configuration settings
+#include "llvm/Support/Chrono.h"
 #include "llvm/Support/Compiler.h"
-#include <system_error>
-#include <windows.h>
-#include <wincrypt.h>
 #include <cassert>
 #include <string>
+#include <system_error>
+#include <windows.h>
+
+// Must be included after windows.h
+#include <wincrypt.h>
 
 /// Determines if the program is running on Windows 8 or newer. This
 /// reimplements one of the helpers in the Windows 8.1 SDK, which are intended
@@ -211,18 +214,45 @@ c_str(SmallVectorImpl<T> &str) {
 }
 
 namespace sys {
-namespace path {
-std::error_code widenPath(const Twine &Path8,
-                          SmallVectorImpl<wchar_t> &Path16);
-} // end namespace path
+
+inline std::chrono::nanoseconds toDuration(FILETIME Time) {
+  ULARGE_INTEGER TimeInteger;
+  TimeInteger.LowPart = Time.dwLowDateTime;
+  TimeInteger.HighPart = Time.dwHighDateTime;
+
+  // FILETIME's are # of 100 nanosecond ticks (1/10th of a microsecond)
+  return std::chrono::nanoseconds(100 * TimeInteger.QuadPart);
+}
+
+inline TimePoint<> toTimePoint(FILETIME Time) {
+  ULARGE_INTEGER TimeInteger;
+  TimeInteger.LowPart = Time.dwLowDateTime;
+  TimeInteger.HighPart = Time.dwHighDateTime;
+
+  // Adjust for different epoch
+  TimeInteger.QuadPart -= 11644473600ll * 10000000;
+
+  // FILETIME's are # of 100 nanosecond ticks (1/10th of a microsecond)
+  return TimePoint<>(std::chrono::nanoseconds(100 * TimeInteger.QuadPart));
+}
+
+inline FILETIME toFILETIME(TimePoint<> TP) {
+  ULARGE_INTEGER TimeInteger;
+  TimeInteger.QuadPart = TP.time_since_epoch().count() / 100;
+  TimeInteger.QuadPart += 11644473600ll * 10000000;
+
+  FILETIME Time;
+  Time.dwLowDateTime = TimeInteger.LowPart;
+  Time.dwHighDateTime = TimeInteger.HighPart;
+  return Time;
+}
 
 namespace windows {
-std::error_code UTF8ToUTF16(StringRef utf8, SmallVectorImpl<wchar_t> &utf16);
-std::error_code UTF16ToUTF8(const wchar_t *utf16, size_t utf16_len,
-                            SmallVectorImpl<char> &utf8);
-/// Convert from UTF16 to the current code page used in the system
-std::error_code UTF16ToCurCP(const wchar_t *utf16, size_t utf16_len,
-                             SmallVectorImpl<char> &utf8);
+// Returns command line arguments. Unlike arguments given to main(),
+// this function guarantees that the returned arguments are encoded in
+// UTF-8 regardless of the current code page setting.
+std::error_code GetCommandLineArguments(SmallVectorImpl<const char *> &Args,
+                                        BumpPtrAllocator &Alloc);
 } // end namespace windows
 } // end namespace sys
 } // end namespace llvm.

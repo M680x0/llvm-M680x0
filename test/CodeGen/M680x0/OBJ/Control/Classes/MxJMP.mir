@@ -16,6 +16,6 @@
 name: MxJMP_ARI
 body: |
   bb.0:
-      JMP32j %a0
+      JMP32j $a0
 
 ...

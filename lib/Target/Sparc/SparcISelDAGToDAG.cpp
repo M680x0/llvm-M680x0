@@ -53,7 +53,7 @@ public:
                                     unsigned ConstraintID,
                                     std::vector<SDValue> &OutOps) override;
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "SPARC DAG->DAG Pattern Instruction Selection";
   }
 
@@ -311,6 +311,8 @@ bool SparcDAGToDAGISel::tryInlineAsm(SDNode *N){
   if (!Changed)
     return false;
 
+  SelectInlineAsmMemoryOperands(AsmNodeOperands, SDLoc(N));
+
   SDValue New = CurDAG->getNode(ISD::INLINEASM, SDLoc(N),
       CurDAG->getVTList(MVT::Other, MVT::Glue), AsmNodeOperands);
   New->setNodeId(-1);
@@ -361,19 +363,6 @@ void SparcDAGToDAGISel::Select(SDNode *N) {
     // FIXME: Handle div by immediate.
     unsigned Opcode = N->getOpcode() == ISD::SDIV ? SP::SDIVrr : SP::UDIVrr;
     CurDAG->SelectNodeTo(N, Opcode, MVT::i32, DivLHS, DivRHS, TopPart);
-    return;
-  }
-  case ISD::MULHU:
-  case ISD::MULHS: {
-    // FIXME: Handle mul by immediate.
-    SDValue MulLHS = N->getOperand(0);
-    SDValue MulRHS = N->getOperand(1);
-    unsigned Opcode = N->getOpcode() == ISD::MULHU ? SP::UMULrr : SP::SMULrr;
-    SDNode *Mul =
-        CurDAG->getMachineNode(Opcode, dl, MVT::i32, MVT::i32, MulLHS, MulRHS);
-    SDValue ResultHigh = SDValue(Mul, 1);
-    ReplaceUses(SDValue(N, 0), ResultHigh);
-    CurDAG->RemoveDeadNode(N);
     return;
   }
   }

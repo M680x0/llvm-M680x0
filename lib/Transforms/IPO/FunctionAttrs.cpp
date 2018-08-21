@@ -6,35 +6,60 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-///
+//
 /// \file
 /// This file implements interprocedural passes which walk the
 /// call-graph deducing and/or propagating function attributes.
-///
+//
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/IPO/FunctionAttrs.h"
-#include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/Analysis/CaptureTracking.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/LazyCallGraph.h"
+#include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/InstIterator.h"
-#include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Use.h"
+#include "llvm/IR/User.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Transforms/IPO.h"
+#include <cassert>
+#include <iterator>
+#include <map>
+#include <vector>
+
 using namespace llvm;
 
 #define DEBUG_TYPE "functionattrs"
@@ -48,32 +73,43 @@ STATISTIC(NumReadOnlyArg, "Number of arguments marked readonly");
 STATISTIC(NumNoAlias, "Number of function returns marked noalias");
 STATISTIC(NumNonNullReturn, "Number of function returns marked nonnull");
 STATISTIC(NumNoRecurse, "Number of functions marked as norecurse");
+STATISTIC(NumNoUnwind, "Number of functions marked as nounwind");
+
+// FIXME: This is disabled by default to avoid exposing security vulnerabilities
+// in C/C++ code compiled by clang:
+// http://lists.llvm.org/pipermail/cfe-dev/2017-January/052066.html
+static cl::opt<bool> EnableNonnullArgPropagation(
+    "enable-nonnull-arg-prop", cl::Hidden,
+    cl::desc("Try to propagate nonnull argument attributes from callsites to "
+             "caller functions."));
+
+static cl::opt<bool> DisableNoUnwindInference(
+    "disable-nounwind-inference", cl::Hidden,
+    cl::desc("Stop inferring nounwind attribute during function-attrs pass"));
 
 namespace {
-typedef SmallSetVector<Function *, 8> SCCNodeSet;
-}
 
-namespace {
-/// The three kinds of memory access relevant to 'readonly' and
-/// 'readnone' attributes.
-enum MemoryAccessKind {
-  MAK_ReadNone = 0,
-  MAK_ReadOnly = 1,
-  MAK_MayWrite = 2
-};
-}
+using SCCNodeSet = SmallSetVector<Function *, 8>;
 
-static MemoryAccessKind checkFunctionMemoryAccess(Function &F, AAResults &AAR,
+} // end anonymous namespace
+
+/// Returns the memory access attribute for function F using AAR for AA results,
+/// where SCCNodes is the current SCC.
+///
+/// If ThisBody is true, this function may examine the function body and will
+/// return a result pertaining to this copy of the function. If it is false, the
+/// result will be based only on AA results for the function declaration; it
+/// will be assumed that some other (perhaps less optimized) version of the
+/// function may be selected at link time.
+static MemoryAccessKind checkFunctionMemoryAccess(Function &F, bool ThisBody,
+                                                  AAResults &AAR,
                                                   const SCCNodeSet &SCCNodes) {
   FunctionModRefBehavior MRB = AAR.getModRefBehavior(&F);
   if (MRB == FMRB_DoesNotAccessMemory)
     // Already perfect!
     return MAK_ReadNone;
 
-  // Non-exact function definitions may not be selected at link time, and an
-  // alternative version that writes to memory may be selected.  See the comment
-  // on GlobalValue::isDefinitionExact for more details.
-  if (!F.hasExactDefinition()) {
+  if (!ThisBody) {
     if (AliasAnalysis::onlyReadsMemory(MRB))
       return MAK_ReadOnly;
 
@@ -98,17 +134,18 @@ static MemoryAccessKind checkFunctionMemoryAccess(Function &F, AAResults &AAR,
           SCCNodes.count(CS.getCalledFunction()))
         continue;
       FunctionModRefBehavior MRB = AAR.getModRefBehavior(CS);
+      ModRefInfo MRI = createModRefInfo(MRB);
 
       // If the call doesn't access memory, we're done.
-      if (!(MRB & MRI_ModRef))
+      if (isNoModRef(MRI))
         continue;
 
       if (!AliasAnalysis::onlyAccessesArgPointees(MRB)) {
         // The call could access any memory. If that includes writes, give up.
-        if (MRB & MRI_Mod)
+        if (isModSet(MRI))
           return MAK_MayWrite;
         // If it reads, note it.
-        if (MRB & MRI_Ref)
+        if (isRefSet(MRI))
           ReadsMemory = true;
         continue;
       }
@@ -130,10 +167,10 @@ static MemoryAccessKind checkFunctionMemoryAccess(Function &F, AAResults &AAR,
         if (AAR.pointsToConstantMemory(Loc, /*OrLocal=*/true))
           continue;
 
-        if (MRB & MRI_Mod)
+        if (isModSet(MRI))
           // Writes non-local memory.  Give up.
           return MAK_MayWrite;
-        if (MRB & MRI_Ref)
+        if (isRefSet(MRI))
           // Ok, it reads non-local memory.
           ReadsMemory = true;
       }
@@ -172,9 +209,14 @@ static MemoryAccessKind checkFunctionMemoryAccess(Function &F, AAResults &AAR,
   return ReadsMemory ? MAK_ReadOnly : MAK_ReadNone;
 }
 
+MemoryAccessKind llvm::computeFunctionBodyMemoryAccess(Function &F,
+                                                       AAResults &AAR) {
+  return checkFunctionMemoryAccess(F, /*ThisBody=*/true, AAR, {});
+}
+
 /// Deduce readonly/readnone attributes for the SCC.
 template <typename AARGetterT>
-static bool addReadAttrs(const SCCNodeSet &SCCNodes, AARGetterT AARGetter) {
+static bool addReadAttrs(const SCCNodeSet &SCCNodes, AARGetterT &&AARGetter) {
   // Check if any of the functions in the SCC read or write memory.  If they
   // write memory then they can't be marked readnone or readonly.
   bool ReadsMemory = false;
@@ -182,7 +224,11 @@ static bool addReadAttrs(const SCCNodeSet &SCCNodes, AARGetterT AARGetter) {
     // Call the callable parameter to look up AA results for this function.
     AAResults &AAR = AARGetter(*F);
 
-    switch (checkFunctionMemoryAccess(*F, AAR, SCCNodes)) {
+    // Non-exact function definitions may not be selected at link time, and an
+    // alternative version that writes to memory may be selected.  See the
+    // comment on GlobalValue::isDefinitionExact for more details.
+    switch (checkFunctionMemoryAccess(*F, F->hasExactDefinition(),
+                                      AAR, SCCNodes)) {
     case MAK_MayWrite:
       return false;
     case MAK_ReadOnly:
@@ -209,15 +255,11 @@ static bool addReadAttrs(const SCCNodeSet &SCCNodes, AARGetterT AARGetter) {
     MadeChange = true;
 
     // Clear out any existing attributes.
-    AttrBuilder B;
-    B.addAttribute(Attribute::ReadOnly).addAttribute(Attribute::ReadNone);
-    F->removeAttributes(
-        AttributeSet::FunctionIndex,
-        AttributeSet::get(F->getContext(), AttributeSet::FunctionIndex, B));
+    F->removeFnAttr(Attribute::ReadOnly);
+    F->removeFnAttr(Attribute::ReadNone);
 
     // Add in the new attribute.
-    F->addAttribute(AttributeSet::FunctionIndex,
-                    ReadsMemory ? Attribute::ReadOnly : Attribute::ReadNone);
+    F->addFnAttr(ReadsMemory ? Attribute::ReadOnly : Attribute::ReadNone);
 
     if (ReadsMemory)
       ++NumReadOnly;
@@ -229,6 +271,7 @@ static bool addReadAttrs(const SCCNodeSet &SCCNodes, AARGetterT AARGetter) {
 }
 
 namespace {
+
 /// For a given pointer Argument, this retains a list of Arguments of functions
 /// in the same SCC that the pointer data flows into. We use this to build an
 /// SCC of the arguments.
@@ -240,7 +283,7 @@ struct ArgumentGraphNode {
 class ArgumentGraph {
   // We store pointers to ArgumentGraphNode objects, so it's important that
   // that they not move around upon insert.
-  typedef std::map<Argument *, ArgumentGraphNode> ArgumentMapTy;
+  using ArgumentMapTy = std::map<Argument *, ArgumentGraphNode>;
 
   ArgumentMapTy ArgumentMap;
 
@@ -255,7 +298,7 @@ class ArgumentGraph {
 public:
   ArgumentGraph() { SyntheticRoot.Definition = nullptr; }
 
-  typedef SmallVectorImpl<ArgumentGraphNode *>::iterator iterator;
+  using iterator = SmallVectorImpl<ArgumentGraphNode *>::iterator;
 
   iterator begin() { return SyntheticRoot.Uses.begin(); }
   iterator end() { return SyntheticRoot.Uses.end(); }
@@ -273,8 +316,7 @@ public:
 /// consider that a capture, instead adding it to the "Uses" list and
 /// continuing with the analysis.
 struct ArgumentUsesTracker : public CaptureTracker {
-  ArgumentUsesTracker(const SCCNodeSet &SCCNodes)
-      : Captured(false), SCCNodes(SCCNodes) {}
+  ArgumentUsesTracker(const SCCNodeSet &SCCNodes) : SCCNodes(SCCNodes) {}
 
   void tooManyUses() override { Captured = true; }
 
@@ -323,41 +365,47 @@ struct ArgumentUsesTracker : public CaptureTracker {
     return false;
   }
 
-  bool Captured; // True only if certainly captured (used outside our SCC).
-  SmallVector<Argument *, 4> Uses; // Uses within our SCC.
+  // True only if certainly captured (used outside our SCC).
+  bool Captured = false;
+
+  // Uses within our SCC.
+  SmallVector<Argument *, 4> Uses;
 
   const SCCNodeSet &SCCNodes;
 };
-}
+
+} // end anonymous namespace
 
 namespace llvm {
-template <> struct GraphTraits<ArgumentGraphNode *> {
-  typedef ArgumentGraphNode *NodeRef;
-  typedef SmallVectorImpl<ArgumentGraphNode *>::iterator ChildIteratorType;
 
-  static inline NodeRef getEntryNode(NodeRef A) { return A; }
-  static inline ChildIteratorType child_begin(NodeRef N) {
-    return N->Uses.begin();
-  }
-  static inline ChildIteratorType child_end(NodeRef N) { return N->Uses.end(); }
+template <> struct GraphTraits<ArgumentGraphNode *> {
+  using NodeRef = ArgumentGraphNode *;
+  using ChildIteratorType = SmallVectorImpl<ArgumentGraphNode *>::iterator;
+
+  static NodeRef getEntryNode(NodeRef A) { return A; }
+  static ChildIteratorType child_begin(NodeRef N) { return N->Uses.begin(); }
+  static ChildIteratorType child_end(NodeRef N) { return N->Uses.end(); }
 };
+
 template <>
 struct GraphTraits<ArgumentGraph *> : public GraphTraits<ArgumentGraphNode *> {
   static NodeRef getEntryNode(ArgumentGraph *AG) { return AG->getEntryNode(); }
+
   static ChildIteratorType nodes_begin(ArgumentGraph *AG) {
     return AG->begin();
   }
+
   static ChildIteratorType nodes_end(ArgumentGraph *AG) { return AG->end(); }
 };
-}
+
+} // end namespace llvm
 
 /// Returns Attribute::None, Attribute::ReadOnly or Attribute::ReadNone.
 static Attribute::AttrKind
 determinePointerReadAttrs(Argument *A,
                           const SmallPtrSet<Argument *, 8> &SCCNodes) {
-
   SmallVector<Use *, 32> Worklist;
-  SmallSet<Use *, 32> Visited;
+  SmallPtrSet<Use *, 32> Visited;
 
   // inalloca arguments are always clobbered by the call.
   if (A->hasInAllocaAttr())
@@ -484,9 +532,6 @@ determinePointerReadAttrs(Argument *A,
 static bool addArgumentReturnedAttrs(const SCCNodeSet &SCCNodes) {
   bool Changed = false;
 
-  AttrBuilder B;
-  B.addAttribute(Attribute::Returned);
-
   // Check each function in turn, determining if an argument is always returned.
   for (Function *F : SCCNodes) {
     // We can infer and propagate function attributes only when we know that the
@@ -496,6 +541,11 @@ static bool addArgumentReturnedAttrs(const SCCNodeSet &SCCNodes) {
       continue;
 
     if (F->getReturnType()->isVoidTy())
+      continue;
+
+    // There is nothing to do if an argument is already marked as 'returned'.
+    if (llvm::any_of(F->args(),
+                     [](const Argument &Arg) { return Arg.hasReturnedAttr(); }))
       continue;
 
     auto FindRetArg = [&]() -> Value * {
@@ -519,7 +569,7 @@ static bool addArgumentReturnedAttrs(const SCCNodeSet &SCCNodes) {
 
     if (Value *RetArg = FindRetArg()) {
       auto *A = cast<Argument>(RetArg);
-      A->addAttr(AttributeSet::get(F->getContext(), A->getArgNo() + 1, B));
+      A->addAttr(Attribute::Returned);
       ++NumReturned;
       Changed = true;
     }
@@ -528,14 +578,54 @@ static bool addArgumentReturnedAttrs(const SCCNodeSet &SCCNodes) {
   return Changed;
 }
 
+/// If a callsite has arguments that are also arguments to the parent function,
+/// try to propagate attributes from the callsite's arguments to the parent's
+/// arguments. This may be important because inlining can cause information loss
+/// when attribute knowledge disappears with the inlined call.
+static bool addArgumentAttrsFromCallsites(Function &F) {
+  if (!EnableNonnullArgPropagation)
+    return false;
+
+  bool Changed = false;
+
+  // For an argument attribute to transfer from a callsite to the parent, the
+  // call must be guaranteed to execute every time the parent is called.
+  // Conservatively, just check for calls in the entry block that are guaranteed
+  // to execute.
+  // TODO: This could be enhanced by testing if the callsite post-dominates the
+  // entry block or by doing simple forward walks or backward walks to the
+  // callsite.
+  BasicBlock &Entry = F.getEntryBlock();
+  for (Instruction &I : Entry) {
+    if (auto CS = CallSite(&I)) {
+      if (auto *CalledFunc = CS.getCalledFunction()) {
+        for (auto &CSArg : CalledFunc->args()) {
+          if (!CSArg.hasNonNullAttr())
+            continue;
+
+          // If the non-null callsite argument operand is an argument to 'F'
+          // (the caller) and the call is guaranteed to execute, then the value
+          // must be non-null throughout 'F'.
+          auto *FArg = dyn_cast<Argument>(CS.getArgOperand(CSArg.getArgNo()));
+          if (FArg && !FArg->hasNonNullAttr()) {
+            FArg->addAttr(Attribute::NonNull);
+            Changed = true;
+          }
+        }
+      }
+    }
+    if (!isGuaranteedToTransferExecutionToSuccessor(&I))
+      break;
+  }
+  
+  return Changed;
+}
+
 /// Deduce nocapture attributes for the SCC.
 static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
   bool Changed = false;
 
   ArgumentGraph AG;
-
-  AttrBuilder B;
-  B.addAttribute(Attribute::NoCapture);
 
   // Check each function in turn, determining which pointer arguments are not
   // captured.
@@ -546,6 +636,8 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
     if (!F->hasExactDefinition())
       continue;
 
+    Changed |= addArgumentAttrsFromCallsites(*F);
+
     // Functions that are readonly (or readnone) and nounwind and don't return
     // a value can't capture arguments. Don't analyze them.
     if (F->onlyReadsMemory() && F->doesNotThrow() &&
@@ -553,7 +645,7 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
       for (Function::arg_iterator A = F->arg_begin(), E = F->arg_end(); A != E;
            ++A) {
         if (A->getType()->isPointerTy() && !A->hasNoCaptureAttr()) {
-          A->addAttr(AttributeSet::get(F->getContext(), A->getArgNo() + 1, B));
+          A->addAttr(Attribute::NoCapture);
           ++NumNoCapture;
           Changed = true;
         }
@@ -572,8 +664,7 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
         if (!Tracker.Captured) {
           if (Tracker.Uses.empty()) {
             // If it's trivially not captured, mark it nocapture now.
-            A->addAttr(
-                AttributeSet::get(F->getContext(), A->getArgNo() + 1, B));
+            A->addAttr(Attribute::NoCapture);
             ++NumNoCapture;
             Changed = true;
           } else {
@@ -599,9 +690,7 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
         Self.insert(&*A);
         Attribute::AttrKind R = determinePointerReadAttrs(&*A, Self);
         if (R != Attribute::None) {
-          AttrBuilder B;
-          B.addAttribute(R);
-          A->addAttr(AttributeSet::get(A->getContext(), A->getArgNo() + 1, B));
+          A->addAttr(R);
           Changed = true;
           R == Attribute::ReadOnly ? ++NumReadOnlyArg : ++NumReadNoneArg;
         }
@@ -626,7 +715,7 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
       if (ArgumentSCC[0]->Uses.size() == 1 &&
           ArgumentSCC[0]->Uses[0] == ArgumentSCC[0]) {
         Argument *A = ArgumentSCC[0]->Definition;
-        A->addAttr(AttributeSet::get(A->getContext(), A->getArgNo() + 1, B));
+        A->addAttr(Attribute::NoCapture);
         ++NumNoCapture;
         Changed = true;
       }
@@ -668,7 +757,7 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
 
     for (unsigned i = 0, e = ArgumentSCC.size(); i != e; ++i) {
       Argument *A = ArgumentSCC[i]->Definition;
-      A->addAttr(AttributeSet::get(A->getContext(), A->getArgNo() + 1, B));
+      A->addAttr(Attribute::NoCapture);
       ++NumNoCapture;
       Changed = true;
     }
@@ -699,14 +788,12 @@ static bool addArgumentAttrs(const SCCNodeSet &SCCNodes) {
     }
 
     if (ReadAttr != Attribute::None) {
-      AttrBuilder B, R;
-      B.addAttribute(ReadAttr);
-      R.addAttribute(Attribute::ReadOnly).addAttribute(Attribute::ReadNone);
       for (unsigned i = 0, e = ArgumentSCC.size(); i != e; ++i) {
         Argument *A = ArgumentSCC[i]->Definition;
         // Clear out existing readonly/readnone attributes
-        A->removeAttr(AttributeSet::get(A->getContext(), A->getArgNo() + 1, R));
-        A->addAttr(AttributeSet::get(A->getContext(), A->getArgNo() + 1, B));
+        A->removeAttr(Attribute::ReadOnly);
+        A->removeAttr(Attribute::ReadNone);
+        A->addAttr(ReadAttr);
         ReadAttr == Attribute::ReadOnly ? ++NumReadOnlyArg : ++NumReadNoneArg;
         Changed = true;
       }
@@ -766,7 +853,7 @@ static bool isFunctionMallocLike(Function *F, const SCCNodeSet &SCCNodes) {
       case Instruction::Call:
       case Instruction::Invoke: {
         CallSite CS(RVI);
-        if (CS.paramHasAttr(0, Attribute::NoAlias))
+        if (CS.hasRetAttr(Attribute::NoAlias))
           break;
         if (CS.getCalledFunction() && SCCNodes.count(CS.getCalledFunction()))
           break;
@@ -789,7 +876,7 @@ static bool addNoAliasAttrs(const SCCNodeSet &SCCNodes) {
   // pointers.
   for (Function *F : SCCNodes) {
     // Already noalias.
-    if (F->doesNotAlias(0))
+    if (F->returnDoesNotAlias())
       continue;
 
     // We can infer and propagate function attributes only when we know that the
@@ -809,10 +896,11 @@ static bool addNoAliasAttrs(const SCCNodeSet &SCCNodes) {
 
   bool MadeChange = false;
   for (Function *F : SCCNodes) {
-    if (F->doesNotAlias(0) || !F->getReturnType()->isPointerTy())
+    if (F->returnDoesNotAlias() ||
+        !F->getReturnType()->isPointerTy())
       continue;
 
-    F->setDoesNotAlias(0);
+    F->setReturnDoesNotAlias();
     ++NumNoAlias;
     MadeChange = true;
   }
@@ -838,11 +926,13 @@ static bool isReturnNonNull(Function *F, const SCCNodeSet &SCCNodes,
     if (auto *Ret = dyn_cast<ReturnInst>(BB.getTerminator()))
       FlowsToReturn.insert(Ret->getReturnValue());
 
+  auto &DL = F->getParent()->getDataLayout();
+
   for (unsigned i = 0; i != FlowsToReturn.size(); ++i) {
     Value *RetVal = FlowsToReturn[i];
 
     // If this value is locally known to be non-null, we're good
-    if (isKnownNonNull(RetVal))
+    if (isKnownNonZero(RetVal, DL))
       continue;
 
     // Otherwise, we need to look upwards since we can't make any local
@@ -902,7 +992,7 @@ static bool addNonNullAttrs(const SCCNodeSet &SCCNodes) {
   // pointers.
   for (Function *F : SCCNodes) {
     // Already nonnull.
-    if (F->getAttributes().hasAttribute(AttributeSet::ReturnIndex,
+    if (F->getAttributes().hasAttribute(AttributeList::ReturnIndex,
                                         Attribute::NonNull))
       continue;
 
@@ -922,8 +1012,9 @@ static bool addNonNullAttrs(const SCCNodeSet &SCCNodes) {
       if (!Speculative) {
         // Mark the function eagerly since we may discover a function
         // which prevents us from speculating about the entire SCC
-        DEBUG(dbgs() << "Eagerly marking " << F->getName() << " as nonnull\n");
-        F->addAttribute(AttributeSet::ReturnIndex, Attribute::NonNull);
+        LLVM_DEBUG(dbgs() << "Eagerly marking " << F->getName()
+                          << " as nonnull\n");
+        F->addAttribute(AttributeList::ReturnIndex, Attribute::NonNull);
         ++NumNonNullReturn;
         MadeChange = true;
       }
@@ -936,13 +1027,13 @@ static bool addNonNullAttrs(const SCCNodeSet &SCCNodes) {
 
   if (SCCReturnsNonNull) {
     for (Function *F : SCCNodes) {
-      if (F->getAttributes().hasAttribute(AttributeSet::ReturnIndex,
+      if (F->getAttributes().hasAttribute(AttributeList::ReturnIndex,
                                           Attribute::NonNull) ||
           !F->getReturnType()->isPointerTy())
         continue;
 
-      DEBUG(dbgs() << "SCC marking " << F->getName() << " as nonnull\n");
-      F->addAttribute(AttributeSet::ReturnIndex, Attribute::NonNull);
+      LLVM_DEBUG(dbgs() << "SCC marking " << F->getName() << " as nonnull\n");
+      F->addAttribute(AttributeList::ReturnIndex, Attribute::NonNull);
       ++NumNonNullReturn;
       MadeChange = true;
     }
@@ -951,47 +1042,212 @@ static bool addNonNullAttrs(const SCCNodeSet &SCCNodes) {
   return MadeChange;
 }
 
-/// Remove the convergent attribute from all functions in the SCC if every
-/// callsite within the SCC is not convergent (except for calls to functions
-/// within the SCC).  Returns true if changes were made.
-static bool removeConvergentAttrs(const SCCNodeSet &SCCNodes) {
-  // For every function in SCC, ensure that either
-  //  * it is not convergent, or
-  //  * we can remove its convergent attribute.
-  bool HasConvergentFn = false;
+namespace {
+
+/// Collects a set of attribute inference requests and performs them all in one
+/// go on a single SCC Node. Inference involves scanning function bodies
+/// looking for instructions that violate attribute assumptions.
+/// As soon as all the bodies are fine we are free to set the attribute.
+/// Customization of inference for individual attributes is performed by
+/// providing a handful of predicates for each attribute.
+class AttributeInferer {
+public:
+  /// Describes a request for inference of a single attribute.
+  struct InferenceDescriptor {
+
+    /// Returns true if this function does not have to be handled.
+    /// General intent for this predicate is to provide an optimization
+    /// for functions that do not need this attribute inference at all
+    /// (say, for functions that already have the attribute).
+    std::function<bool(const Function &)> SkipFunction;
+
+    /// Returns true if this instruction violates attribute assumptions.
+    std::function<bool(Instruction &)> InstrBreaksAttribute;
+
+    /// Sets the inferred attribute for this function.
+    std::function<void(Function &)> SetAttribute;
+
+    /// Attribute we derive.
+    Attribute::AttrKind AKind;
+
+    /// If true, only "exact" definitions can be used to infer this attribute.
+    /// See GlobalValue::isDefinitionExact.
+    bool RequiresExactDefinition;
+
+    InferenceDescriptor(Attribute::AttrKind AK,
+                        std::function<bool(const Function &)> SkipFunc,
+                        std::function<bool(Instruction &)> InstrScan,
+                        std::function<void(Function &)> SetAttr,
+                        bool ReqExactDef)
+        : SkipFunction(SkipFunc), InstrBreaksAttribute(InstrScan),
+          SetAttribute(SetAttr), AKind(AK),
+          RequiresExactDefinition(ReqExactDef) {}
+  };
+
+private:
+  SmallVector<InferenceDescriptor, 4> InferenceDescriptors;
+
+public:
+  void registerAttrInference(InferenceDescriptor AttrInference) {
+    InferenceDescriptors.push_back(AttrInference);
+  }
+
+  bool run(const SCCNodeSet &SCCNodes);
+};
+
+/// Perform all the requested attribute inference actions according to the
+/// attribute predicates stored before.
+bool AttributeInferer::run(const SCCNodeSet &SCCNodes) {
+  SmallVector<InferenceDescriptor, 4> InferInSCC = InferenceDescriptors;
+  // Go through all the functions in SCC and check corresponding attribute
+  // assumptions for each of them. Attributes that are invalid for this SCC
+  // will be removed from InferInSCC.
   for (Function *F : SCCNodes) {
-    if (!F->isConvergent()) continue;
-    HasConvergentFn = true;
 
-    // Can't remove convergent from function declarations.
-    if (F->isDeclaration()) return false;
+    // No attributes whose assumptions are still valid - done.
+    if (InferInSCC.empty())
+      return false;
 
-    // Can't remove convergent if any of our functions has a convergent call to a
-    // function not in the SCC.
-    for (Instruction &I : instructions(*F)) {
-      CallSite CS(&I);
-      // Bail if CS is a convergent call to a function not in the SCC.
-      if (CS && CS.isConvergent() &&
-          SCCNodes.count(CS.getCalledFunction()) == 0)
+    // Check if our attributes ever need scanning/can be scanned.
+    llvm::erase_if(InferInSCC, [F](const InferenceDescriptor &ID) {
+      if (ID.SkipFunction(*F))
         return false;
+
+      // Remove from further inference (invalidate) when visiting a function
+      // that has no instructions to scan/has an unsuitable definition.
+      return F->isDeclaration() ||
+             (ID.RequiresExactDefinition && !F->hasExactDefinition());
+    });
+
+    // For each attribute still in InferInSCC that doesn't explicitly skip F,
+    // set up the F instructions scan to verify assumptions of the attribute.
+    SmallVector<InferenceDescriptor, 4> InferInThisFunc;
+    llvm::copy_if(
+        InferInSCC, std::back_inserter(InferInThisFunc),
+        [F](const InferenceDescriptor &ID) { return !ID.SkipFunction(*F); });
+
+    if (InferInThisFunc.empty())
+      continue;
+
+    // Start instruction scan.
+    for (Instruction &I : instructions(*F)) {
+      llvm::erase_if(InferInThisFunc, [&](const InferenceDescriptor &ID) {
+        if (!ID.InstrBreaksAttribute(I))
+          return false;
+        // Remove attribute from further inference on any other functions
+        // because attribute assumptions have just been violated.
+        llvm::erase_if(InferInSCC, [&ID](const InferenceDescriptor &D) {
+          return D.AKind == ID.AKind;
+        });
+        // Remove attribute from the rest of current instruction scan.
+        return true;
+      });
+
+      if (InferInThisFunc.empty())
+        break;
     }
   }
 
-  // If the SCC doesn't have any convergent functions, we have nothing to do.
-  if (!HasConvergentFn) return false;
+  if (InferInSCC.empty())
+    return false;
 
-  // If we got here, all of the calls the SCC makes to functions not in the SCC
-  // are non-convergent.  Therefore all of the SCC's functions can also be made
-  // non-convergent.  We'll remove the attr from the callsites in
-  // InstCombineCalls.
-  for (Function *F : SCCNodes) {
-    if (!F->isConvergent()) continue;
+  bool Changed = false;
+  for (Function *F : SCCNodes)
+    // At this point InferInSCC contains only functions that were either:
+    //   - explicitly skipped from scan/inference, or
+    //   - verified to have no instructions that break attribute assumptions.
+    // Hence we just go and force the attribute for all non-skipped functions.
+    for (auto &ID : InferInSCC) {
+      if (ID.SkipFunction(*F))
+        continue;
+      Changed = true;
+      ID.SetAttribute(*F);
+    }
+  return Changed;
+}
 
-    DEBUG(dbgs() << "Removing convergent attr from fn " << F->getName()
-                 << "\n");
-    F->setNotConvergent();
+} // end anonymous namespace
+
+/// Helper for non-Convergent inference predicate InstrBreaksAttribute.
+static bool InstrBreaksNonConvergent(Instruction &I,
+                                     const SCCNodeSet &SCCNodes) {
+  const CallSite CS(&I);
+  // Breaks non-convergent assumption if CS is a convergent call to a function
+  // not in the SCC.
+  return CS && CS.isConvergent() && SCCNodes.count(CS.getCalledFunction()) == 0;
+}
+
+/// Helper for NoUnwind inference predicate InstrBreaksAttribute.
+static bool InstrBreaksNonThrowing(Instruction &I, const SCCNodeSet &SCCNodes) {
+  if (!I.mayThrow())
+    return false;
+  if (const auto *CI = dyn_cast<CallInst>(&I)) {
+    if (Function *Callee = CI->getCalledFunction()) {
+      // I is a may-throw call to a function inside our SCC. This doesn't
+      // invalidate our current working assumption that the SCC is no-throw; we
+      // just have to scan that other function.
+      if (SCCNodes.count(Callee) > 0)
+        return false;
+    }
   }
   return true;
+}
+
+/// Infer attributes from all functions in the SCC by scanning every
+/// instruction for compliance to the attribute assumptions. Currently it
+/// does:
+///   - removal of Convergent attribute
+///   - addition of NoUnwind attribute
+///
+/// Returns true if any changes to function attributes were made.
+static bool inferAttrsFromFunctionBodies(const SCCNodeSet &SCCNodes) {
+
+  AttributeInferer AI;
+
+  // Request to remove the convergent attribute from all functions in the SCC
+  // if every callsite within the SCC is not convergent (except for calls
+  // to functions within the SCC).
+  // Note: Removal of the attr from the callsites will happen in
+  // InstCombineCalls separately.
+  AI.registerAttrInference(AttributeInferer::InferenceDescriptor{
+      Attribute::Convergent,
+      // Skip non-convergent functions.
+      [](const Function &F) { return !F.isConvergent(); },
+      // Instructions that break non-convergent assumption.
+      [SCCNodes](Instruction &I) {
+        return InstrBreaksNonConvergent(I, SCCNodes);
+      },
+      [](Function &F) {
+        LLVM_DEBUG(dbgs() << "Removing convergent attr from fn " << F.getName()
+                          << "\n");
+        F.setNotConvergent();
+      },
+      /* RequiresExactDefinition= */ false});
+
+  if (!DisableNoUnwindInference)
+    // Request to infer nounwind attribute for all the functions in the SCC if
+    // every callsite within the SCC is not throwing (except for calls to
+    // functions within the SCC). Note that nounwind attribute suffers from
+    // derefinement - results may change depending on how functions are
+    // optimized. Thus it can be inferred only from exact definitions.
+    AI.registerAttrInference(AttributeInferer::InferenceDescriptor{
+        Attribute::NoUnwind,
+        // Skip non-throwing functions.
+        [](const Function &F) { return F.doesNotThrow(); },
+        // Instructions that break non-throwing assumption.
+        [SCCNodes](Instruction &I) {
+          return InstrBreaksNonThrowing(I, SCCNodes);
+        },
+        [](Function &F) {
+          LLVM_DEBUG(dbgs()
+                     << "Adding nounwind attr to fn " << F.getName() << "\n");
+          F.setDoesNotThrow();
+          ++NumNoUnwind;
+        },
+        /* RequiresExactDefinition= */ true});
+
+  // Perform all the requested attribute inference actions.
+  return AI.run(SCCNodes);
 }
 
 static bool setDoesNotRecurse(Function &F) {
@@ -1050,7 +1306,8 @@ PreservedAnalyses PostOrderFunctionAttrsPass::run(LazyCallGraph::SCC &C,
   bool HasUnknownCall = false;
   for (LazyCallGraph::Node &N : C) {
     Function &F = N.getFunction();
-    if (F.hasFnAttribute(Attribute::OptimizeNone)) {
+    if (F.hasFnAttribute(Attribute::OptimizeNone) ||
+        F.hasFnAttribute(Attribute::Naked)) {
       // Treat any function we're trying not to optimize as if it were an
       // indirect call and omit it from the node set used below.
       HasUnknownCall = true;
@@ -1081,7 +1338,7 @@ PreservedAnalyses PostOrderFunctionAttrsPass::run(LazyCallGraph::SCC &C,
   if (!HasUnknownCall) {
     Changed |= addNoAliasAttrs(SCCNodes);
     Changed |= addNonNullAttrs(SCCNodes);
-    Changed |= removeConvergentAttrs(SCCNodes);
+    Changed |= inferAttrsFromFunctionBodies(SCCNodes);
     Changed |= addNoRecurseAttrs(SCCNodes);
   }
 
@@ -1089,10 +1346,14 @@ PreservedAnalyses PostOrderFunctionAttrsPass::run(LazyCallGraph::SCC &C,
 }
 
 namespace {
+
 struct PostOrderFunctionAttrsLegacyPass : public CallGraphSCCPass {
-  static char ID; // Pass identification, replacement for typeid
+  // Pass identification, replacement for typeid
+  static char ID;
+
   PostOrderFunctionAttrsLegacyPass() : CallGraphSCCPass(ID) {
-    initializePostOrderFunctionAttrsLegacyPassPass(*PassRegistry::getPassRegistry());
+    initializePostOrderFunctionAttrsLegacyPassPass(
+        *PassRegistry::getPassRegistry());
   }
 
   bool runOnSCC(CallGraphSCC &SCC) override;
@@ -1104,7 +1365,8 @@ struct PostOrderFunctionAttrsLegacyPass : public CallGraphSCCPass {
     CallGraphSCCPass::getAnalysisUsage(AU);
   }
 };
-}
+
+} // end anonymous namespace
 
 char PostOrderFunctionAttrsLegacyPass::ID = 0;
 INITIALIZE_PASS_BEGIN(PostOrderFunctionAttrsLegacyPass, "functionattrs",
@@ -1114,7 +1376,9 @@ INITIALIZE_PASS_DEPENDENCY(CallGraphWrapperPass)
 INITIALIZE_PASS_END(PostOrderFunctionAttrsLegacyPass, "functionattrs",
                     "Deduce function attributes", false, false)
 
-Pass *llvm::createPostOrderFunctionAttrsLegacyPass() { return new PostOrderFunctionAttrsLegacyPass(); }
+Pass *llvm::createPostOrderFunctionAttrsLegacyPass() {
+  return new PostOrderFunctionAttrsLegacyPass();
+}
 
 template <typename AARGetterT>
 static bool runImpl(CallGraphSCC &SCC, AARGetterT AARGetter) {
@@ -1128,7 +1392,8 @@ static bool runImpl(CallGraphSCC &SCC, AARGetterT AARGetter) {
   bool ExternalNode = false;
   for (CallGraphNode *I : SCC) {
     Function *F = I->getFunction();
-    if (!F || F->hasFnAttribute(Attribute::OptimizeNone)) {
+    if (!F || F->hasFnAttribute(Attribute::OptimizeNone) ||
+        F->hasFnAttribute(Attribute::Naked)) {
       // External node or function we're trying not to optimize - we both avoid
       // transform them and avoid leveraging information they provide.
       ExternalNode = true;
@@ -1137,6 +1402,10 @@ static bool runImpl(CallGraphSCC &SCC, AARGetterT AARGetter) {
 
     SCCNodes.insert(F);
   }
+
+  // Skip it if the SCC only contains optnone functions.
+  if (SCCNodes.empty())
+    return Changed;
 
   Changed |= addArgumentReturnedAttrs(SCCNodes);
   Changed |= addReadAttrs(SCCNodes, AARGetter);
@@ -1147,7 +1416,7 @@ static bool runImpl(CallGraphSCC &SCC, AARGetterT AARGetter) {
   if (!ExternalNode) {
     Changed |= addNoAliasAttrs(SCCNodes);
     Changed |= addNonNullAttrs(SCCNodes);
-    Changed |= removeConvergentAttrs(SCCNodes);
+    Changed |= inferAttrsFromFunctionBodies(SCCNodes);
     Changed |= addNoRecurseAttrs(SCCNodes);
   }
 
@@ -1157,26 +1426,18 @@ static bool runImpl(CallGraphSCC &SCC, AARGetterT AARGetter) {
 bool PostOrderFunctionAttrsLegacyPass::runOnSCC(CallGraphSCC &SCC) {
   if (skipSCC(SCC))
     return false;
-
-  // We compute dedicated AA results for each function in the SCC as needed. We
-  // use a lambda referencing external objects so that they live long enough to
-  // be queried, but we re-use them each time.
-  Optional<BasicAAResult> BAR;
-  Optional<AAResults> AAR;
-  auto AARGetter = [&](Function &F) -> AAResults & {
-    BAR.emplace(createLegacyPMBasicAAResult(*this, F));
-    AAR.emplace(createLegacyPMAAResults(*this, F, *BAR));
-    return *AAR;
-  };
-
-  return runImpl(SCC, AARGetter);
+  return runImpl(SCC, LegacyAARGetter(*this));
 }
 
 namespace {
+
 struct ReversePostOrderFunctionAttrsLegacyPass : public ModulePass {
-  static char ID; // Pass identification, replacement for typeid
+  // Pass identification, replacement for typeid
+  static char ID;
+
   ReversePostOrderFunctionAttrsLegacyPass() : ModulePass(ID) {
-    initializeReversePostOrderFunctionAttrsLegacyPassPass(*PassRegistry::getPassRegistry());
+    initializeReversePostOrderFunctionAttrsLegacyPassPass(
+        *PassRegistry::getPassRegistry());
   }
 
   bool runOnModule(Module &M) override;
@@ -1187,9 +1448,11 @@ struct ReversePostOrderFunctionAttrsLegacyPass : public ModulePass {
     AU.addPreserved<CallGraphWrapperPass>();
   }
 };
-}
+
+} // end anonymous namespace
 
 char ReversePostOrderFunctionAttrsLegacyPass::ID = 0;
+
 INITIALIZE_PASS_BEGIN(ReversePostOrderFunctionAttrsLegacyPass, "rpo-functionattrs",
                       "Deduce function attributes in RPO", false, false)
 INITIALIZE_PASS_DEPENDENCY(CallGraphWrapperPass)
@@ -1249,7 +1512,7 @@ static bool deduceFunctionAttributeInRPO(Module &M, CallGraph &CG) {
   }
 
   bool Changed = false;
-  for (auto *F : reverse(Worklist))
+  for (auto *F : llvm::reverse(Worklist))
     Changed |= addNoRecurseAttrsTopDown(*F);
 
   return Changed;
@@ -1268,16 +1531,9 @@ PreservedAnalyses
 ReversePostOrderFunctionAttrsPass::run(Module &M, ModuleAnalysisManager &AM) {
   auto &CG = AM.getResult<CallGraphAnalysis>(M);
 
-  bool Changed = deduceFunctionAttributeInRPO(M, CG);
-
-  // CallGraphAnalysis holds AssertingVH and must be invalidated eagerly so
-  // that other passes don't delete stuff from under it.
-  // FIXME: We need to invalidate this to avoid PR28400. Is there a better
-  // solution?
-  AM.invalidate<CallGraphAnalysis>(M);
-
-  if (!Changed)
+  if (!deduceFunctionAttributeInRPO(M, CG))
     return PreservedAnalyses::all();
+
   PreservedAnalyses PA;
   PA.preserve<CallGraphAnalysis>();
   return PA;

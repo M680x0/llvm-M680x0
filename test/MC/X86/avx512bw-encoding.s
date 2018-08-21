@@ -1,4 +1,4 @@
-// RUN: llvm-mc -triple x86_64-unknown-unknown -mcpu=skx  --show-encoding %s | FileCheck %s
+// RUN: llvm-mc -triple x86_64-unknown-unknown --show-encoding %s | FileCheck %s
 
 // CHECK: vpblendmb %zmm25, %zmm18, %zmm17
 // CHECK:  encoding: [0x62,0x82,0x6d,0x40,0x66,0xc9]
@@ -11,6 +11,10 @@
 // CHECK: vpblendmb %zmm25, %zmm18, %zmm17 {%k5} {z}
 // CHECK:  encoding: [0x62,0x82,0x6d,0xc5,0x66,0xc9]
           vpblendmb %zmm25, %zmm18, %zmm17 {%k5} {z}
+
+// CHECK: vpblendmb %zmm25, %zmm18, %zmm17 {%k5} {z}
+// CHECK:  encoding: [0x62,0x82,0x6d,0xc5,0x66,0xc9]
+          vpblendmb %zmm25, %zmm18, %zmm17 {z} {%k5}
 
 // CHECK: vpblendmb (%rcx), %zmm18, %zmm17
 // CHECK:  encoding: [0x62,0xe2,0x6d,0x40,0x66,0x09]

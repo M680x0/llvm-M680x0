@@ -12,6 +12,8 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Testing/Support/Error.h"
+#include "gtest/gtest-spi.h"
 #include "gtest/gtest.h"
 #include <memory>
 
@@ -30,7 +32,7 @@ public:
 
   // Log this error to a stream.
   void log(raw_ostream &OS) const override {
-    OS << "CustomError { " << getInfo() << "}";
+    OS << "CustomError {" << getInfo() << "}";
   }
 
   std::error_code convertToErrorCode() const override {
@@ -82,12 +84,14 @@ protected:
 
 char CustomSubError::ID = 0;
 
-static Error handleCustomError(const CustomError &CE) { return Error(); }
+static Error handleCustomError(const CustomError &CE) {
+  return Error::success();
+}
 
 static void handleCustomErrorVoid(const CustomError &CE) {}
 
 static Error handleCustomErrorUP(std::unique_ptr<CustomError> CE) {
-  return Error();
+  return Error::success();
 }
 
 static void handleCustomErrorUPVoid(std::unique_ptr<CustomError> CE) {}
@@ -95,14 +99,15 @@ static void handleCustomErrorUPVoid(std::unique_ptr<CustomError> CE) {}
 // Test that success values implicitly convert to false, and don't cause crashes
 // once they've been implicitly converted.
 TEST(Error, CheckedSuccess) {
-  Error E;
+  Error E = Error::success();
   EXPECT_FALSE(E) << "Unexpected error while testing Error 'Success'";
 }
 
 // Test that unchecked succes values cause an abort.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, UncheckedSuccess) {
-  EXPECT_DEATH({ Error E; }, "Program aborted due to an unhandled Error:")
+  EXPECT_DEATH({ Error E = Error::success(); },
+               "Program aborted due to an unhandled Error:")
       << "Unchecked Error Succes value did not cause abort()";
 }
 #endif
@@ -119,15 +124,15 @@ void errAsOutParamHelper(Error &Err) {
 
 // Test that ErrorAsOutParameter sets the checked flag on construction.
 TEST(Error, ErrorAsOutParameterChecked) {
-  Error E;
+  Error E = Error::success();
   errAsOutParamHelper(E);
   (void)!!E;
 }
 
 // Test that ErrorAsOutParameter clears the checked flag on destruction.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, ErrorAsOutParameterUnchecked) {
-  EXPECT_DEATH({ Error E; errAsOutParamHelper(E); },
+  EXPECT_DEATH({ Error E = Error::success(); errAsOutParamHelper(E); },
                "Program aborted due to an unhandled Error:")
       << "ErrorAsOutParameter did not clear the checked flag on destruction.";
 }
@@ -136,7 +141,7 @@ TEST(Error, ErrorAsOutParameterUnchecked) {
 // Check that we abort on unhandled failure cases. (Force conversion to bool
 // to make sure that we don't accidentally treat checked errors as handled).
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, UncheckedError) {
   auto DropUnhandledError = []() {
     Error E = make_error<CustomError>(42);
@@ -195,31 +200,31 @@ TEST(Error, HandlerTypeDeduction) {
 
   handleAllErrors(
       make_error<CustomError>(42),
-      [](const CustomError &CE) mutable { return Error::success(); });
+      [](const CustomError &CE) mutable  -> Error { return Error::success(); });
 
   handleAllErrors(make_error<CustomError>(42),
                   [](const CustomError &CE) mutable {});
 
   handleAllErrors(make_error<CustomError>(42),
-                  [](CustomError &CE) { return Error::success(); });
+                  [](CustomError &CE) -> Error { return Error::success(); });
 
   handleAllErrors(make_error<CustomError>(42), [](CustomError &CE) {});
 
   handleAllErrors(make_error<CustomError>(42),
-                  [](CustomError &CE) mutable { return Error::success(); });
+                  [](CustomError &CE) mutable -> Error { return Error::success(); });
 
   handleAllErrors(make_error<CustomError>(42), [](CustomError &CE) mutable {});
 
   handleAllErrors(
       make_error<CustomError>(42),
-      [](std::unique_ptr<CustomError> CE) { return Error::success(); });
+      [](std::unique_ptr<CustomError> CE) -> Error { return Error::success(); });
 
   handleAllErrors(make_error<CustomError>(42),
                   [](std::unique_ptr<CustomError> CE) {});
 
   handleAllErrors(
       make_error<CustomError>(42),
-      [](std::unique_ptr<CustomError> CE) mutable { return Error::success(); });
+      [](std::unique_ptr<CustomError> CE) mutable -> Error { return Error::success(); });
 
   handleAllErrors(make_error<CustomError>(42),
                   [](std::unique_ptr<CustomError> CE) mutable {});
@@ -357,13 +362,13 @@ TEST(Error, CheckJoinErrors) {
         [&](const CustomError &CE) {
           Sum += CE.getInfo();
         });
-    EXPECT_EQ(Sum, 28) << "Failed to correctly concatenate erorr lists.";
+    EXPECT_EQ(Sum, 28) << "Failed to correctly concatenate error lists.";
   }
 }
 
 // Test that we can consume success values.
 TEST(Error, ConsumeSuccess) {
-  Error E;
+  Error E = Error::success();
   consumeError(std::move(E));
 }
 
@@ -374,7 +379,7 @@ TEST(Error, ConsumeError) {
 
 // Test that handleAllUnhandledErrors crashes if an error is not caught.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, FailureToHandle) {
   auto FailToHandle = []() {
     handleAllErrors(make_error<CustomError>(7), [&](const CustomSubError &SE) {
@@ -383,7 +388,8 @@ TEST(Error, FailureToHandle) {
     });
   };
 
-  EXPECT_DEATH(FailToHandle(), "Program aborted due to an unhandled Error:")
+  EXPECT_DEATH(FailToHandle(),
+               "Failure value returned from cantFail wrapped call")
       << "Unhandled Error in handleAllErrors call did not cause an "
          "abort()";
 }
@@ -392,7 +398,7 @@ TEST(Error, FailureToHandle) {
 // Test that handleAllUnhandledErrors crashes if an error is returned from a
 // handler.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, FailureFromHandler) {
   auto ReturnErrorFromHandler = []() {
     handleAllErrors(make_error<CustomError>(7),
@@ -402,7 +408,7 @@ TEST(Error, FailureFromHandler) {
   };
 
   EXPECT_DEATH(ReturnErrorFromHandler(),
-               "Program aborted due to an unhandled Error:")
+               "Failure value returned from cantFail wrapped call")
       << " Error returned from handler in handleAllErrors call did not "
          "cause abort()";
 }
@@ -466,6 +472,39 @@ TEST(Error, ExitOnError) {
       << "exitOnError returned an unexpected error result";
 }
 
+// Test that the ExitOnError utility works as expected.
+TEST(Error, CantFailSuccess) {
+  cantFail(Error::success());
+
+  int X = cantFail(Expected<int>(42));
+  EXPECT_EQ(X, 42) << "Expected value modified by cantFail";
+
+  int Dummy = 42;
+  int &Y = cantFail(Expected<int&>(Dummy));
+  EXPECT_EQ(&Dummy, &Y) << "Reference mangled by cantFail";
+}
+
+// Test that cantFail results in a crash if you pass it a failure value.
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS && !defined(NDEBUG)
+TEST(Error, CantFailDeath) {
+  EXPECT_DEATH(
+      cantFail(make_error<StringError>("foo", inconvertibleErrorCode()),
+               "Cantfail call failed"),
+      "Cantfail call failed")
+    << "cantFail(Error) did not cause an abort for failure value";
+
+  EXPECT_DEATH(
+      {
+        auto IEC = inconvertibleErrorCode();
+        int X = cantFail(Expected<int>(make_error<StringError>("foo", IEC)));
+        (void)X;
+      },
+      "Failure value returned from cantFail wrapped call")
+    << "cantFail(Expected<int>) did not cause an abort for failure value";
+}
+#endif
+
+
 // Test Checked Expected<T> in success mode.
 TEST(Error, CheckedExpectedInSuccessMode) {
   Expected<int> A = 7;
@@ -487,7 +526,7 @@ TEST(Error, ExpectedWithReferenceType) {
 // Test Unchecked Expected<T> in success mode.
 // We expect this to blow up the same way Error would.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, UncheckedExpectedInSuccessModeDestruction) {
   EXPECT_DEATH({ Expected<int> A = 7; },
                "Expected<T> must be checked before access or destruction.")
@@ -498,7 +537,7 @@ TEST(Error, UncheckedExpectedInSuccessModeDestruction) {
 // Test Unchecked Expected<T> in success mode.
 // We expect this to blow up the same way Error would.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, UncheckedExpectedInSuccessModeAccess) {
   EXPECT_DEATH({ Expected<int> A = 7; *A; },
                "Expected<T> must be checked before access or destruction.")
@@ -509,7 +548,7 @@ TEST(Error, UncheckedExpectedInSuccessModeAccess) {
 // Test Unchecked Expected<T> in success mode.
 // We expect this to blow up the same way Error would.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, UncheckedExpectedInSuccessModeAssignment) {
   EXPECT_DEATH({ Expected<int> A = 7; A = 7; },
                "Expected<T> must be checked before access or destruction.")
@@ -529,7 +568,7 @@ TEST(Error, ExpectedInFailureMode) {
 // Check that an Expected instance with an error value doesn't allow access to
 // operator*.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, AccessExpectedInFailureMode) {
   Expected<int> A = make_error<CustomError>(42);
   EXPECT_DEATH(*A, "Expected<T> must be checked before access or destruction.")
@@ -541,7 +580,7 @@ TEST(Error, AccessExpectedInFailureMode) {
 // Check that an Expected instance with an error triggers an abort if
 // unhandled.
 // Test runs in debug mode only.
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
 TEST(Error, UnhandledExpectedInFailureMode) {
   EXPECT_DEATH({ Expected<int> A = make_error<CustomError>(42); },
                "Expected<T> must be checked before access or destruction.")
@@ -567,6 +606,59 @@ TEST(Error, ExpectedCovariance) {
   A2 = Expected<std::unique_ptr<D>>(nullptr);
   // Check A2 again before destruction.
   (void)!!A2;
+}
+
+// Test that handleExpected just returns success values.
+TEST(Error, HandleExpectedSuccess) {
+  auto ValOrErr =
+    handleExpected(Expected<int>(42),
+                   []() { return Expected<int>(43); });
+  EXPECT_TRUE(!!ValOrErr)
+    << "handleExpected should have returned a success value here";
+  EXPECT_EQ(*ValOrErr, 42)
+    << "handleExpected should have returned the original success value here";
+}
+
+enum FooStrategy { Aggressive, Conservative };
+
+static Expected<int> foo(FooStrategy S) {
+  if (S == Aggressive)
+    return make_error<CustomError>(7);
+  return 42;
+}
+
+// Test that handleExpected invokes the error path if errors are not handled.
+TEST(Error, HandleExpectedUnhandledError) {
+  // foo(Aggressive) should return a CustomError which should pass through as
+  // there is no handler for CustomError.
+  auto ValOrErr =
+    handleExpected(
+      foo(Aggressive),
+      []() { return foo(Conservative); });
+
+  EXPECT_FALSE(!!ValOrErr)
+    << "handleExpected should have returned an error here";
+  auto Err = ValOrErr.takeError();
+  EXPECT_TRUE(Err.isA<CustomError>())
+    << "handleExpected should have returned the CustomError generated by "
+    "foo(Aggressive) here";
+  consumeError(std::move(Err));
+}
+
+// Test that handleExpected invokes the fallback path if errors are handled.
+TEST(Error, HandleExpectedHandledError) {
+  // foo(Aggressive) should return a CustomError which should handle triggering
+  // the fallback path.
+  auto ValOrErr =
+    handleExpected(
+      foo(Aggressive),
+      []() { return foo(Conservative); },
+      [](const CustomError&) { /* do nothing */ });
+
+  EXPECT_TRUE(!!ValOrErr)
+    << "handleExpected should have returned a success value here";
+  EXPECT_EQ(*ValOrErr, 42)
+    << "handleExpected returned the wrong success value";
 }
 
 TEST(Error, ErrorCodeConversions) {
@@ -610,18 +702,111 @@ TEST(Error, ErrorMessage) {
   EXPECT_EQ(toString(Error::success()).compare(""), 0);
 
   Error E1 = make_error<CustomError>(0);
-  EXPECT_EQ(toString(std::move(E1)).compare("CustomError { 0}"), 0);
+  EXPECT_EQ(toString(std::move(E1)).compare("CustomError {0}"), 0);
 
   Error E2 = make_error<CustomError>(0);
   handleAllErrors(std::move(E2), [](const CustomError &CE) {
-    EXPECT_EQ(CE.message().compare("CustomError { 0}"), 0);
+    EXPECT_EQ(CE.message().compare("CustomError {0}"), 0);
   });
 
   Error E3 = joinErrors(make_error<CustomError>(0), make_error<CustomError>(1));
   EXPECT_EQ(toString(std::move(E3))
-                .compare("CustomError { 0}\n"
-                         "CustomError { 1}"),
+                .compare("CustomError {0}\n"
+                         "CustomError {1}"),
             0);
+}
+
+TEST(Error, Stream) {
+  {
+    Error OK = Error::success();
+    std::string Buf;
+    llvm::raw_string_ostream S(Buf);
+    S << OK;
+    EXPECT_EQ("success", S.str());
+    consumeError(std::move(OK));
+  }
+  {
+    Error E1 = make_error<CustomError>(0);
+    std::string Buf;
+    llvm::raw_string_ostream S(Buf);
+    S << E1;
+    EXPECT_EQ("CustomError {0}", S.str());
+    consumeError(std::move(E1));
+  }
+}
+
+TEST(Error, ErrorMatchers) {
+  EXPECT_THAT_ERROR(Error::success(), Succeeded());
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_ERROR(make_error<CustomError>(0), Succeeded()),
+      "Expected: succeeded\n  Actual: failed  (CustomError {0})");
+
+  EXPECT_THAT_ERROR(make_error<CustomError>(0), Failed());
+  EXPECT_NONFATAL_FAILURE(EXPECT_THAT_ERROR(Error::success(), Failed()),
+                          "Expected: failed\n  Actual: succeeded");
+
+  EXPECT_THAT_ERROR(make_error<CustomError>(0), Failed<CustomError>());
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_ERROR(Error::success(), Failed<CustomError>()),
+      "Expected: failed with Error of given type\n  Actual: succeeded");
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_ERROR(make_error<CustomError>(0), Failed<CustomSubError>()),
+      "Error was not of given type");
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_ERROR(
+          joinErrors(make_error<CustomError>(0), make_error<CustomError>(1)),
+          Failed<CustomError>()),
+      "multiple errors");
+
+  EXPECT_THAT_ERROR(
+      make_error<CustomError>(0),
+      Failed<CustomError>(testing::Property(&CustomError::getInfo, 0)));
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_ERROR(
+          make_error<CustomError>(0),
+          Failed<CustomError>(testing::Property(&CustomError::getInfo, 1))),
+      "Expected: failed with Error of given type and the error is an object "
+      "whose given property is equal to 1\n"
+      "  Actual: failed  (CustomError {0})");
+  EXPECT_THAT_ERROR(make_error<CustomError>(0), Failed<ErrorInfoBase>());
+
+  EXPECT_THAT_EXPECTED(Expected<int>(0), Succeeded());
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_EXPECTED(Expected<int>(make_error<CustomError>(0)),
+                           Succeeded()),
+      "Expected: succeeded\n  Actual: failed  (CustomError {0})");
+
+  EXPECT_THAT_EXPECTED(Expected<int>(make_error<CustomError>(0)), Failed());
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_EXPECTED(Expected<int>(0), Failed()),
+      "Expected: failed\n  Actual: succeeded with value 0");
+
+  EXPECT_THAT_EXPECTED(Expected<int>(0), HasValue(0));
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_EXPECTED(Expected<int>(make_error<CustomError>(0)),
+                           HasValue(0)),
+      "Expected: succeeded with value (is equal to 0)\n"
+      "  Actual: failed  (CustomError {0})");
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_EXPECTED(Expected<int>(1), HasValue(0)),
+      "Expected: succeeded with value (is equal to 0)\n"
+      "  Actual: succeeded with value 1, (isn't equal to 0)");
+
+  EXPECT_THAT_EXPECTED(Expected<int &>(make_error<CustomError>(0)), Failed());
+  int a = 1;
+  EXPECT_THAT_EXPECTED(Expected<int &>(a), Succeeded());
+  EXPECT_THAT_EXPECTED(Expected<int &>(a), HasValue(testing::Eq(1)));
+
+  EXPECT_THAT_EXPECTED(Expected<int>(1), HasValue(testing::Gt(0)));
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_EXPECTED(Expected<int>(0), HasValue(testing::Gt(1))),
+      "Expected: succeeded with value (is > 1)\n"
+      "  Actual: succeeded with value 0, (isn't > 1)");
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_THAT_EXPECTED(Expected<int>(make_error<CustomError>(0)),
+                           HasValue(testing::Gt(1))),
+      "Expected: succeeded with value (is > 1)\n"
+      "  Actual: failed  (CustomError {0})");
 }
 
 } // end anon namespace

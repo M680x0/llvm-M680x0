@@ -8,15 +8,16 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements a pass which assigns WebAssembly register
+/// This file implements a pass which assigns WebAssembly register
 /// numbers for CodeGen virtual registers.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssembly.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "WebAssembly.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblySubtarget.h"
+#include "WebAssemblyUtilities.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -32,7 +33,7 @@ using namespace llvm;
 
 namespace {
 class WebAssemblyRegNumbering final : public MachineFunctionPass {
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "WebAssembly Register Numbering";
   }
 
@@ -50,14 +51,18 @@ public:
 } // end anonymous namespace
 
 char WebAssemblyRegNumbering::ID = 0;
+INITIALIZE_PASS(WebAssemblyRegNumbering, DEBUG_TYPE,
+                "Assigns WebAssembly register numbers for virtual registers",
+                false, false)
+
 FunctionPass *llvm::createWebAssemblyRegNumbering() {
   return new WebAssemblyRegNumbering();
 }
 
 bool WebAssemblyRegNumbering::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG(dbgs() << "********** Register Numbering **********\n"
-                  "********** Function: "
-               << MF.getName() << '\n');
+  LLVM_DEBUG(dbgs() << "********** Register Numbering **********\n"
+                       "********** Function: "
+                    << MF.getName() << '\n');
 
   WebAssemblyFunctionInfo &MFI = *MF.getInfo<WebAssemblyFunctionInfo>();
   MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -68,24 +73,13 @@ bool WebAssemblyRegNumbering::runOnMachineFunction(MachineFunction &MF) {
   // variables. Assign the numbers for them first.
   MachineBasicBlock &EntryMBB = MF.front();
   for (MachineInstr &MI : EntryMBB) {
-    switch (MI.getOpcode()) {
-    case WebAssembly::ARGUMENT_I32:
-    case WebAssembly::ARGUMENT_I64:
-    case WebAssembly::ARGUMENT_F32:
-    case WebAssembly::ARGUMENT_F64:
-    case WebAssembly::ARGUMENT_v16i8:
-    case WebAssembly::ARGUMENT_v8i16:
-    case WebAssembly::ARGUMENT_v4i32:
-    case WebAssembly::ARGUMENT_v4f32: {
-      int64_t Imm = MI.getOperand(1).getImm();
-      DEBUG(dbgs() << "Arg VReg " << MI.getOperand(0).getReg() << " -> WAReg "
-                   << Imm << "\n");
-      MFI.setWAReg(MI.getOperand(0).getReg(), Imm);
+    if (!WebAssembly::isArgument(MI))
       break;
-    }
-    default:
-      break;
-    }
+
+    int64_t Imm = MI.getOperand(1).getImm();
+    LLVM_DEBUG(dbgs() << "Arg VReg " << MI.getOperand(0).getReg()
+                      << " -> WAReg " << Imm << "\n");
+    MFI.setWAReg(MI.getOperand(0).getReg(), Imm);
   }
 
   // Then assign regular WebAssembly registers for all remaining used
@@ -102,13 +96,13 @@ bool WebAssemblyRegNumbering::runOnMachineFunction(MachineFunction &MF) {
       continue;
     // Handle stackified registers.
     if (MFI.isVRegStackified(VReg)) {
-      DEBUG(dbgs() << "VReg " << VReg << " -> WAReg "
-                   << (INT32_MIN | NumStackRegs) << "\n");
+      LLVM_DEBUG(dbgs() << "VReg " << VReg << " -> WAReg "
+                        << (INT32_MIN | NumStackRegs) << "\n");
       MFI.setWAReg(VReg, INT32_MIN | NumStackRegs++);
       continue;
     }
     if (MFI.getWAReg(VReg) == WebAssemblyFunctionInfo::UnusedReg) {
-      DEBUG(dbgs() << "VReg " << VReg << " -> WAReg " << CurReg << "\n");
+      LLVM_DEBUG(dbgs() << "VReg " << VReg << " -> WAReg " << CurReg << "\n");
       MFI.setWAReg(VReg, CurReg++);
     }
   }

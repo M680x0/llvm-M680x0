@@ -14,7 +14,7 @@
 #ifndef LLVM_AVR_REGISTER_INFO_H
 #define LLVM_AVR_REGISTER_INFO_H
 
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "AVRGenRegisterInfo.inc"
@@ -42,13 +42,20 @@ public:
                            unsigned FIOperandNum,
                            RegScavenger *RS = NULL) const override;
 
-  /// Debug information queries.
   unsigned getFrameRegister(const MachineFunction &MF) const override;
 
-  /// Returns a TargetRegisterClass used for pointer values.
   const TargetRegisterClass *
   getPointerRegClass(const MachineFunction &MF,
                      unsigned Kind = 0) const override;
+
+  /// Splits a 16-bit `DREGS` register into the lo/hi register pair.
+  /// \param Reg A 16-bit register to split.
+  void splitReg(unsigned Reg, unsigned &LoReg, unsigned &HiReg) const;
+
+  bool trackLivenessAfterRegAlloc(const MachineFunction &) const override {
+    return true;
+  }
+
 };
 
 } // end namespace llvm

@@ -46,10 +46,10 @@ protected:
     // fail to initialize the AssumptionCacheTracker.
     initializeAssumptionCacheTrackerPass(*PassRegistry::getPassRegistry());
 
-#ifdef LLVM_ON_WIN32
+#ifdef _WIN32
     // On Windows, generate ELF objects by specifying "-elf" in triple
     HostTriple += "-elf";
-#endif // LLVM_ON_WIN32
+#endif // _WIN32
     HostTriple = Triple::normalize(HostTriple);
   }
 
@@ -67,7 +67,7 @@ protected:
     // If ARCH has sub-arch support, find it
     SmallVectorImpl<std::string>::const_iterator I = SupportedSubArchs.begin();
     for(; I != SupportedSubArchs.end(); ++I)
-      if (Host.getArchName().startswith(I->c_str()))
+      if (Host.getArchName().startswith(*I))
         return true;
 
     return false;

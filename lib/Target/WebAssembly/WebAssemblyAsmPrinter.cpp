@@ -8,12 +8,13 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file contains a printer that converts from our internal
+/// This file contains a printer that converts from our internal
 /// representation of machine-dependent LLVM code to the WebAssembly assembly
 /// language.
 ///
 //===----------------------------------------------------------------------===//
 
+#include "WebAssemblyAsmPrinter.h"
 #include "InstPrinter/WebAssemblyInstPrinter.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "MCTargetDesc/WebAssemblyTargetStreamer.h"
@@ -21,16 +22,19 @@
 #include "WebAssemblyMCInstLower.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblyRegisterInfo.h"
-#include "WebAssemblySubtarget.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineModuleInfoImpls.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCSymbolWasm.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
@@ -38,74 +42,20 @@ using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
 
-namespace {
-
-class WebAssemblyAsmPrinter final : public AsmPrinter {
-  const MachineRegisterInfo *MRI;
-  const WebAssemblyFunctionInfo *MFI;
-
-public:
-  WebAssemblyAsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)), MRI(nullptr), MFI(nullptr) {}
-
-private:
-  const char *getPassName() const override {
-    return "WebAssembly Assembly Printer";
-  }
-
-  //===------------------------------------------------------------------===//
-  // MachineFunctionPass Implementation.
-  //===------------------------------------------------------------------===//
-
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    MRI = &MF.getRegInfo();
-    MFI = MF.getInfo<WebAssemblyFunctionInfo>();
-    return AsmPrinter::runOnMachineFunction(MF);
-  }
-
-  //===------------------------------------------------------------------===//
-  // AsmPrinter Implementation.
-  //===------------------------------------------------------------------===//
-
-  void EmitEndOfAsmFile(Module &M) override;
-  void EmitJumpTableInfo() override;
-  void EmitConstantPool() override;
-  void EmitFunctionBodyStart() override;
-  void EmitFunctionBodyEnd() override;
-  void EmitInstruction(const MachineInstr *MI) override;
-  const MCExpr *lowerConstant(const Constant *CV) override;
-  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                       unsigned AsmVariant, const char *ExtraCode,
-                       raw_ostream &OS) override;
-  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                             unsigned AsmVariant, const char *ExtraCode,
-                             raw_ostream &OS) override;
-
-  MVT getRegType(unsigned RegNo) const;
-  const char *toString(MVT VT) const;
-  std::string regToString(const MachineOperand &MO);
-  WebAssemblyTargetStreamer *getTargetStreamer();
-};
-
-} // end anonymous namespace
-
 //===----------------------------------------------------------------------===//
 // Helpers.
 //===----------------------------------------------------------------------===//
 
 MVT WebAssemblyAsmPrinter::getRegType(unsigned RegNo) const {
+  const TargetRegisterInfo *TRI = Subtarget->getRegisterInfo();
   const TargetRegisterClass *TRC = MRI->getRegClass(RegNo);
   for (MVT T : {MVT::i32, MVT::i64, MVT::f32, MVT::f64, MVT::v16i8, MVT::v8i16,
                 MVT::v4i32, MVT::v4f32})
-    if (TRC->hasType(T))
+    if (TRI->isTypeLegalForClass(*TRC, T))
       return T;
-  DEBUG(errs() << "Unknown type for register number: " << RegNo);
+  LLVM_DEBUG(errs() << "Unknown type for register number: " << RegNo);
   llvm_unreachable("Unknown register type");
   return MVT::Other;
-}
-
-const char *WebAssemblyAsmPrinter::toString(MVT VT) const {
-  return WebAssembly::TypeToString(VT);
 }
 
 std::string WebAssemblyAsmPrinter::regToString(const MachineOperand &MO) {
@@ -126,45 +76,53 @@ WebAssemblyTargetStreamer *WebAssemblyAsmPrinter::getTargetStreamer() {
 //===----------------------------------------------------------------------===//
 // WebAssemblyAsmPrinter Implementation.
 //===----------------------------------------------------------------------===//
-static void ComputeLegalValueVTs(const Function &F, const TargetMachine &TM,
-                                 Type *Ty, SmallVectorImpl<MVT> &ValueVTs) {
-  const DataLayout &DL(F.getParent()->getDataLayout());
-  const WebAssemblyTargetLowering &TLI =
-      *TM.getSubtarget<WebAssemblySubtarget>(F).getTargetLowering();
-  SmallVector<EVT, 4> VTs;
-  ComputeValueVTs(TLI, DL, Ty, VTs);
-
-  for (EVT VT : VTs) {
-    unsigned NumRegs = TLI.getNumRegisters(F.getContext(), VT);
-    MVT RegisterVT = TLI.getRegisterType(F.getContext(), VT);
-    for (unsigned i = 0; i != NumRegs; ++i)
-      ValueVTs.push_back(RegisterVT);
-  }
-}
 
 void WebAssemblyAsmPrinter::EmitEndOfAsmFile(Module &M) {
   for (const auto &F : M) {
     // Emit function type info for all undefined functions
     if (F.isDeclarationForLinker() && !F.isIntrinsic()) {
-      SmallVector<MVT, 4> SignatureVTs;
-      ComputeLegalValueVTs(F, TM, F.getReturnType(), SignatureVTs);
-      size_t NumResults = SignatureVTs.size();
-      if (SignatureVTs.size() > 1) {
-        // WebAssembly currently can't lower returns of multiple values without
-        // demoting to sret (see WebAssemblyTargetLowering::CanLowerReturn). So
-        // replace multiple return values with a pointer parameter.
-        SignatureVTs.clear();
-        SignatureVTs.push_back(
-            MVT::getIntegerVT(M.getDataLayout().getPointerSizeInBits()));
-        NumResults = 0;
-      }
+      SmallVector<MVT, 4> Results;
+      SmallVector<MVT, 4> Params;
+      ComputeSignatureVTs(F, TM, Params, Results);
+      MCSymbol *Sym = getSymbol(&F);
+      getTargetStreamer()->emitIndirectFunctionType(Sym, Params, Results);
 
-      for (auto &Arg : F.args()) {
-        ComputeLegalValueVTs(F, TM, Arg.getType(), SignatureVTs);
+      if (TM.getTargetTriple().isOSBinFormatWasm() &&
+          F.hasFnAttribute("wasm-import-module")) {
+        MCSymbolWasm *WasmSym = cast<MCSymbolWasm>(Sym);
+        StringRef Name = F.getFnAttribute("wasm-import-module")
+                             .getValueAsString();
+        getTargetStreamer()->emitImportModule(WasmSym, Name);
       }
+    }
+  }
+  for (const auto &G : M.globals()) {
+    if (!G.hasInitializer() && G.hasExternalLinkage()) {
+      if (G.getValueType()->isSized()) {
+        uint16_t Size = M.getDataLayout().getTypeAllocSize(G.getValueType());
+        OutStreamer->emitELFSize(getSymbol(&G),
+                                 MCConstantExpr::create(Size, OutContext));
+      }
+    }
+  }
 
-      getTargetStreamer()->emitIndirectFunctionType(F.getName(), SignatureVTs,
-                                                    NumResults);
+  if (const NamedMDNode *Named = M.getNamedMetadata("wasm.custom_sections")) {
+    for (const Metadata *MD : Named->operands()) {
+      const MDTuple *Tuple = dyn_cast<MDTuple>(MD);
+      if (!Tuple || Tuple->getNumOperands() != 2)
+        continue;
+      const MDString *Name = dyn_cast<MDString>(Tuple->getOperand(0));
+      const MDString *Contents = dyn_cast<MDString>(Tuple->getOperand(1));
+      if (!Name || !Contents)
+        continue;
+
+      OutStreamer->PushSection();
+      std::string SectionName = (".custom_section." + Name->getString()).str();
+      MCSectionWasm *mySection =
+          OutContext.getWasmSection(SectionName, SectionKind::getMetadata());
+      OutStreamer->SwitchSection(mySection);
+      OutStreamer->EmitBytes(Contents->getString());
+      OutStreamer->PopSection();
     }
   }
 }
@@ -179,11 +137,10 @@ void WebAssemblyAsmPrinter::EmitJumpTableInfo() {
 }
 
 void WebAssemblyAsmPrinter::EmitFunctionBodyStart() {
-  if (!MFI->getParams().empty())
-    getTargetStreamer()->emitParam(MFI->getParams());
+  getTargetStreamer()->emitParam(CurrentFnSym, MFI->getParams());
 
   SmallVector<MVT, 4> ResultVTs;
-  const Function &F(*MF->getFunction());
+  const Function &F = MF->getFunction();
 
   // Emit the function index.
   if (MDNode *Idx = F.getMetadata("wasm.index")) {
@@ -198,37 +155,17 @@ void WebAssemblyAsmPrinter::EmitFunctionBodyStart() {
   // If the return type needs to be legalized it will get converted into
   // passing a pointer.
   if (ResultVTs.size() == 1)
-    getTargetStreamer()->emitResult(ResultVTs);
+    getTargetStreamer()->emitResult(CurrentFnSym, ResultVTs);
+  else
+    getTargetStreamer()->emitResult(CurrentFnSym, ArrayRef<MVT>());
 
-  bool AnyWARegs = false;
-  SmallVector<MVT, 16> LocalTypes;
-  for (unsigned Idx = 0, IdxE = MRI->getNumVirtRegs(); Idx != IdxE; ++Idx) {
-    unsigned VReg = TargetRegisterInfo::index2VirtReg(Idx);
-    unsigned WAReg = MFI->getWAReg(VReg);
-    // Don't declare unused registers.
-    if (WAReg == WebAssemblyFunctionInfo::UnusedReg)
-      continue;
-    // Don't redeclare parameters.
-    if (WAReg < MFI->getParams().size())
-      continue;
-    // Don't declare stackified registers.
-    if (int(WAReg) < 0)
-      continue;
-    LocalTypes.push_back(getRegType(VReg));
-    AnyWARegs = true;
-  }
-  if (AnyWARegs)
-    getTargetStreamer()->emitLocal(LocalTypes);
+  getTargetStreamer()->emitLocal(MFI->getLocals());
 
   AsmPrinter::EmitFunctionBodyStart();
 }
 
-void WebAssemblyAsmPrinter::EmitFunctionBodyEnd() {
-  getTargetStreamer()->emitEndFunc();
-}
-
 void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
-  DEBUG(dbgs() << "EmitInstruction: " << *MI << '\n');
+  LLVM_DEBUG(dbgs() << "EmitInstruction: " << *MI << '\n');
 
   switch (MI->getOpcode()) {
   case WebAssembly::ARGUMENT_I32:
@@ -256,7 +193,7 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
     if (isVerbose()) {
       OutStreamer->AddComment("fallthrough-return: $pop" +
-                              utostr(MFI->getWARegStackId(
+                              Twine(MFI->getWARegStackId(
                                   MFI->getWAReg(MI->getOperand(0).getReg()))));
       OutStreamer->AddBlankLine();
     }
@@ -282,9 +219,10 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 const MCExpr *WebAssemblyAsmPrinter::lowerConstant(const Constant *CV) {
   if (const GlobalValue *GV = dyn_cast<GlobalValue>(CV))
-    if (GV->getValueType()->isFunctionTy())
+    if (GV->getValueType()->isFunctionTy()) {
       return MCSymbolRefExpr::create(
           getSymbol(GV), MCSymbolRefExpr::VK_WebAssembly_FUNCTION, OutContext);
+    }
   return AsmPrinter::lowerConstant(CV);
 }
 
@@ -335,18 +273,17 @@ bool WebAssemblyAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   if (AsmVariant != 0)
     report_fatal_error("There are no defined alternate asm variants");
 
-  if (!ExtraCode) {
-    // TODO: For now, we just hard-code 0 as the constant offset; teach
-    // SelectInlineAsmMemoryOperand how to do address mode matching.
-    OS << "0(" + regToString(MI->getOperand(OpNo)) + ')';
-    return false;
-  }
+  // The current approach to inline asm is that "r" constraints are expressed
+  // as local indices, rather than values on the operand stack. This simplifies
+  // using "r" as it eliminates the need to push and pop the values in a
+  // particular order, however it also makes it impossible to have an "m"
+  // constraint. So we don't support it.
 
   return AsmPrinter::PrintAsmMemoryOperand(MI, OpNo, AsmVariant, ExtraCode, OS);
 }
 
 // Force static initialization.
 extern "C" void LLVMInitializeWebAssemblyAsmPrinter() {
-  RegisterAsmPrinter<WebAssemblyAsmPrinter> X(TheWebAssemblyTarget32);
-  RegisterAsmPrinter<WebAssemblyAsmPrinter> Y(TheWebAssemblyTarget64);
+  RegisterAsmPrinter<WebAssemblyAsmPrinter> X(getTheWebAssemblyTarget32());
+  RegisterAsmPrinter<WebAssemblyAsmPrinter> Y(getTheWebAssemblyTarget64());
 }

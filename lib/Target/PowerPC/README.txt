@@ -256,7 +256,7 @@ _clamp0g:
         cmpwi cr0, r3, 0
         li r2, 0
         blt cr0, LBB1_2
-; BB#1:                                                     ; %entry
+; %bb.1:                                                    ; %entry
         mr r2, r3
 LBB1_2:                                                     ; %entry
         mr r3, r2
@@ -658,3 +658,8 @@ Instruction fusion was introduced in ISA 2.06 and more opportunities added in
 ISA 2.07.  LLVM needs to add infrastructure to recognize fusion opportunities
 and force instruction pairs to be scheduled together.
 
+-----------------------------------------------------------------------------
+
+More general handling of any_extend and zero_extend:
+
+See https://reviews.llvm.org/D24924#555306

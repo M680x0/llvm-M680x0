@@ -11,17 +11,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "BPF.h"
 #include "BPFInstrInfo.h"
-#include "BPFSubtarget.h"
-#include "BPFTargetMachine.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/TargetRegistry.h"
-#include "llvm/ADT/STLExtras.h"
+#include "BPF.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/IR/DebugLoc.h"
+#include "llvm/Support/ErrorHandling.h"
+#include <cassert>
+#include <iterator>
 
 #define GET_INSTRINFO_CTOR_DTOR
 #include "BPFGenInstrInfo.inc"
@@ -37,6 +35,9 @@ void BPFInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                unsigned SrcReg, bool KillSrc) const {
   if (BPF::GPRRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(BPF::MOV_rr), DestReg)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  else if (BPF::GPR32RegClass.contains(DestReg, SrcReg))
+    BuildMI(MBB, I, DL, get(BPF::MOV_rr_32), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc));
   else
     llvm_unreachable("Impossible reg-to-reg copy");
@@ -56,6 +57,11 @@ void BPFInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
         .addReg(SrcReg, getKillRegState(IsKill))
         .addFrameIndex(FI)
         .addImm(0);
+  else if (RC == &BPF::GPR32RegClass)
+    BuildMI(MBB, I, DL, get(BPF::STW32))
+        .addReg(SrcReg, getKillRegState(IsKill))
+        .addFrameIndex(FI)
+        .addImm(0);
   else
     llvm_unreachable("Can't store this register to stack slot");
 }
@@ -71,6 +77,8 @@ void BPFInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
 
   if (RC == &BPF::GPRRegClass)
     BuildMI(MBB, I, DL, get(BPF::LDD), DestReg).addFrameIndex(FI).addImm(0);
+  else if (RC == &BPF::GPR32RegClass)
+    BuildMI(MBB, I, DL, get(BPF::LDW32), DestReg).addFrameIndex(FI).addImm(0);
   else
     llvm_unreachable("Can't load this register from stack slot");
 }
@@ -85,7 +93,7 @@ bool BPFInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   MachineBasicBlock::iterator I = MBB.end();
   while (I != MBB.begin()) {
     --I;
-    if (I->isDebugValue())
+    if (I->isDebugInstr())
       continue;
 
     // Working from the bottom, when we see a non-terminator
@@ -109,11 +117,11 @@ bool BPFInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       while (std::next(I) != MBB.end())
         std::next(I)->eraseFromParent();
       Cond.clear();
-      FBB = 0;
+      FBB = nullptr;
 
       // Delete the J if it's equivalent to a fall-through.
       if (MBB.isLayoutSuccessor(I->getOperand(0).getMBB())) {
-        TBB = 0;
+        TBB = nullptr;
         I->eraseFromParent();
         I = MBB.end();
         continue;
@@ -130,13 +138,16 @@ bool BPFInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   return false;
 }
 
-unsigned BPFInstrInfo::InsertBranch(MachineBasicBlock &MBB,
+unsigned BPFInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                     MachineBasicBlock *TBB,
                                     MachineBasicBlock *FBB,
                                     ArrayRef<MachineOperand> Cond,
-                                    const DebugLoc &DL) const {
+                                    const DebugLoc &DL,
+                                    int *BytesAdded) const {
+  assert(!BytesAdded && "code size not handled");
+
   // Shouldn't be a fall through.
-  assert(TBB && "InsertBranch must not be told to insert a fallthrough");
+  assert(TBB && "insertBranch must not be told to insert a fallthrough");
 
   if (Cond.empty()) {
     // Unconditional branch
@@ -148,13 +159,16 @@ unsigned BPFInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   llvm_unreachable("Unexpected conditional branch");
 }
 
-unsigned BPFInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
+unsigned BPFInstrInfo::removeBranch(MachineBasicBlock &MBB,
+                                    int *BytesRemoved) const {
+  assert(!BytesRemoved && "code size not handled");
+
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
 
   while (I != MBB.begin()) {
     --I;
-    if (I->isDebugValue())
+    if (I->isDebugInstr())
       continue;
     if (I->getOpcode() != BPF::JMP)
       break;

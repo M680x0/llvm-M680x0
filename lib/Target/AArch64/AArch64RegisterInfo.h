@@ -35,7 +35,7 @@ public:
   /// Code Generation virtual methods...
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
   const MCPhysReg *
-  getCalleeSavedRegsViaCopy(const MachineFunction *MF) const override;
+  getCalleeSavedRegsViaCopy(const MachineFunction *MF) const;
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const override;
 
@@ -45,6 +45,10 @@ public:
     // cold path instead of using a callee-saved register.
     return 5;
   }
+
+  const TargetRegisterClass *
+  getSubClassWithSubReg(const TargetRegisterClass *RC,
+                        unsigned Idx) const override;
 
   // Calls involved in thread-local variable lookup save more registers than
   // normal calls, so they need a different mask to represent this.
@@ -61,12 +65,18 @@ public:
   const uint32_t *getThisReturnPreservedMask(const MachineFunction &MF,
                                              CallingConv::ID) const;
 
+  /// Stack probing calls preserve different CSRs to the normal CC.
+  const uint32_t *getWindowsStackProbePreservedMask() const;
+
   BitVector getReservedRegs(const MachineFunction &MF) const override;
+  bool isConstantPhysReg(unsigned PhysReg) const override;
   const TargetRegisterClass *
   getPointerRegClass(const MachineFunction &MF,
                      unsigned Kind = 0) const override;
   const TargetRegisterClass *
   getCrossCopyRegClass(const TargetRegisterClass *RC) const override;
+
+  bool enableMultipleCopyHints() const override { return true; }
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;
   bool useFPForScavengingIndex(const MachineFunction &MF) const override;
@@ -94,6 +104,10 @@ public:
 
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
+
+  bool trackLivenessAfterRegAlloc(const MachineFunction&) const override {
+    return true;
+  }
 };
 
 } // end namespace llvm

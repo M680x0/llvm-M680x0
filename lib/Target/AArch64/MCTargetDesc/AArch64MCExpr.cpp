@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AArch64MCExpr.h"
-#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbolELF.h"
@@ -62,6 +61,7 @@ StringRef AArch64MCExpr::getVariantKindName() const {
   case VK_TPREL_LO12_NC:       return ":tprel_lo12_nc:";
   case VK_TLSDESC_LO12:        return ":tlsdesc_lo12:";
   case VK_ABS_PAGE:            return "";
+  case VK_ABS_PAGE_NC:         return ":pg_hi21_nc:";
   case VK_GOT_PAGE:            return ":got:";
   case VK_GOT_LO12:            return ":got_lo12:";
   case VK_GOTTPREL_PAGE:       return ":gottprel:";
@@ -70,6 +70,8 @@ StringRef AArch64MCExpr::getVariantKindName() const {
   case VK_GOTTPREL_G0_NC:      return ":gottprel_g0_nc:";
   case VK_TLSDESC:             return "";
   case VK_TLSDESC_PAGE:        return ":tlsdesc:";
+  case VK_SECREL_LO12:         return ":secrel_lo12:";
+  case VK_SECREL_HI12:         return ":secrel_hi12:";
   default:
     llvm_unreachable("Invalid ELF symbol kind");
   }

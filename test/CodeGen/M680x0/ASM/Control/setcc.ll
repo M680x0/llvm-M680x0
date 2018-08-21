@@ -48,27 +48,6 @@ entry:
   ret i64 %iftmp.2.0
 }
 
-@v4 = common global i32 0, align 4
-
-; x00-LABEL: t4:
-; x00:       cmpi.l #1, (v4,%pc)
-; x00:       subx.w %d0, %d0
-; x00:       lsr.w
-; x00:       add.w
-; x00:       lsl.l
-
-define i32 @t4(i32 %a) {
-entry:
-  %0 = load i32, i32* @v4, align 4
-  %not.tobool = icmp eq i32 %0, 0
-  %conv.i = sext i1 %not.tobool to i16
-  %call.lobit = lshr i16 %conv.i, 15
-  %add.i.1 = add nuw nsw i16 %call.lobit, 1
-  %conv4.2 = zext i16 %add.i.1 to i32
-  %add = shl nuw nsw i32 %conv4.2, 16
-  ret i32 %add
-}
-
 
 ; x00-LABEL: t5:
 ; x00:       move.l #31

@@ -34,22 +34,22 @@
 name: MxScc_D
 body: |
   bb.0:
-      %bd0 = SETd8t  implicit %ccr
-      %bd1 = SETd8f  implicit %ccr
-      %bd2 = SETd8hi implicit %ccr
-      %bd3 = SETd8ls implicit %ccr
-      %bd4 = SETd8cc implicit %ccr
-      %bd5 = SETd8cs implicit %ccr
-      %bd6 = SETd8ne implicit %ccr
-      %bd7 = SETd8eq implicit %ccr
-      %bd0 = SETd8vc implicit %ccr
-      %bd0 = SETd8vs implicit %ccr
-      %bd0 = SETd8pl implicit %ccr
-      %bd0 = SETd8mi implicit %ccr
-      %bd0 = SETd8ge implicit %ccr
-      %bd0 = SETd8lt implicit %ccr
-      %bd0 = SETd8gt implicit %ccr
-      %bd0 = SETd8le implicit %ccr
+      $bd0 = SETd8t  implicit $ccr
+      $bd1 = SETd8f  implicit $ccr
+      $bd2 = SETd8hi implicit $ccr
+      $bd3 = SETd8ls implicit $ccr
+      $bd4 = SETd8cc implicit $ccr
+      $bd5 = SETd8cs implicit $ccr
+      $bd6 = SETd8ne implicit $ccr
+      $bd7 = SETd8eq implicit $ccr
+      $bd0 = SETd8vc implicit $ccr
+      $bd0 = SETd8vs implicit $ccr
+      $bd0 = SETd8pl implicit $ccr
+      $bd0 = SETd8mi implicit $ccr
+      $bd0 = SETd8ge implicit $ccr
+      $bd0 = SETd8lt implicit $ccr
+      $bd0 = SETd8gt implicit $ccr
+      $bd0 = SETd8le implicit $ccr
 
 ...
 --- # MxScc_ARID
@@ -108,21 +108,21 @@ body: |
 name: MxScc_ARID
 body: |
   bb.0:
-      SETp8t  -1, %a0, implicit %ccr
-      SETp8f  42, %a1, implicit %ccr
-      SETp8hi  0, %a2, implicit %ccr
-      SETp8ls  0, %a3, implicit %ccr
-      SETp8cc  0, %a4, implicit %ccr
-      SETp8cs  0, %a5, implicit %ccr
-      SETp8ne  0, %a6, implicit %ccr
-      SETp8eq  0, %a0, implicit %ccr
-      SETp8vc  0, %a0, implicit %ccr
-      SETp8vs  0, %a0, implicit %ccr
-      SETp8pl  0, %a0, implicit %ccr
-      SETp8mi  0, %a0, implicit %ccr
-      SETp8ge  0, %a0, implicit %ccr
-      SETp8lt  0, %a0, implicit %ccr
-      SETp8gt  0, %a0, implicit %ccr
-      SETp8le  0, %a0, implicit %ccr
+      SETp8t  -1, $a0, implicit $ccr
+      SETp8f  42, $a1, implicit $ccr
+      SETp8hi  0, $a2, implicit $ccr
+      SETp8ls  0, $a3, implicit $ccr
+      SETp8cc  0, $a4, implicit $ccr
+      SETp8cs  0, $a5, implicit $ccr
+      SETp8ne  0, $a6, implicit $ccr
+      SETp8eq  0, $a0, implicit $ccr
+      SETp8vc  0, $a0, implicit $ccr
+      SETp8vs  0, $a0, implicit $ccr
+      SETp8pl  0, $a0, implicit $ccr
+      SETp8mi  0, $a0, implicit $ccr
+      SETp8ge  0, $a0, implicit $ccr
+      SETp8lt  0, $a0, implicit $ccr
+      SETp8gt  0, $a0, implicit $ccr
+      SETp8le  0, $a0, implicit $ccr
 
 ...

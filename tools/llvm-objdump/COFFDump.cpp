@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements the COFF-specific dumper for llvm-objdump.
+/// This file implements the COFF-specific dumper for llvm-objdump.
 /// It outputs the Win64 EH data structures as plain text.
 /// The encoding of the unwind codes is described in MSDN:
 /// http://msdn.microsoft.com/en-us/library/ck9asaa9.aspx
@@ -20,12 +20,8 @@
 #include "llvm/Object/COFFImportFile.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/Win64EH.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cstring>
-#include <system_error>
 
 using namespace llvm;
 using namespace object;
@@ -177,12 +173,10 @@ resolveSectionAndAddress(const COFFObjectFile *Obj, const SymbolRef &Sym,
 // the function returns the symbol used for the relocation at the offset.
 static std::error_code resolveSymbol(const std::vector<RelocationRef> &Rels,
                                      uint64_t Offset, SymbolRef &Sym) {
-  for (std::vector<RelocationRef>::const_iterator I = Rels.begin(),
-                                                  E = Rels.end();
-                                                  I != E; ++I) {
-    uint64_t Ofs = I->getOffset();
+  for (auto &R : Rels) {
+    uint64_t Ofs = R.getOffset();
     if (Ofs == Offset) {
-      Sym = *I->getSymbol();
+      Sym = *R.getSymbol();
       return std::error_code();
     }
   }
@@ -459,7 +453,7 @@ static bool getPDataSection(const COFFObjectFile *Obj,
       Rels.push_back(Reloc);
 
     // Sort relocations by address.
-    std::sort(Rels.begin(), Rels.end(), RelocAddressLess);
+    llvm::sort(Rels.begin(), Rels.end(), RelocAddressLess);
 
     ArrayRef<uint8_t> Contents;
     error(Obj->getSectionContents(Pdata, Contents));
@@ -643,9 +637,9 @@ void llvm::printCOFFSymbolTable(const object::COFFImportFile *i) {
 
 void llvm::printCOFFSymbolTable(const COFFObjectFile *coff) {
   for (unsigned SI = 0, SE = coff->getNumberOfSymbols(); SI != SE; ++SI) {
-    ErrorOr<COFFSymbolRef> Symbol = coff->getSymbol(SI);
+    Expected<COFFSymbolRef> Symbol = coff->getSymbol(SI);
     StringRef Name;
-    error(Symbol.getError());
+    error(errorToErrorCode(Symbol.takeError()));
     error(coff->getSymbolName(*Symbol, Name));
 
     outs() << "[" << format("%2d", SI) << "]"

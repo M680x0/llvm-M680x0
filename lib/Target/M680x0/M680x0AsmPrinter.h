@@ -35,23 +35,18 @@ class LLVM_LIBRARY_VISIBILITY M680x0AsmPrinter : public AsmPrinter {
 
   void EmitInstrWithMacroNoAT(const MachineInstr *MI);
 
-private:
-
 public:
-
   const M680x0Subtarget *Subtarget;
   const M680x0MachineFunctionInfo *MMFI;
   std::unique_ptr<M680x0MCInstLower> MCInstLowering;
 
   explicit M680x0AsmPrinter(TargetMachine &TM,
                             std::unique_ptr<MCStreamer> Streamer)
-    : AsmPrinter(TM, std::move(Streamer)) {
+      : AsmPrinter(TM, std::move(Streamer)) {
     Subtarget = static_cast<M680x0TargetMachine &>(TM).getSubtargetImpl();
   }
 
-  virtual const char *getPassName() const override {
-    return "M680x0 Assembly Printer";
-  }
+  StringRef getPassName() const override { return "M680x0 Assembly Printer"; }
 
   virtual bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -61,6 +56,6 @@ public:
   void EmitStartOfAsmFile(Module &M) override;
   void EmitEndOfAsmFile(Module &M) override;
 };
-}
+} // namespace llvm
 
 #endif

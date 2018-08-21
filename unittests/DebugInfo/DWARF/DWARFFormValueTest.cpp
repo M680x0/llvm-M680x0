@@ -10,7 +10,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/Dwarf.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/LEB128.h"
 #include "gtest/gtest.h"
@@ -20,20 +20,7 @@ using namespace dwarf;
 
 namespace {
 
-TEST(DWARFFormValue, FixedFormSizes) {
-  // Size of DW_FORM_addr and DW_FORM_ref_addr are equal in DWARF2,
-  // DW_FORM_ref_addr is always 4 bytes in DWARF32 starting from DWARF3.
-  ArrayRef<uint8_t> sizes = DWARFFormValue::getFixedFormSizes(4, 2);
-  EXPECT_EQ(sizes[DW_FORM_addr], sizes[DW_FORM_ref_addr]);
-  sizes = DWARFFormValue::getFixedFormSizes(8, 2);
-  EXPECT_EQ(sizes[DW_FORM_addr], sizes[DW_FORM_ref_addr]);
-  sizes = DWARFFormValue::getFixedFormSizes(8, 3);
-  EXPECT_EQ(4, sizes[DW_FORM_ref_addr]);
-  // Check that we don't have fixed form sizes for weird address sizes.
-  EXPECT_EQ(0U, DWARFFormValue::getFixedFormSizes(16, 2).size());
-}
-
-bool isFormClass(uint16_t Form, DWARFFormValue::FormClass FC) {
+bool isFormClass(dwarf::Form Form, DWARFFormValue::FormClass FC) {
   return DWARFFormValue(Form).isFormClass(FC);
 }
 
@@ -52,14 +39,14 @@ TEST(DWARFFormValue, FormClass) {
 }
 
 template<typename RawTypeT>
-DWARFFormValue createDataXFormValue(uint16_t Form, RawTypeT Value) {
+DWARFFormValue createDataXFormValue(dwarf::Form Form, RawTypeT Value) {
   char Raw[sizeof(RawTypeT)];
   memcpy(Raw, &Value, sizeof(RawTypeT));
   uint32_t Offset = 0;
   DWARFFormValue Result(Form);
-  DataExtractor Data(StringRef(Raw, sizeof(RawTypeT)),
-                     sys::IsLittleEndianHost, sizeof(void*));
-  Result.extractValue(Data, &Offset, nullptr);
+  DWARFDataExtractor Data(StringRef(Raw, sizeof(RawTypeT)),
+                          sys::IsLittleEndianHost, sizeof(void *));
+  Result.extractValue(Data, &Offset, {0, 0, dwarf::DwarfFormat::DWARF32});
   return Result;
 }
 
@@ -69,8 +56,8 @@ DWARFFormValue createULEBFormValue(uint64_t Value) {
   encodeULEB128(Value, OS);
   uint32_t Offset = 0;
   DWARFFormValue Result(DW_FORM_udata);
-  DataExtractor Data(OS.str(), sys::IsLittleEndianHost, sizeof(void*));
-  Result.extractValue(Data, &Offset, nullptr);
+  DWARFDataExtractor Data(OS.str(), sys::IsLittleEndianHost, sizeof(void *));
+  Result.extractValue(Data, &Offset, {0, 0, dwarf::DwarfFormat::DWARF32});
   return Result;
 }
 
@@ -80,8 +67,8 @@ DWARFFormValue createSLEBFormValue(int64_t Value) {
   encodeSLEB128(Value, OS);
   uint32_t Offset = 0;
   DWARFFormValue Result(DW_FORM_sdata);
-  DataExtractor Data(OS.str(), sys::IsLittleEndianHost, sizeof(void*));
-  Result.extractValue(Data, &Offset, nullptr);
+  DWARFDataExtractor Data(OS.str(), sys::IsLittleEndianHost, sizeof(void *));
+  Result.extractValue(Data, &Offset, {0, 0, dwarf::DwarfFormat::DWARF32});
   return Result;
 }
 
@@ -120,6 +107,18 @@ TEST(DWARFFormValue, SignedConstantForms) {
   EXPECT_EQ(LEBMax.getAsSignedConstant().getValue(), LLONG_MAX);
   EXPECT_EQ(LEB1.getAsSignedConstant().getValue(), -42);
   EXPECT_EQ(LEB2.getAsSignedConstant().getValue(), 42);
+
+  // Data16 is a little tricky.
+  char Cksum[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  DWARFFormValue Data16(DW_FORM_data16);
+  DWARFDataExtractor DE16(StringRef(Cksum, 16), sys::IsLittleEndianHost,
+                          sizeof(void *));
+  uint32_t Offset = 0;
+  Data16.extractValue(DE16, &Offset, {0, 0, dwarf::DwarfFormat::DWARF32});
+  SmallString<32> Str;
+  raw_svector_ostream Res(Str);
+  Data16.dump(Res, DIDumpOptions());
+  EXPECT_EQ(memcmp(Str.data(), "000102030405060708090a0b0c0d0e0f", 32), 0);
 }
 
 } // end anonymous namespace

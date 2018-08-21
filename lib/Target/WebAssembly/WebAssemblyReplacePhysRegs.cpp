@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file implements a pass that replaces physical registers with
+/// This file implements a pass that replaces physical registers with
 /// virtual registers.
 ///
 /// LLVM expects certain physical registers, such as a stack pointer. However,
@@ -19,8 +19,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssembly.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "WebAssembly.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblySubtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -39,7 +39,7 @@ public:
   WebAssemblyReplacePhysRegs() : MachineFunctionPass(ID) {}
 
 private:
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "WebAssembly Replace Physical Registers";
   }
 
@@ -53,12 +53,16 @@ private:
 } // end anonymous namespace
 
 char WebAssemblyReplacePhysRegs::ID = 0;
+INITIALIZE_PASS(WebAssemblyReplacePhysRegs, DEBUG_TYPE,
+                "Replace physical registers with virtual registers",
+                false, false)
+
 FunctionPass *llvm::createWebAssemblyReplacePhysRegs() {
   return new WebAssemblyReplacePhysRegs();
 }
 
 bool WebAssemblyReplacePhysRegs::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG({
+  LLVM_DEBUG({
     dbgs() << "********** Replace Physical Registers **********\n"
            << "********** Function: " << MF.getName() << '\n';
   });
@@ -76,7 +80,7 @@ bool WebAssemblyReplacePhysRegs::runOnMachineFunction(MachineFunction &MF) {
   for (unsigned PReg = WebAssembly::NoRegister + 1;
        PReg < WebAssembly::NUM_TARGET_REGS; ++PReg) {
     // Skip fake registers that are never used explicitly.
-    if (PReg == WebAssembly::EXPR_STACK || PReg == WebAssembly::ARGUMENTS)
+    if (PReg == WebAssembly::VALUE_STACK || PReg == WebAssembly::ARGUMENTS)
       continue;
 
     // Replace explicit uses of the physical register with a virtual register.

@@ -1,5 +1,9 @@
-; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu -mcpu=pwr8 -mattr=-direct-move | FileCheck %s
-; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64le-unknown-linux-gnu -mcpu=pwr8 -mattr=-direct-move | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu \
+; RUN:   -mcpu=pwr8 -mattr=-direct-move | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64le-unknown-linux-gnu \
+; RUN:   -mcpu=pwr8 -mattr=-direct-move | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64le-unknown-linux-gnu \
+; RUN:   -mcpu=pwr9 -mattr=-direct-move | FileCheck %s -check-prefix=CHECK-P9
 
 @d = common global double 0.000000e+00, align 8
 @f = common global float 0.000000e+00, align 4
@@ -16,7 +20,7 @@ entry:
   ret void
 ; CHECK-LABEL: @dblToInt
 ; CHECK: xscvdpsxws [[REGCONV1:[0-9]+]],
-; CHECK: stxsiwx [[REGCONV1]],
+; CHECK: stfiwx [[REGCONV1]],
 }
 
 ; Function Attrs: nounwind
@@ -29,7 +33,7 @@ entry:
   ret void
 ; CHECK-LABEL: @fltToInt
 ; CHECK: xscvdpsxws [[REGCONV2:[0-9]+]],
-; CHECK: stxsiwx [[REGCONV2]],
+; CHECK: stfiwx [[REGCONV2]],
 }
 
 ; Function Attrs: nounwind
@@ -41,7 +45,7 @@ entry:
   store volatile double %conv, double* %dd, align 8
   ret void
 ; CHECK-LABEL: @intToDbl
-; CHECK: lxsiwax [[REGLD1:[0-9]+]],
+; CHECK: lfiwax [[REGLD1:[0-9]+]],
 ; CHECK: xscvsxddp {{[0-9]+}}, [[REGLD1]]
 }
 
@@ -54,7 +58,7 @@ entry:
   store volatile float %conv, float* %ff, align 4
   ret void
 ; CHECK-LABEL: @intToFlt
-; CHECK: lxsiwax [[REGLD2:[0-9]+]],
+; CHECK: lfiwax [[REGLD2:[0-9]+]],
 ; CHECK: xscvsxdsp {{[0-9]}}, [[REGLD2]]
 }
 
@@ -68,7 +72,7 @@ entry:
   ret void
 ; CHECK-LABEL: @dblToUInt
 ; CHECK: xscvdpuxws [[REGCONV3:[0-9]+]],
-; CHECK: stxsiwx [[REGCONV3]],
+; CHECK: stfiwx [[REGCONV3]],
 }
 
 ; Function Attrs: nounwind
@@ -81,7 +85,7 @@ entry:
   ret void
 ; CHECK-LABEL: @fltToUInt
 ; CHECK: xscvdpuxws [[REGCONV4:[0-9]+]],
-; CHECK: stxsiwx [[REGCONV4]],
+; CHECK: stfiwx [[REGCONV4]],
 }
 
 ; Function Attrs: nounwind
@@ -93,7 +97,7 @@ entry:
   store volatile double %conv, double* %dd, align 8
   ret void
 ; CHECK-LABEL: @uIntToDbl
-; CHECK: lxsiwzx [[REGLD3:[0-9]+]],
+; CHECK: lfiwzx [[REGLD3:[0-9]+]],
 ; CHECK: xscvuxddp {{[0-9]+}}, [[REGLD3]]
 }
 
@@ -106,7 +110,7 @@ entry:
   store volatile float %conv, float* %ff, align 4
   ret void
 ; CHECK-LABEL: @uIntToFlt
-; CHECK: lxsiwzx [[REGLD4:[0-9]+]],
+; CHECK: lfiwzx [[REGLD4:[0-9]+]],
 ; CHECK: xscvuxdsp {{[0-9]+}}, [[REGLD4]]
 }
 
@@ -119,8 +123,11 @@ entry:
   store volatile float %conv, float* %ff, align 4
   ret void
 ; CHECK-LABEL: @dblToFloat
-; CHECK: lxsdx [[REGLD5:[0-9]+]],
-; CHECK: stxsspx [[REGLD5]],
+; CHECK: lfdx [[REGLD5:[0-9]+]],
+; CHECK: stfsx [[REGLD5]],
+; CHECK-P9-LABEL: @dblToFloat
+; CHECK-P9: lfd [[REGLD5:[0-9]+]],
+; CHECK-P9: stfs [[REGLD5]],
 }
 
 ; Function Attrs: nounwind
@@ -132,6 +139,9 @@ entry:
   store volatile double %conv, double* %dd, align 8
   ret void
 ; CHECK-LABEL: @floatToDbl
-; CHECK: lxsspx [[REGLD5:[0-9]+]],
-; CHECK: stxsdx [[REGLD5]],
+; CHECK: lfsx [[REGLD5:[0-9]+]],
+; CHECK: stfdx [[REGLD5]],
+; CHECK-P9-LABEL: @floatToDbl
+; CHECK-P9: lfs [[REGLD5:[0-9]+]],
+; CHECK-P9: stfd [[REGLD5]],
 }

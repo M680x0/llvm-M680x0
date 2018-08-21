@@ -3,11 +3,17 @@
 	.arch armv8-a+crypto
 
 	aesd v0.16b, v2.16b
+	eor v0.16b, v0.16b, v2.16b
 
 # CHECK: 	aesd	v0.16b, v2.16b
+# CHECK:        eor     v0.16b, v0.16b, v2.16b
 
-	.arch armv8.1-a+ras
-	esb
+// PR32873: without extra features, '.arch' is currently ignored.
+// Add an unrelated feature to accept the directive.
+	.arch armv8.1-a+crypto
+        casa  w5, w7, [x20]
+# CHECK:        casa    w5, w7, [x20]
 
-# CHECK: 	esb
-
+	.arch armv8-a+lse
+	casa  w5, w7, [x20]
+# CHECK:        casa    w5, w7, [x20]

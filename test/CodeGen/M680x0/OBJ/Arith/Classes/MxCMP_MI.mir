@@ -39,10 +39,10 @@
 name: MxCMP_MI_PCI
 body: |
   bb.0:
-    CMP8ki   0, -1, %d1, implicit-def %ccr
-    CMP8ki  -1,  0, %d0, implicit-def %ccr
-    CMP32ki -1,  0, %d7, implicit-def %ccr
-    CMP32ki 42, -1, %d1, implicit-def %ccr
+    CMP8ki   0, -1, $d1, implicit-def $ccr
+    CMP8ki  -1,  0, $d0, implicit-def $ccr
+    CMP32ki -1,  0, $d7, implicit-def $ccr
+    CMP32ki 42, -1, $d1, implicit-def $ccr
 
 ...
 --- # PCD
@@ -71,10 +71,10 @@ body: |
 name: MxCMP_MI_PCD
 body: |
   bb.0:
-    CMP8qi   0,  0, implicit-def %ccr
-    CMP8qi  -1, -1, implicit-def %ccr
-    CMP32qi -1,  0, implicit-def %ccr
-    CMP32qi 42,  0, implicit-def %ccr
+    CMP8qi   0,  0, implicit-def $ccr
+    CMP8qi  -1, -1, implicit-def $ccr
+    CMP32qi -1,  0, implicit-def $ccr
+    CMP32qi 42,  0, implicit-def $ccr
 
 ...
 --- # ARII
@@ -106,10 +106,10 @@ body: |
 name: MxCMP_MI_ARII
 body: |
   bb.0:
-    CMP8fi   0, -1, %a1, %a0, implicit-def %ccr
-    CMP8fi  -1,  0, %a0, %a0, implicit-def %ccr
-    CMP32fi -1,  0, %a6, %a0, implicit-def %ccr
-    CMP32fi 42, -1, %a1, %a0, implicit-def %ccr
+    CMP8fi   0, -1, $a1, $a0, implicit-def $ccr
+    CMP8fi  -1,  0, $a0, $a0, implicit-def $ccr
+    CMP32fi -1,  0, $a6, $a0, implicit-def $ccr
+    CMP32fi 42, -1, $a1, $a0, implicit-def $ccr
 
 ...
 --- # ARID
@@ -138,10 +138,10 @@ body: |
 name: MxCMP_MI_ARID
 body: |
   bb.0:
-    CMP8pi   0, -1, %a1, implicit-def %ccr
-    CMP8pi  -1,  0, %a0, implicit-def %ccr
-    CMP32pi -1,  0, %a6, implicit-def %ccr
-    CMP32pi 42, -1, %a1, implicit-def %ccr
+    CMP8pi   0, -1, $a1, implicit-def $ccr
+    CMP8pi  -1,  0, $a0, implicit-def $ccr
+    CMP32pi -1,  0, $a6, implicit-def $ccr
+    CMP32pi 42, -1, $a1, implicit-def $ccr
 
 ...
 --- # ARI
@@ -164,9 +164,9 @@ body: |
 name: MxCMP_MI_ARI
 body: |
   bb.0:
-    CMP8ji   0, %a1, implicit-def %ccr
-    CMP8ji  -1, %a0, implicit-def %ccr
-    CMP32ji -1, %a6, implicit-def %ccr
-    CMP32ji 42, %a1, implicit-def %ccr
+    CMP8ji   0, $a1, implicit-def $ccr
+    CMP8ji  -1, $a0, implicit-def $ccr
+    CMP32ji -1, $a6, implicit-def $ccr
+    CMP32ji 42, $a1, implicit-def $ccr
 
 ...

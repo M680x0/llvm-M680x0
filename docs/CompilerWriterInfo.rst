@@ -40,7 +40,7 @@ Lanai
 MIPS
 ----
 
-* `MIPS Processor Architecture <https://imgtec.com/mips/architectures/>`_
+* `MIPS Processor Architecture <https://www.mips.com/products/>`_
 
 * `MIPS 64-bit ELF Object File Specification <http://techpubs.sgi.com/library/manuals/4000/007-4658-001/pdf/007-4658-001.pdf>`_
 
@@ -72,14 +72,11 @@ Other documents, collections, notes
 AMDGPU
 ------
 
-* `AMD R6xx shader ISA <http://developer.amd.com/wordpress/media/2012/10/R600_Instruction_Set_Architecture.pdf>`_
-* `AMD R7xx shader ISA <http://developer.amd.com/wordpress/media/2012/10/R700-Family_Instruction_Set_Architecture.pdf>`_
-* `AMD Evergreen shader ISA <http://developer.amd.com/wordpress/media/2012/10/AMD_Evergreen-Family_Instruction_Set_Architecture.pdf>`_
-* `AMD Cayman/Trinity shader ISA <http://developer.amd.com/wordpress/media/2012/10/AMD_HD_6900_Series_Instruction_Set_Architecture.pdf>`_
-* `AMD Southern Islands Series ISA <http://developer.amd.com/wordpress/media/2012/12/AMD_Southern_Islands_Instruction_Set_Architecture.pdf>`_
-* `AMD Sea Islands Series ISA <http://developer.amd.com/wordpress/media/2013/07/AMD_Sea_Islands_Instruction_Set_Architecture.pdf>`_
-* `AMD GPU Programming Guide <http://developer.amd.com/download/AMD_Accelerated_Parallel_Processing_OpenCL_Programming_Guide.pdf>`_
-* `AMD Compute Resources <http://developer.amd.com/tools/heterogeneous-computing/amd-accelerated-parallel-processing-app-sdk/documentation/>`_
+Refer to :doc:`AMDGPUUsage` for additional documentation.
+
+RISC-V
+------
+* `RISC-V User-Level ISA Specification <https://riscv.org/specifications/>`_
 
 SPARC
 -----
@@ -96,7 +93,7 @@ SystemZ
 X86
 ---
 
-* `AMD processor manuals <http://www.amd.com/us-en/Processors/TechnicalResources/0,,30_182_739,00.html>`_
+* `AMD processor manuals <http://developer.amd.com/resources/developer-guides-manuals/>`_
 * `Intel 64 and IA-32 manuals <http://www.intel.com/content/www/us/en/processors/architectures-software-developer-manuals.html>`_
 * `Intel Itanium documentation <http://www.intel.com/design/itanium/documentation.htm?iid=ipp_srvr_proc_itanium2+techdocs>`_
 * `X86 and X86-64 SysV psABI <https://github.com/hjl-tools/x86-psABI/wiki/X86-psABI>`_
@@ -122,7 +119,7 @@ ABI
 ===
 
 * `System V Application Binary Interface <http://www.sco.com/developers/gabi/latest/contents.html>`_
-* `Itanium C++ ABI <http://mentorembedded.github.io/cxx-abi/>`_
+* `Itanium C++ ABI <http://itanium-cxx-abi.github.io/cxx-abi/>`_
 
 Linux
 -----

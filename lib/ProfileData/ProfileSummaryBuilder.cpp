@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/Attributes.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Type.h"
@@ -28,8 +27,8 @@ using namespace llvm;
 static const uint32_t DefaultCutoffsData[] = {
     10000,  /*  1% */
     100000, /* 10% */
-    200000, 300000, 400000, 500000, 600000, 500000, 600000, 700000,
-    800000, 900000, 950000, 990000, 999000, 999900, 999990, 999999};
+    200000, 300000, 400000, 500000, 600000, 700000, 800000,
+    900000, 950000, 990000, 999000, 999900, 999990, 999999};
 const ArrayRef<uint32_t> ProfileSummaryBuilder::DefaultCutoffs =
     DefaultCutoffsData;
 
@@ -59,14 +58,14 @@ void SampleProfileSummaryBuilder::addRecord(
 void ProfileSummaryBuilder::computeDetailedSummary() {
   if (DetailedSummaryCutoffs.empty())
     return;
+  llvm::sort(DetailedSummaryCutoffs.begin(), DetailedSummaryCutoffs.end());
   auto Iter = CountFrequencies.begin();
-  auto End = CountFrequencies.end();
-  std::sort(DetailedSummaryCutoffs.begin(), DetailedSummaryCutoffs.end());
+  const auto End = CountFrequencies.end();
 
   uint32_t CountsSeen = 0;
   uint64_t CurrSum = 0, Count = 0;
 
-  for (uint32_t Cutoff : DetailedSummaryCutoffs) {
+  for (const uint32_t Cutoff : DetailedSummaryCutoffs) {
     assert(Cutoff <= 999999);
     APInt Temp(128, TotalCount);
     APInt N(128, Cutoff);

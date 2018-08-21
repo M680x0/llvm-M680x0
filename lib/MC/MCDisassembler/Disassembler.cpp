@@ -27,8 +27,8 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cstddef>
 #include <cstring>
@@ -130,7 +130,7 @@ void LLVMDisasmDispose(LLVMDisasmContextRef DCR){
   delete DC;
 }
 
-/// \brief Emits the comments that are stored in \p DC comment stream.
+/// Emits the comments that are stored in \p DC comment stream.
 /// Each comment in the comment stream must end with a newline.
 static void emitComments(LLVMDisasmContext *DC,
                          formatted_raw_ostream &FormattedOS) {
@@ -138,7 +138,7 @@ static void emitComments(LLVMDisasmContext *DC,
   StringRef Comments = DC->CommentsToEmit.str();
   // Get the default information for printing a comment.
   const MCAsmInfo *MAI = DC->getAsmInfo();
-  const char *CommentBegin = MAI->getCommentString();
+  StringRef CommentBegin = MAI->getCommentString();
   unsigned CommentColumn = MAI->getCommentColumn();
   bool IsFirst = true;
   while (!Comments.empty()) {
@@ -158,7 +158,7 @@ static void emitComments(LLVMDisasmContext *DC,
   DC->CommentsToEmit.clear();
 }
 
-/// \brief Gets latency information for \p Inst from the itinerary
+/// Gets latency information for \p Inst from the itinerary
 /// scheduling model, based on \p DC information.
 /// \return The maximum expected latency over all the operands or -1
 /// if no information is available.
@@ -184,7 +184,7 @@ static int getItineraryLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
   return Latency;
 }
 
-/// \brief Gets latency information for \p Inst, based on \p DC information.
+/// Gets latency information for \p Inst, based on \p DC information.
 /// \return The maximum expected latency over all the definitions or -1
 /// if no information is available.
 static int getLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
@@ -209,7 +209,7 @@ static int getLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
     return NoInformationAvailable;
 
   // Compute output latency.
-  int Latency = 0;
+  int16_t Latency = 0;
   for (unsigned DefIdx = 0, DefEnd = SCDesc->NumWriteLatencyEntries;
        DefIdx != DefEnd; ++DefIdx) {
     // Lookup the definition's write latency in SubtargetInfo.
@@ -221,7 +221,7 @@ static int getLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
   return Latency;
 }
 
-/// \brief Emits latency information in DC->CommentStream for \p Inst, based
+/// Emits latency information in DC->CommentStream for \p Inst, based
 /// on the information available in \p DC.
 static void emitLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
   int Latency = getLatency(DC, Inst);

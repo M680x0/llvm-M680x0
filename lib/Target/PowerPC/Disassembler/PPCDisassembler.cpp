@@ -51,11 +51,11 @@ static MCDisassembler *createPPCLEDisassembler(const Target &T,
 
 extern "C" void LLVMInitializePowerPCDisassembler() {
   // Register the disassembler for each target.
-  TargetRegistry::RegisterMCDisassembler(ThePPC32Target,
+  TargetRegistry::RegisterMCDisassembler(getThePPC32Target(),
                                          createPPCDisassembler);
-  TargetRegistry::RegisterMCDisassembler(ThePPC64Target,
+  TargetRegistry::RegisterMCDisassembler(getThePPC64Target(),
                                          createPPCDisassembler);
-  TargetRegistry::RegisterMCDisassembler(ThePPC64LETarget,
+  TargetRegistry::RegisterMCDisassembler(getThePPC64LETarget(),
                                          createPPCLEDisassembler);
 }
 
@@ -89,6 +89,17 @@ static const unsigned FRegs[] = {
   PPC::F28, PPC::F29, PPC::F30, PPC::F31
 };
 
+static const unsigned VFRegs[] = {
+  PPC::VF0, PPC::VF1, PPC::VF2, PPC::VF3,
+  PPC::VF4, PPC::VF5, PPC::VF6, PPC::VF7,
+  PPC::VF8, PPC::VF9, PPC::VF10, PPC::VF11,
+  PPC::VF12, PPC::VF13, PPC::VF14, PPC::VF15,
+  PPC::VF16, PPC::VF17, PPC::VF18, PPC::VF19,
+  PPC::VF20, PPC::VF21, PPC::VF22, PPC::VF23,
+  PPC::VF24, PPC::VF25, PPC::VF26, PPC::VF27,
+  PPC::VF28, PPC::VF29, PPC::VF30, PPC::VF31
+};
+
 static const unsigned VRegs[] = {
   PPC::V0, PPC::V1, PPC::V2, PPC::V3,
   PPC::V4, PPC::V5, PPC::V6, PPC::V7,
@@ -110,14 +121,14 @@ static const unsigned VSRegs[] = {
   PPC::VSL24, PPC::VSL25, PPC::VSL26, PPC::VSL27,
   PPC::VSL28, PPC::VSL29, PPC::VSL30, PPC::VSL31,
 
-  PPC::VSH0, PPC::VSH1, PPC::VSH2, PPC::VSH3,
-  PPC::VSH4, PPC::VSH5, PPC::VSH6, PPC::VSH7,
-  PPC::VSH8, PPC::VSH9, PPC::VSH10, PPC::VSH11,
-  PPC::VSH12, PPC::VSH13, PPC::VSH14, PPC::VSH15,
-  PPC::VSH16, PPC::VSH17, PPC::VSH18, PPC::VSH19,
-  PPC::VSH20, PPC::VSH21, PPC::VSH22, PPC::VSH23,
-  PPC::VSH24, PPC::VSH25, PPC::VSH26, PPC::VSH27,
-  PPC::VSH28, PPC::VSH29, PPC::VSH30, PPC::VSH31
+  PPC::V0, PPC::V1, PPC::V2, PPC::V3,
+  PPC::V4, PPC::V5, PPC::V6, PPC::V7,
+  PPC::V8, PPC::V9, PPC::V10, PPC::V11,
+  PPC::V12, PPC::V13, PPC::V14, PPC::V15,
+  PPC::V16, PPC::V17, PPC::V18, PPC::V19,
+  PPC::V20, PPC::V21, PPC::V22, PPC::V23,
+  PPC::V24, PPC::V25, PPC::V26, PPC::V27,
+  PPC::V28, PPC::V29, PPC::V30, PPC::V31
 };
 
 static const unsigned VSFRegs[] = {
@@ -193,6 +204,17 @@ static const unsigned G8Regs[] = {
   PPC::X28, PPC::X29, PPC::X30, PPC::X31
 };
 
+static const unsigned G80Regs[] = {
+  PPC::ZERO8, PPC::X1, PPC::X2, PPC::X3,
+  PPC::X4, PPC::X5, PPC::X6, PPC::X7,
+  PPC::X8, PPC::X9, PPC::X10, PPC::X11,
+  PPC::X12, PPC::X13, PPC::X14, PPC::X15,
+  PPC::X16, PPC::X17, PPC::X18, PPC::X19,
+  PPC::X20, PPC::X21, PPC::X22, PPC::X23,
+  PPC::X24, PPC::X25, PPC::X26, PPC::X27,
+  PPC::X28, PPC::X29, PPC::X30, PPC::X31
+};
+
 static const unsigned QFRegs[] = {
   PPC::QF0, PPC::QF1, PPC::QF2, PPC::QF3,
   PPC::QF4, PPC::QF5, PPC::QF6, PPC::QF7,
@@ -202,6 +224,17 @@ static const unsigned QFRegs[] = {
   PPC::QF20, PPC::QF21, PPC::QF22, PPC::QF23,
   PPC::QF24, PPC::QF25, PPC::QF26, PPC::QF27,
   PPC::QF28, PPC::QF29, PPC::QF30, PPC::QF31
+};
+
+static const unsigned SPERegs[] = {
+  PPC::S0, PPC::S1, PPC::S2, PPC::S3,
+  PPC::S4, PPC::S5, PPC::S6, PPC::S7,
+  PPC::S8, PPC::S9, PPC::S10, PPC::S11,
+  PPC::S12, PPC::S13, PPC::S14, PPC::S15,
+  PPC::S16, PPC::S17, PPC::S18, PPC::S19,
+  PPC::S20, PPC::S21, PPC::S22, PPC::S23,
+  PPC::S24, PPC::S25, PPC::S26, PPC::S27,
+  PPC::S28, PPC::S29, PPC::S30, PPC::S31
 };
 
 template <std::size_t N>
@@ -240,6 +273,12 @@ static DecodeStatus DecodeF8RCRegisterClass(MCInst &Inst, uint64_t RegNo,
                                             uint64_t Address,
                                             const void *Decoder) {
   return decodeRegisterClass(Inst, RegNo, FRegs);
+}
+
+static DecodeStatus DecodeVFRCRegisterClass(MCInst &Inst, uint64_t RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  return decodeRegisterClass(Inst, RegNo, VFRegs);
 }
 
 static DecodeStatus DecodeVRRCRegisterClass(MCInst &Inst, uint64_t RegNo,
@@ -284,6 +323,12 @@ static DecodeStatus DecodeG8RCRegisterClass(MCInst &Inst, uint64_t RegNo,
   return decodeRegisterClass(Inst, RegNo, G8Regs);
 }
 
+static DecodeStatus DecodeG8RC_NOX0RegisterClass(MCInst &Inst, uint64_t RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  return decodeRegisterClass(Inst, RegNo, G80Regs);
+}
+
 #define DecodePointerLikeRegClass0 DecodeGPRCRegisterClass
 #define DecodePointerLikeRegClass1 DecodeGPRC_NOR0RegisterClass
 
@@ -291,6 +336,18 @@ static DecodeStatus DecodeQFRCRegisterClass(MCInst &Inst, uint64_t RegNo,
                                             uint64_t Address,
                                             const void *Decoder) {
   return decodeRegisterClass(Inst, RegNo, QFRegs);
+}
+
+static DecodeStatus DecodeSPE4RCRegisterClass(MCInst &Inst, uint64_t RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  return decodeRegisterClass(Inst, RegNo, GPRegs);
+}
+
+static DecodeStatus DecodeSPERCRegisterClass(MCInst &Inst, uint64_t RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  return decodeRegisterClass(Inst, RegNo, SPERegs);
 }
 
 #define DecodeQSRCRegisterClass DecodeQFRCRegisterClass
@@ -383,6 +440,51 @@ static DecodeStatus decodeMemRIX16Operands(MCInst &Inst, uint64_t Imm,
   return MCDisassembler::Success;
 }
 
+static DecodeStatus decodeSPE8Operands(MCInst &Inst, uint64_t Imm,
+                                         int64_t Address, const void *Decoder) {
+  // Decode the spe8disp field (imm, reg), which has the low 5-bits as the
+  // displacement with 8-byte aligned, and the next 5 bits as the register #.
+
+  uint64_t Base = Imm >> 5;
+  uint64_t Disp = Imm & 0x1F;
+
+  assert(Base < 32 && "Invalid base register");
+
+  Inst.addOperand(MCOperand::createImm(Disp << 3));
+  Inst.addOperand(MCOperand::createReg(GP0Regs[Base]));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus decodeSPE4Operands(MCInst &Inst, uint64_t Imm,
+                                         int64_t Address, const void *Decoder) {
+  // Decode the spe4disp field (imm, reg), which has the low 5-bits as the
+  // displacement with 4-byte aligned, and the next 5 bits as the register #.
+
+  uint64_t Base = Imm >> 5;
+  uint64_t Disp = Imm & 0x1F;
+
+  assert(Base < 32 && "Invalid base register");
+
+  Inst.addOperand(MCOperand::createImm(Disp << 2));
+  Inst.addOperand(MCOperand::createReg(GP0Regs[Base]));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus decodeSPE2Operands(MCInst &Inst, uint64_t Imm,
+                                         int64_t Address, const void *Decoder) {
+  // Decode the spe2disp field (imm, reg), which has the low 5-bits as the
+  // displacement with 2-byte aligned, and the next 5 bits as the register #.
+
+  uint64_t Base = Imm >> 5;
+  uint64_t Disp = Imm & 0x1F;
+
+  assert(Base < 32 && "Invalid base register");
+
+  Inst.addOperand(MCOperand::createImm(Disp << 1));
+  Inst.addOperand(MCOperand::createReg(GP0Regs[Base]));
+  return MCDisassembler::Success;
+}
+
 static DecodeStatus decodeCRBitMOperand(MCInst &Inst, uint64_t Imm,
                                         int64_t Address, const void *Decoder) {
   // The cr bit encoding is 0x80 >> cr_reg_num.
@@ -414,6 +516,11 @@ DecodeStatus PPCDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
   if (STI.getFeatureBits()[PPC::FeatureQPX]) {
     DecodeStatus result =
       decodeInstruction(DecoderTableQPX32, MI, Inst, Address, this, STI);
+    if (result != MCDisassembler::Fail)
+      return result;
+  } else if (STI.getFeatureBits()[PPC::FeatureSPE]) {
+    DecodeStatus result =
+      decodeInstruction(DecoderTableSPE32, MI, Inst, Address, this, STI);
     if (result != MCDisassembler::Fail)
       return result;
   }

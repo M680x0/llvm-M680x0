@@ -183,8 +183,8 @@ so cool to turn it into something like:
    
 ... which would only do one 32-bit XOR per loop iteration instead of two.
 
-It would also be nice to recognize the reg->size doesn't alias reg->node[i], but
-this requires TBAA.
+It would also be nice to recognize the reg->size doesn't alias reg->node[i],
+but this requires TBAA.
 
 //===---------------------------------------------------------------------===//
 
@@ -1778,7 +1778,7 @@ We do get this at the codegen level, so something knows about it, but
 instcombine should catch it earlier:
 
 _foo:                                   ## @foo
-## BB#0:                                ## %entry
+## %bb.0:                               ## %entry
 	movl	%edi, %eax
 	sarl	$4, %eax
 	ret
@@ -2234,13 +2234,13 @@ void foo(funcs f, int which) {
 which we compile to:
 
 foo:                                    # @foo
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
        pushq   %rbp
        movq    %rsp, %rbp
        testl   %esi, %esi
        movq    %rdi, %rax
        je      .LBB0_2
-# BB#1:                                 # %if.then
+# %bb.1:                                # %if.then
        movl    $5, %edi
        callq   *%rax
        popq    %rbp

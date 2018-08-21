@@ -31,10 +31,10 @@
 name: MxMove_RM_ARI_PCI
 body: |
   bb.0:
-    MOV8jk  %a0,  0, %d1, implicit-def %ccr
-    MOV8jk  %a0, -1, %d1, implicit-def %ccr
-    MOV32jk %a0,  0, %d1, implicit-def %ccr
-    MOV32jk %a1,  0, %a2, implicit-def %ccr
+    MOV8jk  $a0,  0, $d1, implicit-def $ccr
+    MOV8jk  $a0, -1, $d1, implicit-def $ccr
+    MOV32jk $a0,  0, $d1, implicit-def $ccr
+    MOV32jk $a1,  0, $a2, implicit-def $ccr
 
 ...
 --- # ARI <- PCD
@@ -55,9 +55,9 @@ body: |
 name: MxMove_RM_PCD
 body: |
   bb.0:
-    MOV8jq  %a0,  0, implicit-def %ccr
-    MOV32jq %a0, -1, implicit-def %ccr
-    MOV32jq %a0, -1, implicit-def %ccr
+    MOV8jq  $a0,  0, implicit-def $ccr
+    MOV32jq $a0, -1, implicit-def $ccr
+    MOV32jq $a0, -1, implicit-def $ccr
 
 ...
 --- # ARII <- ARII
@@ -88,10 +88,10 @@ body: |
 name: MxMove_RM_ARII_ARII
 body: |
   bb.0:
-    MOV8ff  -1, %a0, %d1, 0,  %a0, %d1, implicit-def %ccr
-    MOV8ff  -1, %a0, %d1, -1, %a0, %d1, implicit-def %ccr
-    MOV32ff 0,  %a1, %d1, 0,  %a1, %d1, implicit-def %ccr
-    MOV32ff 0,  %a2, %a2, 42, %a2, %a2, implicit-def %ccr
+    MOV8ff  -1, $a0, $d1, 0,  $a0, $d1, implicit-def $ccr
+    MOV8ff  -1, $a0, $d1, -1, $a0, $d1, implicit-def $ccr
+    MOV32ff 0,  $a1, $d1, 0,  $a1, $d1, implicit-def $ccr
+    MOV32ff 0,  $a2, $a2, 42, $a2, $a2, implicit-def $ccr
 
 ...
 --- # ARID <- ARID
@@ -115,9 +115,9 @@ body: |
 name: MxMove_RM_ARID
 body: |
   bb.0:
-    MOV8pp   0, %a0, 0,  %a0, implicit-def %ccr
-    MOV32pp  0, %a1, -1, %a1, implicit-def %ccr
-    MOV32pp -1, %a1, 42, %a1, implicit-def %ccr
+    MOV8pp   0, $a0, 0,  $a0, implicit-def $ccr
+    MOV32pp  0, $a1, -1, $a1, implicit-def $ccr
+    MOV32pp -1, $a1, 42, $a1, implicit-def $ccr
 
 ...
 --- # ARIPD <- ARIPD
@@ -135,9 +135,9 @@ body: |
 name: MxMove_RM_ARIPD
 body: |
   bb.0:
-    MOV8ee  %a0, %a0, implicit-def %ccr
-    MOV32ee %a1, %a1, implicit-def %ccr
-    MOV32ee %a1, %a1, implicit-def %ccr
+    MOV8ee  $a0, $a0, implicit-def $ccr
+    MOV32ee $a1, $a1, implicit-def $ccr
+    MOV32ee $a1, $a1, implicit-def $ccr
 
 ...
 --- # ARIPI <- ARIPI
@@ -155,9 +155,9 @@ body: |
 name: MxMove_RM_ARIPI
 body: |
   bb.0:
-    MOV8oo  %a0, %a0, implicit-def %ccr
-    MOV32oo %a1, %a1, implicit-def %ccr
-    MOV32oo %a1, %a1, implicit-def %ccr
+    MOV8oo  $a0, $a0, implicit-def $ccr
+    MOV32oo $a1, $a1, implicit-def $ccr
+    MOV32oo $a1, $a1, implicit-def $ccr
 
 ...
 --- # ARI <- ARI
@@ -175,9 +175,9 @@ body: |
 name: MxMove_RM_ARI
 body: |
   bb.0:
-    MOV8jj  %a0, %a0, implicit-def %ccr
-    MOV32jj %a1, %a1, implicit-def %ccr
-    MOV32jj %a1, %a1, implicit-def %ccr
+    MOV8jj  $a0, $a0, implicit-def $ccr
+    MOV32jj $a1, $a1, implicit-def $ccr
+    MOV32jj $a1, $a1, implicit-def $ccr
 
 ...
 --- # ABS <- ABS
@@ -205,8 +205,8 @@ body: |
 name: MxMove_RM_ABS
 body: |
   bb.0:
-    MOV8bb   0, -1,          implicit-def %ccr
-    MOV32bb -1,  0,          implicit-def %ccr
-    MOV32bb  0,  2147483647, implicit-def %ccr
+    MOV8bb   0, -1,          implicit-def $ccr
+    MOV32bb -1,  0,          implicit-def $ccr
+    MOV32bb  0,  2147483647, implicit-def $ccr
 
 ...

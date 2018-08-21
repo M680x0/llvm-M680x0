@@ -21,8 +21,8 @@
 name: MxBRA8
 body: |
   bb.0:
-      BRA8  1, implicit %ccr
-      BRA8 42, implicit %ccr
+      BRA8  1, implicit $ccr
+      BRA8 42, implicit $ccr
 
 ...
 --- # MxBRA16
@@ -42,8 +42,8 @@ body: |
 name: MxBRA16
 body: |
   bb.0:
-      BRA16  0, implicit %ccr
-      BRA16 -1, implicit %ccr
-      BRA16 42, implicit %ccr
+      BRA16  0, implicit $ccr
+      BRA16 -1, implicit $ccr
+      BRA16 42, implicit $ccr
 
 ...

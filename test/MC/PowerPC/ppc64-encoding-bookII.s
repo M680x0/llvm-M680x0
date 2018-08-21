@@ -60,7 +60,12 @@
 # CHECK-BE: dcbst 2, 3                      # encoding: [0x7c,0x02,0x18,0x6c]
 # CHECK-LE: dcbst 2, 3                      # encoding: [0x6c,0x18,0x02,0x7c]
             dcbst 2, 3
-# FIXME:    dcbf 2, 3, 1
+# CHECK-BE: dcbfl 2, 3                      # encoding: [0x7c,0x22,0x18,0xac]
+# CHECK-LE: dcbfl 2, 3                      # encoding: [0xac,0x18,0x22,0x7c]
+            dcbf 2, 3, 1
+# CHECK-BE: dcbflp 2, 3                     # encoding: [0x7c,0x62,0x18,0xac]
+# CHECK-LE: dcbflp 2, 3                     # encoding: [0xac,0x18,0x62,0x7c]
+            dcbf 2, 3, 3
 
 # Synchronization instructions
 
@@ -92,8 +97,8 @@
 # CHECK-BE: eieio                           # encoding: [0x7c,0x00,0x06,0xac]
 # CHECK-LE: eieio                           # encoding: [0xac,0x06,0x00,0x7c]
             eieio
-# CHECK-BE: waitimpl                        # encoding: [0x7c,0x40,0x00,0x7c]
-# CHECK-LE: waitimpl                        # encoding: [0x7c,0x00,0x40,0x7c]
+# CHECK-BE: waitimpl                        # encoding: [0x7c,0x40,0x00,0x3c]
+# CHECK-LE: waitimpl                        # encoding: [0x3c,0x00,0x40,0x7c]
             wait 2
 # CHECK-BE: mbar 1                          # encoding: [0x7c,0x20,0x06,0xac]
 # CHECK-LE: mbar 1                          # encoding: [0xac,0x06,0x20,0x7c]
@@ -106,7 +111,12 @@
 # CHECK-BE: dcbf 2, 3                       # encoding: [0x7c,0x02,0x18,0xac]
 # CHECK-LE: dcbf 2, 3                       # encoding: [0xac,0x18,0x02,0x7c]
             dcbf 2, 3
-# FIXME:    dcbfl 2, 3
+# CHECK-BE: dcbfl 2, 3                      # encoding: [0x7c,0x22,0x18,0xac]
+# CHECK-LE: dcbfl 2, 3                      # encoding: [0xac,0x18,0x22,0x7c]
+            dcbfl 2, 3
+# CHECK-BE: dcbflp 2, 3                     # encoding: [0x7c,0x62,0x18,0xac]
+# CHECK-LE: dcbflp 2, 3                     # encoding: [0xac,0x18,0x62,0x7c]
+            dcbflp 2, 3
 
 # CHECK-BE: lbarx 2, 3, 4                   # encoding: [0x7c,0x43,0x20,0x68]
 # CHECK-LE: lbarx 2, 3, 4                   # encoding: [0x68,0x20,0x43,0x7c]
@@ -161,14 +171,14 @@
 # CHECK-LE: ptesync                         # encoding: [0xac,0x04,0x40,0x7c]
             ptesync
 
-# CHECK-BE: wait                            # encoding: [0x7c,0x00,0x00,0x7c]
-# CHECK-LE: wait                            # encoding: [0x7c,0x00,0x00,0x7c]
+# CHECK-BE: wait                            # encoding: [0x7c,0x00,0x00,0x3c]
+# CHECK-LE: wait                            # encoding: [0x3c,0x00,0x00,0x7c]
             wait
-# CHECK-BE: waitrsv                         # encoding: [0x7c,0x20,0x00,0x7c]
-# CHECK-LE: waitrsv                         # encoding: [0x7c,0x00,0x20,0x7c]
+# CHECK-BE: waitrsv                         # encoding: [0x7c,0x20,0x00,0x3c]
+# CHECK-LE: waitrsv                         # encoding: [0x3c,0x00,0x20,0x7c]
             waitrsv
-# CHECK-BE: waitimpl                        # encoding: [0x7c,0x40,0x00,0x7c]
-# CHECK-LE: waitimpl                        # encoding: [0x7c,0x00,0x40,0x7c]
+# CHECK-BE: waitimpl                        # encoding: [0x7c,0x40,0x00,0x3c]
+# CHECK-LE: waitimpl                        # encoding: [0x3c,0x00,0x40,0x7c]
             waitimpl
 
 # Time base instructions

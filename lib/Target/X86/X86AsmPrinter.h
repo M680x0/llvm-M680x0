@@ -14,6 +14,7 @@
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/FaultMaps.h"
 #include "llvm/CodeGen/StackMaps.h"
+#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/Target/TargetMachine.h"
 
 // Implemented in X86MCInstLower.cpp
@@ -30,6 +31,8 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   StackMaps SM;
   FaultMaps FM;
   std::unique_ptr<MCCodeEmitter> CodeEmitter;
+  bool EmitFPOData = false;
+  bool NeedsRetpoline = false;
 
   // This utility class tracks the length of a stackmap instruction's 'shadow'.
   // It is used by the X86AsmPrinter to ensure that the stackmap shadow
@@ -71,27 +74,6 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
 
   StackMapShadowTracker SMShadowTracker;
 
-  // This describes the kind of sled we're storing in the XRay table.
-  enum class SledKind : uint8_t {
-    FUNCTION_ENTER = 0,
-    FUNCTION_EXIT = 1,
-    TAIL_CALL = 2,
-  };
-
-  // The table will contain these structs that point to the sled, the function
-  // containing the sled, and what kind of sled (and whether they should always
-  // be instrumented).
-  struct XRayFunctionEntry {
-    const MCSymbol *Sled;
-    const MCSymbol *Function;
-    SledKind Kind;
-    bool AlwaysInstrument;
-    const class Function *Fn;
-  };
-
-  // All the sleds to be emitted.
-  std::vector<XRayFunctionEntry> Sleds;
-
   // All instructions emitted by the X86AsmPrinter should use this helper
   // method.
   //
@@ -102,7 +84,7 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   void LowerSTACKMAP(const MachineInstr &MI);
   void LowerPATCHPOINT(const MachineInstr &MI, X86MCInstLower &MCIL);
   void LowerSTATEPOINT(const MachineInstr &MI, X86MCInstLower &MCIL);
-  void LowerFAULTING_LOAD_OP(const MachineInstr &MI, X86MCInstLower &MCIL);
+  void LowerFAULTING_OP(const MachineInstr &MI, X86MCInstLower &MCIL);
   void LowerPATCHABLE_OP(const MachineInstr &MI, X86MCInstLower &MCIL);
 
   void LowerTlsAddr(X86MCInstLower &MCInstLowering, const MachineInstr &MI);
@@ -112,20 +94,20 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
                                      X86MCInstLower &MCIL);
   void LowerPATCHABLE_RET(const MachineInstr &MI, X86MCInstLower &MCIL);
   void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI, X86MCInstLower &MCIL);
+  void LowerPATCHABLE_EVENT_CALL(const MachineInstr &MI, X86MCInstLower &MCIL);
+  void LowerPATCHABLE_TYPED_EVENT_CALL(const MachineInstr &MI,
+                                       X86MCInstLower &MCIL);
 
-  // Helper function that emits the XRay sleds we've collected for a particular
-  // function.
-  void EmitXRayTable();
+  void LowerFENTRY_CALL(const MachineInstr &MI, X86MCInstLower &MCIL);
 
-  // Helper function to record a given XRay sled.
-  void recordSled(MCSymbol *Sled, const MachineInstr &MI, SledKind Kind);
+  // Choose between emitting .seh_ directives and .cv_fpo_ directives.
+  void EmitSEHInstruction(const MachineInstr *MI);
+
 public:
-  explicit X86AsmPrinter(TargetMachine &TM,
-                         std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)), SM(*this), FM(*this) {}
+  X86AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer);
 
-  const char *getPassName() const override {
-    return "X86 Assembly / Object Emitter";
+  StringRef getPassName() const override {
+    return "X86 Assembly Printer";
   }
 
   const X86Subtarget &getSubtarget() const { return *Subtarget; }
@@ -137,6 +119,7 @@ public:
   void EmitInstruction(const MachineInstr *MI) override;
 
   void EmitBasicBlockEnd(const MachineBasicBlock &MBB) override {
+    AsmPrinter::EmitBasicBlockEnd(MBB);
     SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
   }
 
@@ -147,16 +130,19 @@ public:
                              unsigned AsmVariant, const char *ExtraCode,
                              raw_ostream &OS) override;
 
-  /// \brief Return the symbol for the specified constant pool entry.
+  /// Return the symbol for the specified constant pool entry.
   MCSymbol *GetCPISymbol(unsigned CPID) const override;
 
   bool doInitialization(Module &M) override {
     SMShadowTracker.reset(0);
     SM.reset();
+    FM.reset();
     return AsmPrinter::doInitialization(M);
   }
 
   bool runOnMachineFunction(MachineFunction &F) override;
+  void EmitFunctionBodyStart() override;
+  void EmitFunctionBodyEnd() override;
 };
 
 } // end namespace llvm

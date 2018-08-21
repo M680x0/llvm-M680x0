@@ -5,7 +5,7 @@ target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-apple-macosx10.11.0"
 
 
-@argc = global i8 0, align 1
+@argc = global i8 0, align 1, !dbg !21
 
 define void @globalfunc() {
 entry:
@@ -32,7 +32,7 @@ declare void @llvm.dbg.value(metadata, i64, metadata, metadata)
 !9 = !DIBasicType(encoding: DW_ATE_signed, size: 32, align: 32, name: "int")
 !10 = !DIDerivedType(baseType: !4, tag: DW_TAG_pointer_type, size: 64, align: 64, flags: DIFlagArtificial)
 !11 = !DIBasicType(tag: DW_TAG_base_type, name: "char", size: 8, align: 8, encoding: DW_ATE_signed_char)
-!13 = distinct !DISubprogram(name: "test_with_debug", linkageName: "test_with_debug", line: 6, isLocal: false, isDefinition: true, flags: DIFlagPrototyped, isOptimized: true, unit: !0, scopeLine: 6, file: !1, scope: !14, type: !15, variables: !17)
+!13 = distinct !DISubprogram(name: "test_with_debug", linkageName: "test_with_debug", line: 6, isLocal: false, isDefinition: true, flags: DIFlagPrototyped, isOptimized: true, unit: !0, scopeLine: 6, file: !1, scope: !14, type: !15, retainedNodes: !17)
 !14 = !DIFile(filename: "test.cpp", directory: "")
 !15 = !DISubroutineType(types: !16)
 !16 = !{null}
@@ -40,7 +40,7 @@ declare void @llvm.dbg.value(metadata, i64, metadata, metadata)
 !18 = !DILocalVariable(name: "c", line: 7, scope: !13, file: !14, type: !4)
 !19 = !DILocalVariable(name: "lc", line: 8, scope: !13, file: !14, type: !11)
 !20 = !{!21}
-!21 = !DIGlobalVariable(name: "argc", line: 1, isLocal: false, isDefinition: true, scope: null, file: !14, type: !11, variable: i8* @argc)
+!21 = !DIGlobalVariable(name: "argc", line: 1, isLocal: false, isDefinition: true, scope: null, file: !14, type: !11)
 !22 = !{i32 2, !"Dwarf Version", i32 4}
 !23 = !{i32 2, !"Debug Info Version", i32 0}
 !25 = !DILocation(line: 8, column: 3, scope: !13)

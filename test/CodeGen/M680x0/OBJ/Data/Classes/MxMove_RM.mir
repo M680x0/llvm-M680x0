@@ -31,10 +31,10 @@
 name: MxMove_RM_PCI
 body: |
   bb.0:
-    %bd0 = MOV8dk  0,  %d1, implicit-def %ccr
-    %bd0 = MOV8dk  -1, %d1, implicit-def %ccr
-     %d0 = MOV32rk 0,  %d1, implicit-def %ccr
-     %d1 = MOV32rk 0,  %a2, implicit-def %ccr
+    $bd0 = MOV8dk  0,  $d1, implicit-def $ccr
+    $bd0 = MOV8dk  -1, $d1, implicit-def $ccr
+     $d0 = MOV32rk 0,  $d1, implicit-def $ccr
+     $d1 = MOV32rk 0,  $a2, implicit-def $ccr
 
 ...
 --- # PCD
@@ -55,9 +55,9 @@ body: |
 name: MxMove_RM_PCD
 body: |
   bb.0:
-    %bd0 = MOV8dq  0,  implicit-def %ccr
-     %d0 = MOV32rq -1, implicit-def %ccr
-     %a0 = MOV32rq -1, implicit-def %ccr
+    $bd0 = MOV8dq  0,  implicit-def $ccr
+     $d0 = MOV32rq -1, implicit-def $ccr
+     $a0 = MOV32rq -1, implicit-def $ccr
 
 ...
 --- # ARII
@@ -84,10 +84,10 @@ body: |
 name: MxMove_RM_ARII
 body: |
   bb.0:
-    %bd0 = MOV8df  0,  %a0, %d1, implicit-def %ccr
-    %bd0 = MOV8df  -1, %a0, %d1, implicit-def %ccr
-     %d0 = MOV32rf 0,  %a1, %d1, implicit-def %ccr
-     %d1 = MOV32rf 0,  %a2, %a2, implicit-def %ccr
+    $bd0 = MOV8df  0,  $a0, $d1, implicit-def $ccr
+    $bd0 = MOV8df  -1, $a0, $d1, implicit-def $ccr
+     $d0 = MOV32rf 0,  $a1, $d1, implicit-def $ccr
+     $d1 = MOV32rf 0,  $a2, $a2, implicit-def $ccr
 
 ...
 --- # ARID
@@ -108,9 +108,9 @@ body: |
 name: MxMove_RM_ARID
 body: |
   bb.0:
-    %bd0 = MOV8dp  0,  %a0, implicit-def %ccr
-     %d0 = MOV32rp -1, %a1, implicit-def %ccr
-     %a0 = MOV32rp -1, %a1, implicit-def %ccr
+    $bd0 = MOV8dp  0,  $a0, implicit-def $ccr
+     $d0 = MOV32rp -1, $a1, implicit-def $ccr
+     $a0 = MOV32rp -1, $a1, implicit-def $ccr
 
 ...
 --- # ARIPD
@@ -128,9 +128,9 @@ body: |
 name: MxMove_RM_ARIPD
 body: |
   bb.0:
-    %bd0 = MOV8de  %a0, implicit-def %ccr
-     %d3 = MOV32re %a1, implicit-def %ccr
-     %a4 = MOV32re %a1, implicit-def %ccr
+    $bd0 = MOV8de  $a0, implicit-def $ccr
+     $d3 = MOV32re $a1, implicit-def $ccr
+     $a4 = MOV32re $a1, implicit-def $ccr
 
 ...
 --- # ARIPI
@@ -148,9 +148,9 @@ body: |
 name: MxMove_RM_ARIPI
 body: |
   bb.0:
-    %bd0 = MOV8do  %a0, implicit-def %ccr
-     %d3 = MOV32ro %a1, implicit-def %ccr
-     %a4 = MOV32ro %a1, implicit-def %ccr
+    $bd0 = MOV8do  $a0, implicit-def $ccr
+     $d3 = MOV32ro $a1, implicit-def $ccr
+     $a4 = MOV32ro $a1, implicit-def $ccr
 
 ...
 --- # ARI
@@ -168,9 +168,9 @@ body: |
 name: MxMove_RM_ARI
 body: |
   bb.0:
-    %bd0 = MOV8dj  %a0, implicit-def %ccr
-     %d3 = MOV32rj %a1, implicit-def %ccr
-     %a4 = MOV32rj %a1, implicit-def %ccr
+    $bd0 = MOV8dj  $a0, implicit-def $ccr
+     $d3 = MOV32rj $a1, implicit-def $ccr
+     $a4 = MOV32rj $a1, implicit-def $ccr
 
 ...
 --- # ABS
@@ -193,8 +193,8 @@ body: |
 name: MxMove_RM_ABS
 body: |
   bb.0:
-    %bd0 = MOV8db  0, implicit-def %ccr
-     %d3 = MOV32rb 0, implicit-def %ccr
-     %a4 = MOV32rb 0, implicit-def %ccr
+    $bd0 = MOV8db  0, implicit-def $ccr
+     $d3 = MOV32rb 0, implicit-def $ccr
+     $a4 = MOV32rb 0, implicit-def $ccr
 
 ...

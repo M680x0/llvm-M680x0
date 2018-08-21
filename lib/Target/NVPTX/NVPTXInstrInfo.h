@@ -16,7 +16,7 @@
 
 #include "NVPTX.h"
 #include "NVPTXRegisterInfo.h"
-#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 
 #define GET_INSTRINFO_HEADER
 #include "NVPTXGenInstrInfo.inc"
@@ -52,25 +52,18 @@ public:
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
-  virtual bool isMoveInstr(const MachineInstr &MI, unsigned &SrcReg,
-                           unsigned &DestReg) const;
-  bool isLoadInstr(const MachineInstr &MI, unsigned &AddrSpace) const;
-  bool isStoreInstr(const MachineInstr &MI, unsigned &AddrSpace) const;
 
-  virtual bool CanTailMerge(const MachineInstr *MI) const;
   // Branch analysis.
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
                      bool AllowModify) const override;
-  unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
-  unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+  unsigned removeBranch(MachineBasicBlock &MBB,
+                        int *BytesRemoved = nullptr) const override;
+  unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
                         MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
-                        const DebugLoc &DL) const override;
-  unsigned getLdStCodeAddrSpace(const MachineInstr &MI) const {
-    return MI.getOperand(2).getImm();
-  }
-
+                        const DebugLoc &DL,
+                        int *BytesAdded = nullptr) const override;
 };
 
 } // namespace llvm
